@@ -207,7 +207,7 @@ export function TeamMembersCard({
           ) : (
             <div className="space-y-3">
               {members.map((member) => {
-                const config = roleConfig[member.role]
+                const config = roleConfig[member.role] || roleConfig.member
                 const Icon = config.icon
                 const isCurrentUser = member.profile.id === currentUserId
                 const canModify = canModifyMember(member)

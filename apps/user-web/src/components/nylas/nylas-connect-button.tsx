@@ -12,6 +12,7 @@ interface NylasConnectButtonProps {
   children?: React.ReactNode
   variant?: 'default' | 'outline' | 'ghost'
   size?: 'default' | 'sm' | 'lg'
+  returnUrl?: string
 }
 
 // Google "G" logo - official colors
@@ -55,13 +56,17 @@ function MicrosoftLogo({ className }: { className?: string }) {
  */
 async function initiateOAuth(
   provider: 'google' | 'microsoft',
-  onError?: (error: string) => void
+  onError?: (error: string) => void,
+  returnUrl?: string
 ) {
   try {
     const res = await fetch('/api/nylas/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider }),
+      body: JSON.stringify({
+        provider,
+        returnUrl: returnUrl || window.location.pathname,
+      }),
     })
 
     const data = await res.json()
@@ -98,14 +103,15 @@ export function GoogleSignInButton({
   onSuccess,
   onError,
   className,
+  returnUrl,
 }: Omit<NylasConnectButtonProps, 'provider'>) {
   const [loading, setLoading] = useState(false)
 
   const handleClick = useCallback(async () => {
     setLoading(true)
-    await initiateOAuth('google', onError)
+    await initiateOAuth('google', onError, returnUrl)
     setLoading(false)
-  }, [onError])
+  }, [onError, returnUrl])
 
   return (
     <button
@@ -141,14 +147,15 @@ export function MicrosoftSignInButton({
   onSuccess,
   onError,
   className,
+  returnUrl,
 }: Omit<NylasConnectButtonProps, 'provider'>) {
   const [loading, setLoading] = useState(false)
 
   const handleClick = useCallback(async () => {
     setLoading(true)
-    await initiateOAuth('microsoft', onError)
+    await initiateOAuth('microsoft', onError, returnUrl)
     setLoading(false)
-  }, [onError])
+  }, [onError, returnUrl])
 
   return (
     <button

@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react"
 import { useInbox } from "@/providers/inbox-provider"
 import { useCompose } from "./layout"
-import { MailList, MailDisplay } from "@/components/mail"
+import { MailList, MailDisplay, MailItem } from "@/components/mail"
 import { CallsList, CallItem } from "@/components/mail/calls-list"
 import { CallsDisplay } from "@/components/mail/calls-display"
 import { TextsList, TextThread } from "@/components/mail/texts-list"
@@ -14,11 +14,22 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Mail, Search, Loader2, AlertCircle, X } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@dreamteam/ui/alert-dialog"
+import { Mail, Search, Loader2, AlertCircle, X, Trash2 } from "lucide-react"
 
 export default function InboxPage() {
   const {
     grants,
+    selectedGrantId,
     emails,
     selectedEmailId,
     selectedEmail,
@@ -30,16 +41,20 @@ export default function InboxPage() {
     selectEmail,
     toggleStar,
     toggleRead,
+    deleteEmail,
     searchQuery,
     searchEmails,
     isSearching,
     folder,
   } = useInbox()
 
-  const { openCompose } = useCompose()
+  const { openCompose, openDraft } = useCompose()
 
   const [localSearch, setLocalSearch] = useState("")
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [loadingDraft, setLoadingDraft] = useState(false)
 
   // Calls state
   const [selectedCall, setSelectedCall] = useState<CallItem | null>(null)
@@ -52,6 +67,83 @@ export default function InboxPage() {
     setSelectedCall(null)
     setSelectedThread(null)
   }, [folder])
+
+  // State for list action delete confirmation
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+
+  // Handle email deletion (from display panel)
+  const handleDeleteEmail = useCallback(async () => {
+    if (!selectedEmailId) return
+
+    setIsDeleting(true)
+    const success = await deleteEmail(selectedEmailId)
+    setIsDeleting(false)
+    setDeleteDialogOpen(false)
+
+    if (!success) {
+      // Error will be shown via the error state in the provider
+    }
+  }, [selectedEmailId, deleteEmail])
+
+  // Handle delete from list (with confirmation)
+  const handleListDelete = useCallback((emailId: string) => {
+    setDeleteTargetId(emailId)
+    setDeleteDialogOpen(true)
+  }, [])
+
+  // Handle confirmed deletion (works for both list and display panel)
+  const handleConfirmDelete = useCallback(async () => {
+    const targetId = deleteTargetId || selectedEmailId
+    if (!targetId) return
+
+    setIsDeleting(true)
+    const success = await deleteEmail(targetId)
+    setIsDeleting(false)
+    setDeleteDialogOpen(false)
+    setDeleteTargetId(null)
+
+    if (!success) {
+      // Error will be shown via the error state in the provider
+    }
+  }, [deleteTargetId, selectedEmailId, deleteEmail])
+
+
+  // Handle selecting a draft - fetch and open in compose dialog
+  const handleSelectDraft = useCallback(async (email: MailItem) => {
+    if (!selectedGrantId) return
+
+    setLoadingDraft(true)
+    try {
+      const params = new URLSearchParams({ grantId: selectedGrantId })
+      const response = await fetch(`/api/nylas/drafts/${email.id}?${params}`)
+
+      if (response.ok) {
+        const data = await response.json()
+        const draft = data.draft
+        openDraft({
+          id: draft.id,
+          to: draft.to || [],
+          cc: draft.cc || [],
+          bcc: draft.bcc || [],
+          subject: draft.subject,
+          body: draft.body || '',
+        })
+      }
+    } catch (err) {
+      console.error('Failed to fetch draft:', err)
+    } finally {
+      setLoadingDraft(false)
+    }
+  }, [selectedGrantId, openDraft])
+
+  // Handle email/draft selection based on folder
+  const handleEmailSelect = useCallback((email: MailItem) => {
+    if (folder === 'drafts') {
+      handleSelectDraft(email)
+    } else {
+      selectEmail(email)
+    }
+  }, [folder, handleSelectDraft, selectEmail])
 
   // Debounced search (only for emails)
   const handleSearchChange = useCallback(
@@ -143,7 +235,7 @@ export default function InboxPage() {
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Email List Panel */}
-      <div className="w-[400px] shrink-0 border-r flex flex-col">
+      <div className="w-[550px] shrink-0 border-r flex flex-col">
         {/* Error Alert */}
         {error && (
           <Alert variant="destructive" className="m-3 mb-0">
@@ -191,16 +283,19 @@ export default function InboxPage() {
 
         {/* Email List */}
         <ScrollArea className="flex-1 h-0">
-          {loading && emails.length === 0 ? (
+          {(loading || loadingDraft) && emails.length === 0 ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <MailList
               emails={emails}
-              selectedId={selectedEmailId}
-              onSelect={selectEmail}
+              selectedId={folder === 'drafts' ? null : selectedEmailId}
+              folder={folder}
+              onSelect={handleEmailSelect}
               onToggleStar={toggleStar}
+              onToggleRead={toggleRead}
+              onDelete={handleListDelete}
             />
           )}
         </ScrollArea>
@@ -210,14 +305,51 @@ export default function InboxPage() {
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <MailDisplay
           email={selectedEmail}
+          grantId={selectedGrantId}
           loading={loadingEmail}
           onToggleStar={(starred) => selectedEmailId && toggleStar(selectedEmailId, starred)}
-          onToggleRead={toggleRead}
+          onToggleRead={(unread) => selectedEmailId && toggleRead(selectedEmailId, unread)}
+          onDelete={() => setDeleteDialogOpen(true)}
           onReply={() => selectedEmail && openCompose("reply", selectedEmail)}
           onReplyAll={() => selectedEmail && openCompose("reply-all", selectedEmail)}
           onForward={() => selectedEmail && openCompose("forward", selectedEmail)}
         />
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => {
+        setDeleteDialogOpen(open)
+        if (!open) setDeleteTargetId(null)
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Email</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this email? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

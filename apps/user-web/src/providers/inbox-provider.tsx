@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react"
 import { NylasGrant, MailItem, MailDetail } from "@/components/mail"
 
 interface InboxContextValue {
@@ -35,7 +35,8 @@ interface InboxContextValue {
   fetchEmails: () => Promise<void>
   selectEmail: (email: MailItem) => void
   toggleStar: (emailId: string, starred: boolean) => Promise<void>
-  toggleRead: (unread: boolean) => Promise<void>
+  toggleRead: (emailId: string, unread: boolean) => Promise<void>
+  deleteEmail: (emailId: string) => Promise<boolean>
 
   // Computed
   unreadCount: number
@@ -67,6 +68,9 @@ export function InboxProvider({ children }: { children: ReactNode }) {
 
   const clearError = useCallback(() => setError(null), [])
 
+  // Ref to track if we've auto-selected a grant (prevents race condition)
+  const hasAutoSelectedRef = useRef(false)
+
   // Fetch connected accounts
   const fetchGrants = useCallback(async () => {
     setError(null)
@@ -81,8 +85,9 @@ export function InboxProvider({ children }: { children: ReactNode }) {
       const data = await res.json()
       setGrants(data.grants || [])
 
-      // Auto-select first grant if none selected
-      if (data.grants?.length > 0 && !selectedGrantId) {
+      // Auto-select first grant if we haven't already
+      if (data.grants?.length > 0 && !hasAutoSelectedRef.current) {
+        hasAutoSelectedRef.current = true
         setSelectedGrantId(data.grants[0].id)
         // fetchEmails will be triggered and will set loading to false
       } else {
@@ -94,11 +99,29 @@ export function InboxProvider({ children }: { children: ReactNode }) {
       setError('Failed to connect to server')
       setLoading(false)
     }
-  }, [selectedGrantId])
+  }, []) // No dependencies - stable function reference
+
+  // Map internal folder IDs to Nylas folder names
+  const getNylasFolderName = (folderId: string): string | undefined => {
+    const folderMap: Record<string, string> = {
+      inbox: 'INBOX',
+      sent: 'SENT',
+      drafts: 'DRAFT',
+      trash: 'TRASH',
+    }
+    return folderMap[folderId]
+  }
 
   // Fetch emails for selected account
   const fetchEmails = useCallback(async () => {
     if (!selectedGrantId) {
+      setEmails([])
+      setLoading(false)
+      return
+    }
+
+    // Skip email fetch for non-email folders (calls, texts)
+    if (folder === 'calls' || folder === 'texts') {
       setEmails([])
       setLoading(false)
       return
@@ -112,8 +135,9 @@ export function InboxProvider({ children }: { children: ReactNode }) {
         limit: '50',
       })
 
-      if (folder !== 'inbox') {
-        params.set('folder', folder)
+      const nylasFolder = getNylasFolderName(folder)
+      if (nylasFolder) {
+        params.set('folder', nylasFolder)
       }
 
       const res = await fetch(`/api/nylas/emails?${params}`)
@@ -238,26 +262,59 @@ export function InboxProvider({ children }: { children: ReactNode }) {
   }, [selectedGrantId, selectedEmail])
 
   // Handle read toggle
-  const toggleRead = useCallback(async (unread: boolean) => {
-    if (!selectedGrantId || !selectedEmailId) return
+  const toggleRead = useCallback(async (emailId: string, unread: boolean) => {
+    if (!selectedGrantId) return
 
     try {
-      await fetch(`/api/nylas/emails/${selectedEmailId}`, {
+      await fetch(`/api/nylas/emails/${emailId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ grantId: selectedGrantId, unread }),
       })
 
       setEmails(prev =>
-        prev.map(e => e.id === selectedEmailId ? { ...e, unread } : e)
+        prev.map(e => e.id === emailId ? { ...e, unread } : e)
       )
-      if (selectedEmail) {
+      if (selectedEmail?.id === emailId) {
         setSelectedEmail(prev => prev ? { ...prev, unread } : null)
       }
     } catch (error) {
       console.error('Failed to toggle read status:', error)
     }
-  }, [selectedGrantId, selectedEmailId, selectedEmail])
+  }, [selectedGrantId, selectedEmail])
+
+  // Handle email delete
+  const deleteEmailFn = useCallback(async (emailId: string): Promise<boolean> => {
+    if (!selectedGrantId) return false
+
+    try {
+      const params = new URLSearchParams({ grantId: selectedGrantId })
+      const res = await fetch(`/api/nylas/emails/${emailId}?${params}`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Failed to delete email')
+        return false
+      }
+
+      // Remove from local state
+      setEmails(prev => prev.filter(e => e.id !== emailId))
+
+      // Clear selection if deleted email was selected
+      if (selectedEmailId === emailId) {
+        setSelectedEmailId(null)
+        setSelectedEmail(null)
+      }
+
+      return true
+    } catch (error) {
+      console.error('Failed to delete email:', error)
+      setError('Failed to delete email')
+      return false
+    }
+  }, [selectedGrantId, selectedEmailId])
 
   // Initial load
   useEffect(() => {
@@ -299,6 +356,7 @@ export function InboxProvider({ children }: { children: ReactNode }) {
         selectEmail,
         toggleStar,
         toggleRead,
+        deleteEmail: deleteEmailFn,
         unreadCount,
       }}
     >

@@ -238,6 +238,7 @@ export function OpportunitiesFilterBar({
           onCheckedChange={(checked) =>
             onFiltersChange({ ...filters, needsAttention: checked })
           }
+          className="data-[state=unchecked]:!bg-gray-400 data-[state=checked]:!bg-sky-500 [&>span]:transition-transform [&>span]:duration-200"
         />
         <Label htmlFor="needs-attention" className="text-sm cursor-pointer">
           Needs attention

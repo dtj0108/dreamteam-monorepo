@@ -27,11 +27,32 @@ interface Deal {
   contact_id?: string
 }
 
+interface Activity {
+  id: string
+  type: string  // 'call', 'email', 'meeting', 'note', 'task'
+  subject: string
+  description?: string
+  is_completed: boolean
+  completed_at?: string
+}
+
+interface LeadTask {
+  id: string
+  lead_id: string
+  title: string
+  description?: string
+  is_completed: boolean
+  completed_at?: string
+  due_date?: string
+}
+
 interface TriggerContext {
   userId: string
   lead?: Lead
   contact?: Contact
   deal?: Deal
+  activity?: Activity
+  leadTask?: LeadTask
   previousStatus?: string
   previousStageId?: string
 }
@@ -86,6 +107,23 @@ function buildWorkflowContext(triggerContext: TriggerContext): WorkflowContext {
       last_name: triggerContext.contact.last_name,
       email: triggerContext.contact.email,
       phone: triggerContext.contact.phone,
+    }
+  }
+
+  if (triggerContext.activity) {
+    context.activity = {
+      id: triggerContext.activity.id,
+      type: triggerContext.activity.type,
+      subject: triggerContext.activity.subject,
+      is_completed: triggerContext.activity.is_completed,
+    }
+  }
+
+  if (triggerContext.leadTask) {
+    context.leadTask = {
+      id: triggerContext.leadTask.id,
+      title: triggerContext.leadTask.title,
+      is_completed: triggerContext.leadTask.is_completed,
     }
   }
 
@@ -210,6 +248,28 @@ export async function triggerLeadStatusChanged(
 }
 
 /**
+ * Trigger workflows when a lead's pipeline stage changes
+ */
+export async function triggerLeadStageChanged(
+  lead: Lead & { stage_id?: string },
+  previousStageId: string
+): Promise<void> {
+  // Only trigger if stage actually changed
+  if (lead.stage_id === previousStageId) {
+    return
+  }
+
+  const contact = await fetchLeadPrimaryContact(lead.id)
+
+  await triggerWorkflows('lead_stage_changed', {
+    userId: lead.user_id,
+    lead,
+    contact: contact || undefined,
+    previousStageId,
+  })
+}
+
+/**
  * Trigger workflows when a lead is first contacted
  */
 export async function triggerLeadContacted(lead: Lead, contact?: Contact): Promise<void> {
@@ -279,5 +339,59 @@ export async function triggerDealLost(deal: Deal): Promise<void> {
     userId: deal.profile_id,
     deal,
     contact: contact || undefined,
+  })
+}
+
+/**
+ * Trigger workflows when an activity is logged on a lead
+ */
+export async function triggerActivityLogged(
+  activity: Activity,
+  lead: Lead,
+  userId: string
+): Promise<void> {
+  const contact = await fetchLeadPrimaryContact(lead.id)
+
+  await triggerWorkflows('activity_logged', {
+    userId,
+    lead,
+    contact: contact || undefined,
+    activity,
+  })
+}
+
+/**
+ * Trigger workflows when an activity is completed
+ */
+export async function triggerActivityCompleted(
+  activity: Activity,
+  lead: Lead,
+  userId: string
+): Promise<void> {
+  const contact = await fetchLeadPrimaryContact(lead.id)
+
+  await triggerWorkflows('activity_completed', {
+    userId,
+    lead,
+    contact: contact || undefined,
+    activity,
+  })
+}
+
+/**
+ * Trigger workflows when a lead task is completed
+ */
+export async function triggerTaskCompleted(
+  task: LeadTask,
+  lead: Lead,
+  userId: string
+): Promise<void> {
+  const contact = await fetchLeadPrimaryContact(lead.id)
+
+  await triggerWorkflows('task_completed', {
+    userId,
+    lead,
+    contact: contact || undefined,
+    leadTask: task,
   })
 }

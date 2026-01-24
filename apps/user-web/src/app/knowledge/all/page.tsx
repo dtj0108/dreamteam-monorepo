@@ -22,6 +22,7 @@ import {
   Search,
   LayoutGrid,
   List,
+  GripVertical,
 } from "lucide-react"
 import { useKnowledge } from "@/providers/knowledge-provider"
 import { useLocalStorage } from "@/hooks/use-local-storage"
@@ -30,6 +31,7 @@ import { formatDistanceToNow } from "date-fns"
 import { CategoryBadge } from "@/components/knowledge/category-badge"
 import { cn } from "@/lib/utils"
 import type { KnowledgePage } from "@/providers/knowledge-provider"
+import { useDraggable } from "@dnd-kit/core"
 
 type SortOption = "updated-desc" | "updated-asc" | "created-desc" | "created-asc" | "name-asc" | "name-desc"
 type ViewMode = "grid" | "list"
@@ -64,6 +66,35 @@ function sortPages(pages: KnowledgePage[], sortBy: SortOption): KnowledgePage[] 
   })
 }
 
+// Draggable wrapper for page items
+interface DraggablePageProps {
+  page: KnowledgePage
+  children: React.ReactNode
+}
+
+function DraggablePage({ page, children }: DraggablePageProps) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `page-${page.id}`,
+    data: { type: "page", page },
+  })
+
+  // Don't apply transform here - let DragOverlay handle the visual
+  // Just fade the original element while dragging
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-50"
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
 export default function KnowledgeAllPage() {
   const searchParams = useSearchParams()
   const filter = searchParams.get("filter")
@@ -76,7 +107,14 @@ export default function KnowledgeAllPage() {
     setSelectedCategoryId,
     getCategoryById,
     filteredPages,
+    setPageCategories,
   } = useKnowledge()
+
+  // Handler to remove a category from a page
+  const handleRemoveCategory = async (pageId: string, categoryId: string, currentCategoryIds: string[]) => {
+    const newIds = currentCategoryIds.filter(id => id !== categoryId)
+    await setPageCategories(pageId, newIds)
+  }
 
   // UI state with localStorage persistence
   const [viewMode, setViewMode] = useLocalStorage<ViewMode>("knowledge-view-mode", "grid")
@@ -138,7 +176,7 @@ export default function KnowledgeAllPage() {
   }
 
   return (
-    <ScrollArea className="flex-1">
+    <ScrollArea className="flex-1 overflow-hidden">
       <div className="p-6 max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -256,79 +294,94 @@ export default function KnowledgeAllPage() {
           /* Grid View */
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {displayPages.map((page) => (
-              <Link
-                key={page.id}
-                href={`/knowledge/${page.id}`}
-                className="group block"
-              >
-                <Card className="h-full transition-all hover:shadow-md hover:border-primary/50">
-                  <CardContent className="p-4 flex flex-col h-full">
-                    {/* Icon */}
-                    <div className="text-3xl mb-3">{page.icon || "📄"}</div>
+              <DraggablePage key={page.id} page={page}>
+                <Link
+                  href={`/knowledge/${page.id}`}
+                  className="group block"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Card className="h-full transition-all hover:shadow-md hover:border-primary/50">
+                    <CardContent className="p-4 flex flex-col h-full">
+                      {/* Icon */}
+                      <div className="text-3xl mb-3">{page.icon || "📄"}</div>
 
-                    {/* Title */}
-                    <h3 className="font-medium line-clamp-2 mb-2 group-hover:text-primary transition-colors">
-                      {page.title}
-                    </h3>
+                      {/* Title */}
+                      <h3 className="font-medium line-clamp-2 mb-2 group-hover:text-primary transition-colors">
+                        {page.title}
+                      </h3>
 
-                    {/* Categories */}
-                    {page.categories && page.categories.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {page.categories.slice(0, 2).map((cat) => (
-                          <CategoryBadge key={cat.id} category={cat} size="sm" />
-                        ))}
-                        {page.categories.length > 2 && (
-                          <span className="text-xs text-muted-foreground">
-                            +{page.categories.length - 2}
-                          </span>
+                      {/* Categories */}
+                      {page.categories && page.categories.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {page.categories.slice(0, 2).map((cat) => (
+                            <CategoryBadge
+                              key={cat.id}
+                              category={cat}
+                              size="sm"
+                              onRemove={() => handleRemoveCategory(page.id, cat.id, page.categoryIds)}
+                            />
+                          ))}
+                          {page.categories.length > 2 && (
+                            <span className="text-xs text-muted-foreground">
+                              +{page.categories.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Footer: Date & Favorite */}
+                      <div className="mt-auto pt-2 flex items-center justify-between text-xs text-muted-foreground">
+                        <span>
+                          {formatDistanceToNow(new Date(page.updatedAt), { addSuffix: true })}
+                        </span>
+                        {page.isFavorite && (
+                          <Star className="size-3.5 text-yellow-500 fill-yellow-500" />
                         )}
                       </div>
-                    )}
-
-                    {/* Footer: Date & Favorite */}
-                    <div className="mt-auto pt-2 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>
-                        {formatDistanceToNow(new Date(page.updatedAt), { addSuffix: true })}
-                      </span>
-                      {page.isFavorite && (
-                        <Star className="size-3.5 text-yellow-500 fill-yellow-500" />
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </DraggablePage>
             ))}
           </div>
         ) : (
           /* List View */
           <div className="space-y-2">
             {displayPages.map((page) => (
-              <Link
-                key={page.id}
-                href={`/knowledge/${page.id}`}
-                className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors"
-              >
-                <span className="text-xl shrink-0">{page.icon || "📄"}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate">{page.title}</div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(page.updatedAt), { addSuffix: true })}
-                    </span>
-                    {page.categories?.slice(0, 2).map((cat) => (
-                      <CategoryBadge key={cat.id} category={cat} size="sm" />
-                    ))}
-                    {page.categories && page.categories.length > 2 && (
+              <DraggablePage key={page.id} page={page}>
+                <Link
+                  href={`/knowledge/${page.id}`}
+                  className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <GripVertical className="size-4 text-muted-foreground shrink-0" />
+                  <span className="text-xl shrink-0">{page.icon || "📄"}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{page.title}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-muted-foreground">
-                        +{page.categories.length - 2}
+                        {formatDistanceToNow(new Date(page.updatedAt), { addSuffix: true })}
                       </span>
-                    )}
+                      {page.categories?.slice(0, 2).map((cat) => (
+                        <CategoryBadge
+                          key={cat.id}
+                          category={cat}
+                          size="sm"
+                          onRemove={() => handleRemoveCategory(page.id, cat.id, page.categoryIds)}
+                        />
+                      ))}
+                      {page.categories && page.categories.length > 2 && (
+                        <span className="text-xs text-muted-foreground">
+                          +{page.categories.length - 2}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {page.isFavorite && (
-                  <Star className="size-4 text-yellow-500 fill-yellow-500 shrink-0" />
-                )}
-              </Link>
+                  {page.isFavorite && (
+                    <Star className="size-4 text-yellow-500 fill-yellow-500 shrink-0" />
+                  )}
+                </Link>
+              </DraggablePage>
             ))}
           </div>
         )}

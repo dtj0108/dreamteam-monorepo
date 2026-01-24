@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createServerSupabaseClient } from "@/lib/supabase-server"
 import { getSession } from "@/lib/session"
+import { triggerActivityLogged } from "@/lib/workflow-trigger-service"
 
 // GET /api/leads/[id]/activities - List activities for a lead
 export async function GET(
@@ -81,10 +82,10 @@ export async function POST(
 
     const supabase = createAdminClient()
 
-    // Verify lead ownership and get contacts
+    // Verify lead ownership and get contacts with lead details for workflow trigger
     const { data: lead, error: leadError } = await supabase
       .from("leads")
-      .select("id, contacts(id)")
+      .select("id, name, status, notes, user_id, contacts(id)")
       .eq("id", id)
       .eq("user_id", session.id)
       .single()
@@ -139,6 +140,28 @@ export async function POST(
       console.error("Error creating activity:", error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    // Trigger activity_logged workflow (fire and forget)
+    triggerActivityLogged(
+      {
+        id: activity.id,
+        type: activity.type,
+        subject: activity.subject || "",
+        description: activity.description,
+        is_completed: activity.is_completed,
+        completed_at: activity.completed_at,
+      },
+      {
+        id: lead.id,
+        name: lead.name,
+        status: lead.status,
+        notes: lead.notes,
+        user_id: lead.user_id,
+      },
+      session.id
+    ).catch((err) => {
+      console.error("Error triggering activity_logged workflows:", err)
+    })
 
     return NextResponse.json({ activity })
   } catch (error) {

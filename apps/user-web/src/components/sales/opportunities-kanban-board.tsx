@@ -656,8 +656,14 @@ export function OpportunitiesKanbanBoard({
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
         <div className="text-center">
-          <p>No pipeline configured</p>
-          <p className="text-sm">Create a pipeline to get started</p>
+          <p className="text-lg font-medium">No pipeline configured</p>
+          <p className="text-sm mb-4">Create a pipeline to get started</p>
+          <Button asChild>
+            <Link href="/sales/customize">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Pipeline
+            </Link>
+          </Button>
         </div>
       </div>
     )

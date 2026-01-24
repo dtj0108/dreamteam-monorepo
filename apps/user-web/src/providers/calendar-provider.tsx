@@ -67,6 +67,8 @@ interface CalendarContextValue {
 
   // Actions
   createEvent: (event: CreateEventInput) => Promise<boolean>
+  updateEvent: (eventId: string, event: UpdateEventInput) => Promise<boolean>
+  deleteEvent: (eventId: string) => Promise<boolean>
 
   // Error
   error: string | null
@@ -80,6 +82,17 @@ interface CreateEventInput {
   startTime: Date
   endTime: Date
   participants?: Array<{ email: string; name?: string }>
+  timezone?: string
+}
+
+interface UpdateEventInput {
+  title?: string
+  description?: string
+  location?: string
+  startTime?: Date
+  endTime?: Date
+  participants?: Array<{ email: string; name?: string }>
+  timezone?: string
 }
 
 const CalendarContext = createContext<CalendarContextValue | null>(null)
@@ -101,6 +114,14 @@ export function CalendarProvider({
 }) {
   // State
   const [grantId, setGrantId] = useState<string | null>(initialGrantId || null)
+
+  // Update grantId when initialGrantId prop changes (e.g., after OAuth redirect)
+  useEffect(() => {
+    if (initialGrantId) {
+      setGrantId(initialGrantId)
+    }
+  }, [initialGrantId])
+
   const [calendars, setCalendars] = useState<CalendarInfo[]>([])
   const [selectedCalendarId, setSelectedCalendarId] = useState<string | null>(null)
   const [events, setEvents] = useState<CalendarEvent[]>([])
@@ -217,6 +238,8 @@ export function CalendarProvider({
           when: {
             startTime: Math.floor(input.startTime.getTime() / 1000),
             endTime: Math.floor(input.endTime.getTime() / 1000),
+            startTimezone: input.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+            endTimezone: input.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
           },
           participants: input.participants,
         }),
@@ -241,6 +264,93 @@ export function CalendarProvider({
       return false
     }
   }, [grantId, selectedCalendarId, fetchEvents, startDate, endDate])
+
+  // Update event
+  const updateEventHandler = useCallback(async (eventId: string, input: UpdateEventInput): Promise<boolean> => {
+    if (!grantId || !selectedCalendarId) {
+      setError('No calendar selected')
+      return false
+    }
+
+    try {
+      const body: Record<string, unknown> = {
+        grantId,
+        calendarId: selectedCalendarId,
+      }
+
+      if (input.title !== undefined) body.title = input.title
+      if (input.description !== undefined) body.description = input.description
+      if (input.location !== undefined) body.location = input.location
+      if (input.startTime && input.endTime) {
+        const timezone = input.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+        body.when = {
+          startTime: Math.floor(input.startTime.getTime() / 1000),
+          endTime: Math.floor(input.endTime.getTime() / 1000),
+          startTimezone: timezone,
+          endTimezone: timezone,
+        }
+      }
+      if (input.participants) body.participants = input.participants
+
+      const res = await fetch(`/api/nylas/events/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Failed to update event')
+        return false
+      }
+
+      // Refresh events
+      await fetchEvents(
+        Math.floor(startDate.getTime() / 1000),
+        Math.floor(endDate.getTime() / 1000)
+      )
+
+      return true
+    } catch (err) {
+      console.error('Failed to update event:', err)
+      setError('Failed to update event')
+      return false
+    }
+  }, [grantId, selectedCalendarId, fetchEvents, startDate, endDate])
+
+  // Delete event
+  const deleteEventHandler = useCallback(async (eventId: string): Promise<boolean> => {
+    if (!grantId || !selectedCalendarId) {
+      setError('No calendar selected')
+      return false
+    }
+
+    try {
+      const params = new URLSearchParams({
+        grantId,
+        calendarId: selectedCalendarId,
+      })
+
+      const res = await fetch(`/api/nylas/events/${eventId}?${params}`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Failed to delete event')
+        return false
+      }
+
+      // Remove from local state
+      setEvents(prev => prev.filter(e => e.id !== eventId))
+
+      return true
+    } catch (err) {
+      console.error('Failed to delete event:', err)
+      setError('Failed to delete event')
+      return false
+    }
+  }, [grantId, selectedCalendarId])
 
   // Load calendars when grant changes
   useEffect(() => {
@@ -277,6 +387,8 @@ export function CalendarProvider({
         view,
         setView,
         createEvent: createEventHandler,
+        updateEvent: updateEventHandler,
+        deleteEvent: deleteEventHandler,
         error,
         clearError,
       }}

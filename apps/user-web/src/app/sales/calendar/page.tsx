@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useCalendar } from "@/providers/calendar-provider"
+import { useCalendar, CalendarEvent } from "@/providers/calendar-provider"
 import { CalendarView } from "@/components/calendar/calendar-view"
 import { EventDialog } from "@/components/calendar/event-dialog"
 import { Button } from "@/components/ui/button"
@@ -21,6 +21,7 @@ import {
   Loader2,
   AlertCircle,
   X,
+  Globe,
 } from "lucide-react"
 import { GoogleSignInButton, MicrosoftSignInButton } from "@/components/nylas"
 
@@ -44,6 +45,11 @@ export default function CalendarPage() {
 
   const [eventDialogOpen, setEventDialogOpen] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create')
+
+  // Get user's timezone
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   // Navigation
   const navigateWeek = (direction: 'prev' | 'next') => {
@@ -84,6 +90,22 @@ export default function CalendarPage() {
 
   const handleDateClick = (date: Date) => {
     setSelectedDate(date)
+    setSelectedEvent(null)
+    setDialogMode('create')
+    setEventDialogOpen(true)
+  }
+
+  const handleEventClick = (event: CalendarEvent) => {
+    setSelectedEvent(event)
+    setSelectedDate(null)
+    setDialogMode('edit')
+    setEventDialogOpen(true)
+  }
+
+  const handleNewEvent = () => {
+    setSelectedDate(null)
+    setSelectedEvent(null)
+    setDialogMode('create')
     setEventDialogOpen(true)
   }
 
@@ -98,8 +120,14 @@ export default function CalendarPage() {
             Connect your Google or Microsoft account to view and manage your calendar.
           </p>
           <div className="flex flex-col gap-3">
-            <GoogleSignInButton onSuccess={() => window.location.reload()} />
-            <MicrosoftSignInButton onSuccess={() => window.location.reload()} />
+            <GoogleSignInButton
+              onSuccess={() => window.location.reload()}
+              returnUrl="/sales/calendar"
+            />
+            <MicrosoftSignInButton
+              onSuccess={() => window.location.reload()}
+              returnUrl="/sales/calendar"
+            />
           </div>
         </div>
       </div>
@@ -141,6 +169,12 @@ export default function CalendarPage() {
           </div>
 
           <h2 className="text-lg font-semibold">{formatDateRange()}</h2>
+
+          {/* Timezone indicator */}
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Globe className="h-3 w-3" />
+            <span>{userTimezone}</span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -156,7 +190,7 @@ export default function CalendarPage() {
             </SelectContent>
           </Select>
 
-          <Button onClick={() => setEventDialogOpen(true)}>
+          <Button onClick={handleNewEvent}>
             <Plus className="h-4 w-4 mr-2" />
             New Event
           </Button>
@@ -188,6 +222,7 @@ export default function CalendarPage() {
             view={view}
             startDate={startDate}
             onDateClick={handleDateClick}
+            onEventClick={handleEventClick}
           />
         )}
       </div>
@@ -197,6 +232,8 @@ export default function CalendarPage() {
         open={eventDialogOpen}
         onOpenChange={setEventDialogOpen}
         initialDate={selectedDate}
+        event={selectedEvent}
+        mode={dialogMode}
       />
     </div>
   )

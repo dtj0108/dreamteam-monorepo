@@ -14,6 +14,10 @@ import {
 import { cn } from "@/lib/utils"
 import {
   Mail,
+  Inbox,
+  Send,
+  FileEdit,
+  Trash2,
   Phone,
   MessageSquare,
   Plus,
@@ -47,8 +51,14 @@ interface MailSidebarProps {
   loading?: boolean
 }
 
-const folders = [
-  { id: "inbox", label: "Emails", icon: Mail },
+const emailFolders = [
+  { id: "inbox", label: "Inbox", icon: Inbox, nylasFolder: "INBOX" },
+  { id: "sent", label: "Sent", icon: Send, nylasFolder: "SENT" },
+  { id: "drafts", label: "Drafts", icon: FileEdit, nylasFolder: "DRAFT" },
+  { id: "trash", label: "Trash", icon: Trash2, nylasFolder: "TRASH" },
+]
+
+const otherFolders = [
   { id: "calls", label: "Calls", icon: Phone },
   { id: "texts", label: "Texts", icon: MessageSquare },
 ]
@@ -117,7 +127,7 @@ export function MailSidebar({
 
       <ScrollArea className="flex-1">
         <div className="p-2">
-          {/* Folders Section */}
+          {/* Email Folders Section */}
           <Collapsible open={foldersOpen} onOpenChange={setFoldersOpen} suppressHydrationWarning>
             <div className="flex items-center px-2 py-1.5">
               <CollapsibleTrigger asChild>
@@ -127,14 +137,15 @@ export function MailSidebar({
                   ) : (
                     <ChevronRight className="size-3.5" />
                   )}
-                  Inbox
+                  <Mail className="size-3.5 ml-0.5" />
+                  <span className="ml-1">Email</span>
                 </button>
               </CollapsibleTrigger>
             </div>
 
             <CollapsibleContent>
-              <div className="space-y-0.5">
-                {folders.map((f) => {
+              <div className="space-y-0.5 ml-2">
+                {emailFolders.map((f) => {
                   const isActive = folder === f.id
 
                   return (
@@ -168,6 +179,29 @@ export function MailSidebar({
               </div>
             </CollapsibleContent>
           </Collapsible>
+
+          {/* Other Sections (Calls, Texts) */}
+          <div className="mt-2 space-y-0.5">
+            {otherFolders.map((f) => {
+              const isActive = folder === f.id
+
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => onFolderChange(f.id)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors",
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <f.icon className="size-4 shrink-0" />
+                  <span className="truncate flex-1 text-left">{f.label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       </ScrollArea>
     </div>

@@ -3,6 +3,26 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useProjects, type Project, type ProjectStatus, type Department } from "@/providers/projects-provider"
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -37,6 +57,7 @@ import {
   Lightbulb,
   Rocket,
   Shield,
+  GripVertical,
 } from "lucide-react"
 import { CreateProjectDialog } from "@/components/projects/create-project-dialog"
 import { DepartmentManager } from "@/components/projects/department-manager"
@@ -72,10 +93,11 @@ const priorityColors = {
   critical: "bg-red-100 text-red-700",
 }
 
-function ProjectCard({ project, onArchive, onDelete }: {
+function ProjectCard({ project, onArchive, onDelete, dragHandleProps }: {
   project: Project
   onArchive: () => void
   onDelete: () => void
+  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>
 }) {
   const memberAvatars = project.project_members?.slice(0, 4) || []
   const remainingMembers = (project.project_members?.length || 0) - 4
@@ -85,6 +107,14 @@ function ProjectCard({ project, onArchive, onDelete }: {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
+            {dragHandleProps && (
+              <button
+                {...dragHandleProps}
+                className="cursor-grab active:cursor-grabbing p-1 -ml-1 opacity-0 group-hover:opacity-100 transition-opacity touch-none"
+              >
+                <GripVertical className="h-4 w-4 text-muted-foreground" />
+              </button>
+            )}
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center"
               style={{ backgroundColor: project.color + "20" }}
@@ -207,15 +237,24 @@ function ProjectCard({ project, onArchive, onDelete }: {
   )
 }
 
-function ProjectListRow({ project, onArchive, onDelete }: {
+function ProjectListRow({ project, onArchive, onDelete, dragHandleProps }: {
   project: Project
   onArchive: () => void
   onDelete: () => void
+  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>
 }) {
   const memberAvatars = project.project_members?.slice(0, 3) || []
 
   return (
     <div className="group flex items-center gap-4 p-4 border-b hover:bg-muted/50 transition-colors">
+      {dragHandleProps && (
+        <button
+          {...dragHandleProps}
+          className="cursor-grab active:cursor-grabbing p-1 opacity-0 group-hover:opacity-100 transition-opacity touch-none"
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </button>
+      )}
       <div
         className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
         style={{ backgroundColor: project.color + "20" }}
@@ -301,14 +340,94 @@ function ProjectListRow({ project, onArchive, onDelete }: {
   )
 }
 
+// Sortable wrapper for ProjectCard (grid view)
+function SortableProjectCard({ project, onArchive, onDelete }: {
+  project: Project
+  onArchive: () => void
+  onDelete: () => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: project.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1 : 0,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <ProjectCard
+        project={project}
+        onArchive={onArchive}
+        onDelete={onDelete}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  )
+}
+
+// Sortable wrapper for ProjectListRow (list view)
+function SortableProjectListRow({ project, onArchive, onDelete }: {
+  project: Project
+  onArchive: () => void
+  onDelete: () => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: project.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1 : 0,
+    position: "relative" as const,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <ProjectListRow
+        project={project}
+        onArchive={onArchive}
+        onDelete={onDelete}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  )
+}
+
 export default function ProjectsAllPage() {
-  const { projects, departments, loading, updateProject, deleteProject } = useProjects()
+  const { projects, departments, loading, updateProject, deleteProject, reorderProjects } = useProjects()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [departmentFilter, setDepartmentFilter] = useState<string>("all")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showDepartmentManager, setShowDepartmentManager] = useState(false)
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   const filteredProjects = projects.filter((project) => {
     const matchesSearch = project.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -328,6 +447,27 @@ export default function ProjectsAllPage() {
       await deleteProject(project.id)
     }
   }
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string)
+  }
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveId(null)
+
+    if (over && active.id !== over.id) {
+      const oldIndex = filteredProjects.findIndex(p => p.id === active.id)
+      const newIndex = filteredProjects.findIndex(p => p.id === over.id)
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrder = arrayMove(filteredProjects, oldIndex, newIndex)
+        await reorderProjects(newOrder.map(p => p.id))
+      }
+    }
+  }
+
+  const activeProject = activeId ? filteredProjects.find(p => p.id === activeId) : null
 
   // Only show skeleton on first load (no cached data)
   // If we have cached projects, render them instantly while refreshing in background
@@ -538,39 +678,77 @@ export default function ProjectsAllPage() {
             )}
           </div>
         </Card>
-      ) : viewMode === "grid" ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredProjects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              onArchive={() => handleArchive(project)}
-              onDelete={() => handleDelete(project)}
-            />
-          ))}
-        </div>
       ) : (
-        <Card>
-          <div className="divide-y">
-            <div className="flex items-center gap-4 p-4 text-sm font-medium text-muted-foreground bg-muted/50">
-              <div className="w-10" />
-              <div className="flex-1">Project</div>
-              <div className="w-24">Status</div>
-              <div className="w-32">Progress</div>
-              <div className="w-20">Team</div>
-              <div className="w-24 text-right">Due Date</div>
-              <div className="w-8" />
-            </div>
-            {filteredProjects.map((project) => (
-              <ProjectListRow
-                key={project.id}
-                project={project}
-                onArchive={() => handleArchive(project)}
-                onDelete={() => handleDelete(project)}
-              />
-            ))}
-          </div>
-        </Card>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={filteredProjects.map(p => p.id)}
+            strategy={viewMode === "grid" ? rectSortingStrategy : verticalListSortingStrategy}
+          >
+            {viewMode === "grid" ? (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filteredProjects.map((project) => (
+                  <SortableProjectCard
+                    key={project.id}
+                    project={project}
+                    onArchive={() => handleArchive(project)}
+                    onDelete={() => handleDelete(project)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <div className="divide-y">
+                  <div className="flex items-center gap-4 p-4 text-sm font-medium text-muted-foreground bg-muted/50">
+                    <div className="w-8" />
+                    <div className="w-10" />
+                    <div className="flex-1">Project</div>
+                    <div className="w-24">Status</div>
+                    <div className="w-32">Progress</div>
+                    <div className="w-20">Team</div>
+                    <div className="w-24 text-right">Due Date</div>
+                    <div className="w-8" />
+                  </div>
+                  {filteredProjects.map((project) => (
+                    <SortableProjectListRow
+                      key={project.id}
+                      project={project}
+                      onArchive={() => handleArchive(project)}
+                      onDelete={() => handleDelete(project)}
+                    />
+                  ))}
+                </div>
+              </Card>
+            )}
+          </SortableContext>
+
+          {/* Drag Overlay - shows the item being dragged */}
+          <DragOverlay>
+            {activeProject ? (
+              viewMode === "grid" ? (
+                <div className="opacity-80">
+                  <ProjectCard
+                    project={activeProject}
+                    onArchive={() => {}}
+                    onDelete={() => {}}
+                  />
+                </div>
+              ) : (
+                <div className="opacity-80 bg-background border rounded-lg">
+                  <ProjectListRow
+                    project={activeProject}
+                    onArchive={() => {}}
+                    onDelete={() => {}}
+                  />
+                </div>
+              )
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {/* Create Project Dialog */}

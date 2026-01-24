@@ -34,7 +34,8 @@ import { ActionCard } from "@/components/workflows/action-card"
 import { ActionPicker } from "@/components/workflows/action-picker"
 import { ConfigSidePanel } from "@/components/workflows/config-side-panel"
 import { FlowConnector } from "@/components/workflows/flow-connector"
-import type { Workflow, WorkflowAction } from "@/types/workflow"
+import { ConditionBranchView } from "@/components/workflows/condition-branch-view"
+import type { Workflow, WorkflowAction, ConditionActionConfig } from "@/types/workflow"
 
 // Sortable wrapper for ActionCard
 function SortableActionCard({
@@ -101,6 +102,19 @@ export default function WorkflowBuilderPage() {
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
   const [showActionPicker, setShowActionPicker] = useState(false)
 
+  // Track context when adding to a condition branch
+  // null = adding to top-level, { conditionId, branch } = adding to a specific branch
+  const [addToBranchContext, setAddToBranchContext] = useState<{
+    conditionId: string
+    branch: "if" | "else"
+  } | null>(null)
+
+  // Track if selected action is in a branch (for editing)
+  const [selectedBranchContext, setSelectedBranchContext] = useState<{
+    conditionId: string
+    branch: "if" | "else"
+  } | null>(null)
+
   // DnD sensors - require 8px movement to start drag (allows clicks to work)
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -155,26 +169,103 @@ export default function WorkflowBuilderPage() {
     }
   }
 
-  // Add new action
+  // Add new action (to top-level or to a branch)
   const handleAddAction = (action: WorkflowAction) => {
-    setActions((prev) => [...prev, action])
-    setSelectedActionId(action.id)
+    if (addToBranchContext) {
+      // Adding to a condition branch
+      const { conditionId, branch } = addToBranchContext
+      setActions((prev) =>
+        prev.map((a) => {
+          if (a.id === conditionId && a.type === "condition") {
+            const condConfig = a.config as unknown as ConditionActionConfig
+            const branchKey = branch === "if" ? "if_branch" : "else_branch"
+            const currentBranch = condConfig[branchKey] || []
+            return {
+              ...a,
+              config: {
+                ...condConfig,
+                [branchKey]: [...currentBranch, { ...action, order: currentBranch.length }],
+              },
+            }
+          }
+          return a
+        })
+      )
+      setSelectedActionId(action.id)
+      setSelectedBranchContext(addToBranchContext)
+      setAddToBranchContext(null)
+    } else {
+      // Adding to top-level
+      setActions((prev) => [...prev, action])
+      setSelectedActionId(action.id)
+      setSelectedBranchContext(null)
+    }
   }
 
-  // Save edited action
+  // Save edited action (top-level or in a branch)
   const handleSaveAction = (updatedAction: WorkflowAction) => {
-    setActions((prev) =>
-      prev.map((a) => (a.id === updatedAction.id ? updatedAction : a))
-    )
+    if (selectedBranchContext) {
+      // Saving a branch action
+      const { conditionId, branch } = selectedBranchContext
+      setActions((prev) =>
+        prev.map((a) => {
+          if (a.id === conditionId && a.type === "condition") {
+            const condConfig = a.config as unknown as ConditionActionConfig
+            const branchKey = branch === "if" ? "if_branch" : "else_branch"
+            const currentBranch = condConfig[branchKey] || []
+            return {
+              ...a,
+              config: {
+                ...condConfig,
+                [branchKey]: currentBranch.map((ba) =>
+                  ba.id === updatedAction.id ? updatedAction : ba
+                ),
+              },
+            }
+          }
+          return a
+        })
+      )
+    } else {
+      // Saving a top-level action
+      setActions((prev) =>
+        prev.map((a) => (a.id === updatedAction.id ? updatedAction : a))
+      )
+    }
   }
 
-  // Delete action
+  // Delete action (top-level or in a branch)
   const handleDeleteAction = (actionId: string) => {
-    setActions((prev) => {
-      const filtered = prev.filter((a) => a.id !== actionId)
-      return filtered.map((item, idx) => ({ ...item, order: idx }))
-    })
+    if (selectedBranchContext) {
+      // Deleting a branch action
+      const { conditionId, branch } = selectedBranchContext
+      setActions((prev) =>
+        prev.map((a) => {
+          if (a.id === conditionId && a.type === "condition") {
+            const condConfig = a.config as unknown as ConditionActionConfig
+            const branchKey = branch === "if" ? "if_branch" : "else_branch"
+            const currentBranch = condConfig[branchKey] || []
+            const filtered = currentBranch.filter((ba) => ba.id !== actionId)
+            return {
+              ...a,
+              config: {
+                ...condConfig,
+                [branchKey]: filtered.map((item, idx) => ({ ...item, order: idx })),
+              },
+            }
+          }
+          return a
+        })
+      )
+    } else {
+      // Deleting a top-level action
+      setActions((prev) => {
+        const filtered = prev.filter((a) => a.id !== actionId)
+        return filtered.map((item, idx) => ({ ...item, order: idx }))
+      })
+    }
     setSelectedActionId(null)
+    setSelectedBranchContext(null)
   }
 
   // Save workflow
@@ -252,6 +343,29 @@ export default function WorkflowBuilderPage() {
     }
   }
 
+  // Find selected action (could be top-level or in a branch)
+  // NOTE: This must be before early returns to comply with Rules of Hooks
+  const selectedAction = useMemo(() => {
+    if (!selectedActionId) return null
+
+    // First check top-level
+    const topLevel = actions.find((a) => a.id === selectedActionId)
+    if (topLevel) return topLevel
+
+    // Check inside condition branches
+    for (const action of actions) {
+      if (action.type === "condition") {
+        const condConfig = action.config as unknown as ConditionActionConfig
+        const inIfBranch = (condConfig.if_branch || []).find((a) => a.id === selectedActionId)
+        if (inIfBranch) return inIfBranch
+        const inElseBranch = (condConfig.else_branch || []).find((a) => a.id === selectedActionId)
+        if (inElseBranch) return inElseBranch
+      }
+    }
+
+    return null
+  }, [selectedActionId, actions])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -263,8 +377,6 @@ export default function WorkflowBuilderPage() {
   if (!workflow) {
     return null
   }
-
-  const selectedAction = actions.find((a) => a.id === selectedActionId) || null
 
   return (
     <div className="flex h-screen">
@@ -373,13 +485,44 @@ export default function WorkflowBuilderPage() {
                 strategy={verticalListSortingStrategy}
               >
                 {actions.map((action) => (
-                  <div key={action.id} className="flex flex-col items-center">
-                    <SortableActionCard
-                      action={action}
-                      selected={selectedActionId === action.id}
-                      onClick={() => setSelectedActionId(action.id)}
-                    />
-                    <FlowConnector />
+                  <div key={action.id} className="flex flex-col items-center w-full">
+                    {action.type === "condition" ? (
+                      <>
+                        <ConditionBranchView
+                          action={action}
+                          selectedActionId={selectedActionId}
+                          onSelectCondition={() => {
+                            setSelectedActionId(action.id)
+                            setSelectedBranchContext(null)
+                          }}
+                          onSelectAction={(actionId) => {
+                            setSelectedActionId(actionId)
+                            setSelectedBranchContext(null)
+                          }}
+                          onAddToBranch={(branch) => {
+                            setAddToBranchContext({ conditionId: action.id, branch })
+                            setShowActionPicker(true)
+                          }}
+                          onSelectBranchAction={(actionId, branch) => {
+                            setSelectedActionId(actionId)
+                            setSelectedBranchContext({ conditionId: action.id, branch })
+                          }}
+                        />
+                        <FlowConnector />
+                      </>
+                    ) : (
+                      <>
+                        <SortableActionCard
+                          action={action}
+                          selected={selectedActionId === action.id}
+                          onClick={() => {
+                            setSelectedActionId(action.id)
+                            setSelectedBranchContext(null)
+                          }}
+                        />
+                        <FlowConnector />
+                      </>
+                    )}
                   </div>
                 ))}
               </SortableContext>
@@ -405,16 +548,26 @@ export default function WorkflowBuilderPage() {
       {selectedAction && (
         <ConfigSidePanel
           action={selectedAction}
-          onClose={() => setSelectedActionId(null)}
+          onClose={() => {
+            setSelectedActionId(null)
+            setSelectedBranchContext(null)
+          }}
           onSave={handleSaveAction}
           onDelete={handleDeleteAction}
+          triggerType={workflow.trigger_type}
+          allActions={actions}
         />
       )}
 
       {/* Action picker dialog */}
       <ActionPicker
         open={showActionPicker}
-        onOpenChange={setShowActionPicker}
+        onOpenChange={(open) => {
+          setShowActionPicker(open)
+          if (!open) {
+            setAddToBranchContext(null)
+          }
+        }}
         onSelectAction={handleAddAction}
         existingActionsCount={actions.length}
       />

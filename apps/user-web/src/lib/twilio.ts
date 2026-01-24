@@ -632,14 +632,7 @@ export interface AccessTokenResult {
  * Generate an access token for Twilio Voice SDK (browser calling)
  */
 export function generateVoiceAccessToken(identity: string): AccessTokenResult {
-  // #region agent log
-  fetch('http://127.0.0.1:7246/ingest/f4f05322-bb7d-4d7a-b25d-8aaed8531e84',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'twilio.ts:generateVoiceAccessToken:entry',message:'Token generation started',data:{identity,hasApiKeySid:!!apiKeySid,hasApiKeySecret:!!apiKeySecret,hasTwimlAppSid:!!twimlAppSid,accountSidPrefix:accountSid?.substring(0,6),apiKeySidPrefix:apiKeySid?.substring(0,6),twimlAppSidPrefix:twimlAppSid?.substring(0,6),accountSidLen:accountSid?.length,apiKeySidLen:apiKeySid?.length,apiKeySecretLen:apiKeySecret?.length,twimlAppSidLen:twimlAppSid?.length,apiKeySecretFirst4:apiKeySecret?.substring(0,4),apiKeySecretLast4:apiKeySecret?.substring(apiKeySecret.length-4),hasWhitespace:{accountSid:accountSid!==accountSid?.trim(),apiKeySid:apiKeySid!==apiKeySid?.trim(),apiKeySecret:apiKeySecret!==apiKeySecret?.trim(),twimlAppSid:twimlAppSid!==twimlAppSid?.trim()}},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H6'})}).catch(()=>{});
-  // #endregion
-
   if (!apiKeySid || !apiKeySecret || !twimlAppSid) {
-    // #region agent log
-    fetch('http://127.0.0.1:7246/ingest/f4f05322-bb7d-4d7a-b25d-8aaed8531e84',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'twilio.ts:generateVoiceAccessToken:missing-creds',message:'Missing credentials',data:{apiKeySid:apiKeySid||'MISSING',apiKeySecret:apiKeySecret?'SET':'MISSING',twimlAppSid:twimlAppSid||'MISSING'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     return {
       success: false,
       error: 'Twilio Voice SDK not configured. Missing API Key or TwiML App SID.',
@@ -649,10 +642,6 @@ export function generateVoiceAccessToken(identity: string): AccessTokenResult {
   try {
     const { AccessToken } = jwt
     const { VoiceGrant } = AccessToken
-
-    // #region agent log
-    fetch('http://127.0.0.1:7246/ingest/f4f05322-bb7d-4d7a-b25d-8aaed8531e84',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'twilio.ts:generateVoiceAccessToken:creating-token',message:'Creating AccessToken',data:{accountSid:accountSid?.substring(0,6),apiKeySid:apiKeySid?.substring(0,6),twimlAppSid:twimlAppSid?.substring(0,6),identity},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H3'})}).catch(()=>{});
-    // #endregion
 
     // Create access token
     const token = new AccessToken(
@@ -671,19 +660,11 @@ export function generateVoiceAccessToken(identity: string): AccessTokenResult {
     // Add the grant to the token
     token.addGrant(voiceGrant)
 
-    const jwtToken = token.toJwt()
-    // #region agent log
-    fetch('http://127.0.0.1:7246/ingest/f4f05322-bb7d-4d7a-b25d-8aaed8531e84',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'twilio.ts:generateVoiceAccessToken:success',message:'Token generated successfully',data:{tokenLength:jwtToken.length,tokenPrefix:jwtToken.substring(0,20)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3,H5'})}).catch(()=>{});
-    // #endregion
-
     return {
       success: true,
-      token: jwtToken,
+      token: token.toJwt(),
     }
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7246/ingest/f4f05322-bb7d-4d7a-b25d-8aaed8531e84',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'twilio.ts:generateVoiceAccessToken:error',message:'Token generation failed',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
     console.error('Failed to generate access token:', error)
     return {
       success: false,

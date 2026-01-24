@@ -13,6 +13,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -40,6 +42,7 @@ import {
   LightbulbIcon,
   UsersIcon,
   TrashIcon,
+  CheckIcon,
 } from "lucide-react"
 import { CollapsibleSection } from "@/components/sales/collapsible-section"
 import { LeadForm, type Lead } from "@/components/sales/lead-form"
@@ -68,6 +71,21 @@ interface Activity {
   created_at: string
 }
 
+interface LeadStage {
+  id: string
+  name: string
+  color: string | null
+  position: number
+  pipeline_id: string
+}
+
+interface Pipeline {
+  id: string
+  name: string
+  is_default: boolean
+  stages: LeadStage[]
+}
+
 interface LeadWithRelations extends Lead {
   id: string
   contacts: Contact[]
@@ -76,6 +94,9 @@ interface LeadWithRelations extends Lead {
   opportunities: LeadOpportunity[]
   created_at: string
   updated_at: string
+  pipeline_id?: string | null
+  stage_id?: string | null
+  stage?: LeadStage | null
 }
 
 const statusOptions = [
@@ -101,6 +122,7 @@ export default function LeadDetailPage() {
   const [smsDialogOpen, setSmsDialogOpen] = React.useState(false)
   const [noteDialogOpen, setNoteDialogOpen] = React.useState(false)
   const [ownedNumbers, setOwnedNumbers] = React.useState<{ id: string; phone_number: string; is_primary: boolean }[]>([])
+  const [pipelines, setPipelines] = React.useState<Pipeline[]>([])
   const { initiateCall, deviceState } = useCall()
 
   const fetchLead = React.useCallback(async () => {
@@ -131,6 +153,16 @@ export default function LeadDetailPage() {
         setOwnedNumbers(data.numbers || [])
       })
       .catch((err) => console.error("Failed to fetch owned numbers:", err))
+  }, [])
+
+  // Fetch pipelines for the stage selector
+  React.useEffect(() => {
+    fetch("/api/lead-pipelines")
+      .then((res) => res.json())
+      .then((data) => {
+        setPipelines(data || [])
+      })
+      .catch((err) => console.error("Failed to fetch pipelines:", err))
   }, [])
 
   // Call a specific contact - pass contact or defaults to first with phone
@@ -169,6 +201,15 @@ export default function LeadDetailPage() {
 
   const handleStatusChange = async (status: string) => {
     await handleUpdateLead({ ...lead!, status })
+  }
+
+  const handleStageChange = async (stageId: string, pipelineId: string) => {
+    const res = await fetch(`/api/leads/${params.id}/stage`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage_id: stageId, pipeline_id: pipelineId }),
+    })
+    if (res.ok) fetchLead()
   }
 
   const handleDeleteLead = async () => {
@@ -301,6 +342,52 @@ export default function LeadDetailPage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          {/* Pipeline/Stage Selector */}
+          {pipelines.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <div
+                    className="size-2 rounded-full"
+                    style={{ backgroundColor: lead.stage?.color || "#6b7280" }}
+                  />
+                  <span className="text-muted-foreground">
+                    {pipelines.find((p) => p.id === lead.pipeline_id)?.name || "No Pipeline"}
+                  </span>
+                  <span className="text-muted-foreground">→</span>
+                  <span>{lead.stage?.name || "No Stage"}</span>
+                  <ChevronDownIcon className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="max-h-80 overflow-y-auto">
+                {pipelines.map((pipeline, index) => (
+                  <div key={pipeline.id}>
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {pipeline.name}
+                    </DropdownMenuLabel>
+                    {pipeline.stages
+                      ?.sort((a, b) => a.position - b.position)
+                      .map((stage) => (
+                        <DropdownMenuItem
+                          key={stage.id}
+                          onClick={() => handleStageChange(stage.id, pipeline.id)}
+                        >
+                          <div
+                            className="size-2 rounded-full mr-2"
+                            style={{ backgroundColor: stage.color || "#6b7280" }}
+                          />
+                          {stage.name}
+                          {stage.id === lead.stage_id && (
+                            <CheckIcon className="ml-auto size-4" />
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    {index < pipelines.length - 1 && <DropdownMenuSeparator />}
+                  </div>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <Button variant="ghost" size="icon">
             <MoreHorizontalIcon className="size-5" />
           </Button>

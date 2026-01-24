@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@dreamteam/database/server'
 import { getSession } from '@dreamteam/auth/session'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
-import { getEmail, updateEmail, isNylasConfigured } from '@/lib/nylas'
+import { getEmail, updateEmail, deleteEmail, isNylasConfigured } from '@/lib/nylas'
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -182,6 +182,88 @@ export async function PATCH(
     console.error('Update email error:', error)
     return NextResponse.json(
       { error: 'Failed to update email' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * DELETE /api/nylas/emails/[id]
+ *
+ * Delete an email.
+ *
+ * Query params:
+ * - grantId: The internal grant ID (UUID)
+ */
+export async function DELETE(
+  request: NextRequest,
+  context: RouteContext
+) {
+  try {
+    const { id: messageId } = await context.params
+
+    if (!isNylasConfigured()) {
+      return NextResponse.json(
+        { error: 'Nylas is not configured' },
+        { status: 503 }
+      )
+    }
+
+    const session = await getSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'No workspace selected' }, { status: 400 })
+    }
+
+    const { isValid } = await validateWorkspaceAccess(workspaceId, session.id)
+    if (!isValid) {
+      return NextResponse.json({ error: 'Not a workspace member' }, { status: 403 })
+    }
+
+    const grantId = request.nextUrl.searchParams.get('grantId')
+    if (!grantId) {
+      return NextResponse.json(
+        { error: 'grantId is required' },
+        { status: 400 }
+      )
+    }
+
+    const supabase = createAdminClient()
+
+    // Verify grant access
+    const { data: grant, error: grantError } = await supabase
+      .from('nylas_grants')
+      .select('grant_id')
+      .eq('id', grantId)
+      .eq('workspace_id', workspaceId)
+      .single()
+
+    if (grantError || !grant) {
+      return NextResponse.json(
+        { error: 'Connected account not found' },
+        { status: 404 }
+      )
+    }
+
+    // Delete email at Nylas
+    const result = await deleteEmail(grant.grant_id, messageId)
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error, errorCode: result.errorCode },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Delete email error:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete email' },
       { status: 500 }
     )
   }

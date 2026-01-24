@@ -19,6 +19,7 @@ const publicRoutes = [
   '/api/twilio/recording',  // Twilio recording callback
   '/api/twilio/status',     // Twilio status callback
   '/api/plaid/webhook',     // Plaid webhook endpoint (must be public)
+  '/api/nylas/webhook',     // Nylas webhook endpoint (must be public)
   '/api/og',                // Open Graph image generation (must be public)
   '/api/test',              // Test route
   '/api/make',              // Make.com integration (handles own auth via API keys)

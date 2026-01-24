@@ -82,7 +82,7 @@ export function ActionPicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden" showCloseButton={false}>
         <DialogTitle className="sr-only">Add Step</DialogTitle>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b">

@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq("workspace_id", workspaceId)
+      .order("position", { ascending: true })
       .order("created_at", { ascending: false })
 
     if (status) {
@@ -151,6 +152,7 @@ export async function POST(request: NextRequest) {
         budget,
         owner_id: userId,
         department_id: department_id || null,
+        position: 0, // New projects go to top
       })
       .select()
       .single()

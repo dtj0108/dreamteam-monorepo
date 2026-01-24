@@ -119,6 +119,10 @@ export default function GlobalTimelinePage() {
     setStartDate(startOfWeek(new Date()))
   }
 
+  const handleDateClick = (date: Date) => {
+    setStartDate(date)
+  }
+
   // Only show skeleton on first load - cached data renders instantly
   if (loading && projects.length === 0) {
     return <TimelinePageSkeleton />
@@ -189,10 +193,11 @@ export default function GlobalTimelinePage() {
               </div>
               <div className="flex">
                 {dateColumns.map((date, i) => (
-                  <div
+                  <button
                     key={i}
+                    onClick={() => handleDateClick(date)}
                     className={cn(
-                      "text-center py-2 border-r text-xs",
+                      "text-center py-2 border-r text-xs hover:bg-accent transition-colors",
                       isToday(date) && "bg-primary/10",
                       isWeekend(date) && "bg-muted/50"
                     )}
@@ -206,7 +211,7 @@ export default function GlobalTimelinePage() {
                         {format(date, "MMM")}
                       </div>
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>

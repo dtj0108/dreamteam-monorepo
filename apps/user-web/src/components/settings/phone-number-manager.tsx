@@ -36,6 +36,7 @@ import {
   CheckIcon,
   AlertCircleIcon,
   RefreshCwIcon,
+  PencilIcon,
 } from "lucide-react"
 import { PHONE_PRICING, formatAddOnPrice } from "@/types/addons"
 
@@ -82,6 +83,11 @@ export function PhoneNumberManager() {
   // Confirm dialogs
   const [releaseDialog, setReleaseDialog] = React.useState<OwnedNumber | null>(null)
   const [purchaseDialog, setPurchaseDialog] = React.useState<AvailableNumber | null>(null)
+
+  // Edit friendly name dialog
+  const [editDialog, setEditDialog] = React.useState<OwnedNumber | null>(null)
+  const [editFriendlyName, setEditFriendlyName] = React.useState("")
+  const [isUpdating, setIsUpdating] = React.useState(false)
 
   // Error state
   const [error, setError] = React.useState<string | null>(null)
@@ -247,6 +253,48 @@ export function PhoneNumberManager() {
     }
   }
 
+  const openEditDialog = (number: OwnedNumber) => {
+    setEditFriendlyName(number.friendly_name || "")
+    setEditDialog(number)
+  }
+
+  const updateFriendlyName = async () => {
+    if (!editDialog) return
+
+    setIsUpdating(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/twilio/numbers/owned", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editDialog.id,
+          friendlyName: editFriendlyName,
+        }),
+      })
+
+      if (res.ok) {
+        // Update local state
+        setOwnedNumbers((prev) =>
+          prev.map((n) =>
+            n.id === editDialog.id
+              ? { ...n, friendly_name: editFriendlyName || null }
+              : n
+          )
+        )
+        setEditDialog(null)
+      } else {
+        const data = await res.json()
+        setError(data.error || "Failed to update friendly name")
+      }
+    } catch (err) {
+      console.error("Failed to update friendly name:", err)
+      setError("Network error. Please try again.")
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const formatPhoneNumber = (phone: string) => {
     // Format +1XXXXXXXXXX to (XXX) XXX-XXXX
     const match = phone.match(/^\+1(\d{3})(\d{3})(\d{4})$/)
@@ -341,6 +389,14 @@ export function PhoneNumberManager() {
                         Set Primary
                       </Button>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openEditDialog(number)}
+                      title="Edit friendly name"
+                    >
+                      <PencilIcon className="size-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -545,6 +601,41 @@ export function PhoneNumberManager() {
                 <CheckIcon className="size-4 mr-2" />
               )}
               Confirm Purchase
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Friendly Name Dialog */}
+      <Dialog open={!!editDialog} onOpenChange={() => setEditDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Friendly Name</DialogTitle>
+            <DialogDescription>
+              Set a friendly name for {editDialog && formatPhoneNumber(editDialog.phone_number)} to help identify this number.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="friendlyName">Friendly Name</Label>
+            <Input
+              id="friendlyName"
+              placeholder="e.g., Sales Line, Support"
+              value={editFriendlyName}
+              onChange={(e) => setEditFriendlyName(e.target.value)}
+              className="mt-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialog(null)}>
+              Cancel
+            </Button>
+            <Button onClick={updateFriendlyName} disabled={isUpdating}>
+              {isUpdating ? (
+                <Loader2Icon className="size-4 animate-spin mr-2" />
+              ) : (
+                <CheckIcon className="size-4 mr-2" />
+              )}
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -7,6 +7,8 @@ import {
   OpportunitiesKanbanBoard,
   type KanbanOpportunity,
 } from "@/components/sales/opportunities-kanban-board"
+import { OpportunitiesTable } from "@/components/sales/opportunities-table"
+import type { OpportunityRow } from "./columns"
 import {
   OpportunitiesFilterBar,
   type OpportunitiesFilters,
@@ -71,8 +73,9 @@ export default function OpportunitiesPage() {
   const [editingOpportunity, setEditingOpportunity] = useState<KanbanOpportunity | null>(null)
   const [creatingForStageId, setCreatingForStageId] = useState<string | null>(null)
 
-  // Get selected pipeline
+  // Get selected pipeline (null means "All Pipelines" - will show table view)
   const selectedPipeline = useMemo(() => {
+    if (!filters.pipelineId) return null
     return pipelines.find((p) => p.id === filters.pipelineId) || null
   }, [pipelines, filters.pipelineId])
 
@@ -221,9 +224,79 @@ export default function OpportunitiesPage() {
     return result
   }, [leads, filters.needsAttention, filters.userIds])
 
-  // Handle opportunity click (edit)
+  // Flatten leads into opportunities for the table view (includes all statuses and pipeline info)
+  const tableOpportunities: OpportunityRow[] = useMemo(() => {
+    const result: OpportunityRow[] = []
+
+    leads.forEach((lead) => {
+      if (!lead.opportunities || lead.opportunities.length === 0) return
+
+      // Find pipeline info for this lead
+      const pipeline = pipelines.find((p) => p.id === lead.pipeline_id)
+
+      // Apply filters but include all statuses (not just active)
+      let opps = [...lead.opportunities]
+
+      // Apply needsAttention filter
+      if (filters.needsAttention) {
+        opps = opps.filter((opp) => {
+          if (!opp.expected_close_date) return false
+          return new Date(opp.expected_close_date) < new Date()
+        })
+      }
+
+      // Apply user filter
+      if (filters.userIds && filters.userIds.length > 0) {
+        opps = opps.filter((opp) => opp.user_id && filters.userIds.includes(opp.user_id))
+      }
+
+      // Add flattened opportunities with pipeline/stage info
+      opps.forEach((opp) => {
+        result.push({
+          id: opp.id,
+          name: opp.name,
+          value: opp.value,
+          probability: opp.probability,
+          status: opp.status,
+          value_type: opp.value_type,
+          expected_close_date: opp.expected_close_date,
+          lead_id: lead.id,
+          lead_name: lead.name,
+          stage_id: lead.stage_id,
+          pipeline_name: pipeline?.name,
+          stage_name: lead.stage?.name,
+          stage_color: lead.stage?.color,
+          contact: opp.contact,
+          user: opp.user,
+        })
+      })
+    })
+
+    return result
+  }, [leads, pipelines, filters.needsAttention, filters.userIds])
+
+  // Handle opportunity click (edit) - for Kanban
   const handleOpportunityClick = useCallback((opportunity: KanbanOpportunity) => {
     setEditingOpportunity(opportunity)
+  }, [])
+
+  // Handle table row edit click
+  const handleTableEdit = useCallback((opportunity: OpportunityRow) => {
+    // Convert to KanbanOpportunity format for the form
+    setEditingOpportunity({
+      id: opportunity.id,
+      name: opportunity.name,
+      value: opportunity.value,
+      probability: opportunity.probability,
+      status: opportunity.status,
+      value_type: opportunity.value_type,
+      expected_close_date: opportunity.expected_close_date,
+      lead_id: opportunity.lead_id,
+      lead_name: opportunity.lead_name,
+      stage_id: opportunity.stage_id,
+      contact: opportunity.contact,
+      user: opportunity.user,
+    })
   }, [])
 
   // Handle add opportunity - navigate to leads page
@@ -370,15 +443,15 @@ export default function OpportunitiesPage() {
         members={members}
       />
 
-      {/* Kanban Board */}
-      <div className="flex-1 min-h-0 px-6 py-4">
+      {/* Content: Table or Kanban Board */}
+      <div className="flex-1 min-h-0 px-6 py-4 overflow-auto">
         {loading ? (
           <div className="flex gap-5 overflow-hidden h-full">
             {[1, 2, 3, 4].map((i) => (
               <Skeleton key={i} className="h-full w-80 shrink-0 rounded-2xl" />
             ))}
           </div>
-        ) : (
+        ) : selectedPipeline ? (
           <OpportunitiesKanbanBoard
             pipeline={selectedPipeline}
             opportunities={opportunities}
@@ -387,6 +460,12 @@ export default function OpportunitiesPage() {
             onDeleteOpportunity={handleDeleteOpportunity}
             onMoveOpportunity={handleMoveOpportunity}
             valueDisplay={filters.valueDisplay}
+          />
+        ) : (
+          <OpportunitiesTable
+            opportunities={tableOpportunities}
+            onEdit={handleTableEdit}
+            onDelete={handleDeleteOpportunity}
           />
         )}
       </div>

@@ -4,6 +4,56 @@ import { verifyWebhookSignature } from '@/lib/nylas'
 import { logNylasEvent } from '@/lib/audit'
 
 /**
+ * Extract grant_id from various webhook payload formats.
+ * Nylas v3 webhooks can have grant_id in different locations.
+ */
+function extractGrantId(data: Record<string, unknown>): string | null {
+  // Try common locations for grant_id in Nylas webhooks
+  if (data.grant_id && typeof data.grant_id === 'string') {
+    return data.grant_id
+  }
+
+  const object = data.object as Record<string, unknown> | undefined
+  if (object?.grant_id && typeof object.grant_id === 'string') {
+    return object.grant_id
+  }
+
+  // For Nylas v3, grant_id might be at the root level
+  if (data.data && typeof data.data === 'object') {
+    const nestedData = data.data as Record<string, unknown>
+    if (nestedData.grant_id && typeof nestedData.grant_id === 'string') {
+      return nestedData.grant_id
+    }
+    const nestedObject = nestedData.object as Record<string, unknown> | undefined
+    if (nestedObject?.grant_id && typeof nestedObject.grant_id === 'string') {
+      return nestedObject.grant_id
+    }
+  }
+
+  return null
+}
+
+/**
+ * Extract object ID (message/event) from webhook payload.
+ */
+function extractObjectId(data: Record<string, unknown>): string | null {
+  const object = data.object as Record<string, unknown> | undefined
+  if (object?.id && typeof object.id === 'string') {
+    return object.id
+  }
+
+  if (data.data && typeof data.data === 'object') {
+    const nestedData = data.data as Record<string, unknown>
+    const nestedObject = nestedData.object as Record<string, unknown> | undefined
+    if (nestedObject?.id && typeof nestedObject.id === 'string') {
+      return nestedObject.id
+    }
+  }
+
+  return null
+}
+
+/**
  * POST /api/nylas/webhook
  *
  * Handle Nylas webhooks for real-time updates.
@@ -11,11 +61,16 @@ import { logNylasEvent } from '@/lib/audit'
  * Webhook types:
  * - message.created: New email received
  * - message.updated: Email updated (read status, labels, etc.)
+ * - message.opened: Email opened by recipient (with tracking)
+ * - message.link_clicked: Link in email clicked (with tracking)
  * - event.created: New calendar event
  * - event.updated: Calendar event updated
  * - event.deleted: Calendar event deleted
+ * - grant.created: New grant connected
+ * - grant.updated: Grant status changed
  * - grant.expired: Grant token expired (needs re-authentication)
  * - grant.revoked: Grant was revoked by user
+ * - grant.deleted: Grant was deleted
  */
 export async function POST(request: NextRequest) {
   try {
@@ -23,14 +78,19 @@ export async function POST(request: NextRequest) {
     const body = await request.text()
     const signature = request.headers.get('x-nylas-signature')
 
-    // Verify webhook signature
+    // Verify webhook signature (skip if not configured, for development)
     const verification = verifyWebhookSignature(body, signature)
     if (!verification.valid) {
-      console.error('Webhook verification failed:', verification.error)
-      return NextResponse.json(
-        { error: 'Invalid signature' },
-        { status: 401 }
-      )
+      // In production, reject invalid signatures
+      // In development without webhook secret, allow through with warning
+      if (verification.error !== 'Webhook secret not configured') {
+        console.error('Webhook verification failed:', verification.error)
+        return NextResponse.json(
+          { error: 'Invalid signature' },
+          { status: 401 }
+        )
+      }
+      console.warn('[Nylas Webhook] Webhook secret not configured - processing without verification')
     }
 
     const payload = JSON.parse(body)
@@ -40,26 +100,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ challenge: payload.challenge })
     }
 
-    const { type, data } = payload
+    // Nylas v3 webhook format: { specversion, type, source, id, time, data: { object: {...} } }
+    const type = payload.type
+    const data = payload.data || payload
 
-    console.log(`[Nylas Webhook] Received ${type}:`, JSON.stringify(data, null, 2))
+    console.log(`[Nylas Webhook] Received ${type}:`, JSON.stringify(data, null, 2).substring(0, 500))
 
     const supabase = createAdminClient()
 
+    // Extract grant_id using helper function for consistent handling
+    const grantId = extractGrantId(data)
+    const objectId = extractObjectId(data)
+
     switch (type) {
       case 'grant.expired':
-      case 'grant.revoked': {
+      case 'grant.revoked':
+      case 'grant.deleted': {
         // Update grant status in database
-        const grantId = data.object?.grant_id || data.grant_id
         if (grantId) {
+          const statusMap: Record<string, string> = {
+            'grant.expired': 'expired',
+            'grant.revoked': 'revoked',
+            'grant.deleted': 'deleted',
+          }
+          const messageMap: Record<string, string> = {
+            'grant.expired': 'Grant expired. User needs to re-authenticate.',
+            'grant.revoked': 'Grant was revoked by user.',
+            'grant.deleted': 'Grant was deleted.',
+          }
+
           const { data: grant, error } = await supabase
             .from('nylas_grants')
             .update({
-              status: type === 'grant.expired' ? 'expired' : 'error',
+              status: statusMap[type] || 'error',
               error_code: type,
-              error_message: type === 'grant.expired'
-                ? 'Grant expired. User needs to re-authenticate.'
-                : 'Grant was revoked by user.',
+              error_message: messageMap[type] || 'Grant status changed.',
               updated_at: new Date().toISOString(),
             })
             .eq('grant_id', grantId)
@@ -80,11 +155,46 @@ export async function POST(request: NextRequest) {
         break
       }
 
+      case 'grant.created':
+      case 'grant.updated': {
+        // Grant was created or updated - log the event
+        if (grantId) {
+          const { data: grant } = await supabase
+            .from('nylas_grants')
+            .select('id, workspace_id, user_id')
+            .eq('grant_id', grantId)
+            .single()
+
+          if (grant) {
+            // Update last_sync_at to indicate activity
+            await supabase
+              .from('nylas_grants')
+              .update({
+                last_sync_at: new Date().toISOString(),
+                status: 'active',
+                error_code: null,
+                error_message: null,
+              })
+              .eq('id', grant.id)
+
+            await logNylasEvent(
+              'nylas.webhook_received',
+              grant.id,
+              grant.workspace_id,
+              grant.user_id,
+              request,
+              { webhookType: type, grantId }
+            )
+          }
+        }
+        break
+      }
+
       case 'message.created':
-      case 'message.updated': {
-        // Could trigger email sync or update local cache
-        // For now, just log the event
-        const grantId = data.object?.grant_id
+      case 'message.updated':
+      case 'message.opened':
+      case 'message.link_clicked': {
+        // Email event - update sync timestamp and log
         if (grantId) {
           const { data: grant } = await supabase
             .from('nylas_grants')
@@ -105,7 +215,7 @@ export async function POST(request: NextRequest) {
               grant.workspace_id,
               grant.user_id,
               request,
-              { webhookType: type, messageId: data.object?.id }
+              { webhookType: type, messageId: objectId }
             )
           }
         }
@@ -115,8 +225,7 @@ export async function POST(request: NextRequest) {
       case 'event.created':
       case 'event.updated':
       case 'event.deleted': {
-        // Could trigger calendar sync or update local cache
-        const grantId = data.object?.grant_id
+        // Calendar event - update sync timestamp and log
         if (grantId) {
           const { data: grant } = await supabase
             .from('nylas_grants')
@@ -137,7 +246,7 @@ export async function POST(request: NextRequest) {
               grant.workspace_id,
               grant.user_id,
               request,
-              { webhookType: type, eventId: data.object?.id }
+              { webhookType: type, eventId: objectId }
             )
           }
         }

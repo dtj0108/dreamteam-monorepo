@@ -347,7 +347,7 @@ export function LeadStatusesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
         <div>
           <h2 className="text-lg font-medium">Lead Statuses</h2>
           <p className="text-sm text-muted-foreground">

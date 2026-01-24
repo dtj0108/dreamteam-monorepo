@@ -59,8 +59,8 @@ export interface Lead {
   state?: string
   country?: string
   postal_code?: string
-  pipeline_id?: string
-  stage_id?: string
+  pipeline_id?: string | null
+  stage_id?: string | null
   source?: string
   assigned_to?: string
   tag_ids?: string[]
@@ -190,7 +190,7 @@ export function LeadForm({
     if (lead) {
       // Editing existing lead
       setFormData(lead)
-      setSelectedPipelineId(lead.pipeline_id)
+      setSelectedPipelineId(lead.pipeline_id ?? undefined)
       setSelectedTagIds(lead.tag_ids || [])
     } else {
       // Creating new lead

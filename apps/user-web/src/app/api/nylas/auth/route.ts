@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { provider } = body
+    const { provider, returnUrl } = body
 
     if (!provider || !['google', 'microsoft'].includes(provider)) {
       return NextResponse.json(
@@ -47,7 +47,9 @@ export async function POST(request: Request) {
     const result = generateAuthUrl(
       session.id,
       workspaceId,
-      provider as 'google' | 'microsoft'
+      provider as 'google' | 'microsoft',
+      undefined, // use default scopes
+      returnUrl || '/sales/inbox'
     )
 
     if (!result.success) {

@@ -43,8 +43,8 @@ const workspaceConfig: Record<WorkspaceId, {
     description: "Chat with your team and collaborate",
     quickLinks: [
       { emoji: "💬", label: "Messages", description: "Chat with your team", href: "/team/messages" },
-      { emoji: "#️⃣", label: "Channels", description: "Browse team channels", href: "/team/messages" },
-      { emoji: "✉️", label: "Direct Messages", description: "Private conversations", href: "/team/messages" },
+      { emoji: "#️⃣", label: "Channels", description: "Browse team channels", href: "/team/channels" },
+      { emoji: "✉️", label: "Direct Messages", description: "Private conversations", href: "/team/dm" },
     ],
   },
   projects: {
@@ -53,9 +53,9 @@ const workspaceConfig: Record<WorkspaceId, {
     description: "Organize tasks and track milestones",
     quickLinks: [
       { emoji: "📁", label: "Projects", description: "View all projects", href: "/projects/all" },
-      { emoji: "✅", label: "Tasks", description: "Create and manage tasks", href: "/projects/all" },
-      { emoji: "📅", label: "Timeline", description: "See project schedule", href: "/projects/all" },
-      { emoji: "🚩", label: "Milestones", description: "Track key deliverables", href: "/projects/all" },
+      { emoji: "✅", label: "Tasks", description: "Create and manage tasks", href: "/projects/my-tasks" },
+      { emoji: "📅", label: "Timeline", description: "See project schedule", href: "/projects/timeline" },
+      { emoji: "🚩", label: "Milestones", description: "Track key deliverables", href: "/projects/milestones" },
     ],
   },
   knowledge: {

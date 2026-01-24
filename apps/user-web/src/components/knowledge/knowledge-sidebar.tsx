@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { KnowledgePage, KnowledgeCategory, Whiteboard } from "@/providers/knowledge-provider"
 import { useLocalStorage } from "@/hooks/use-local-storage"
+import { useDroppable } from "@dnd-kit/core"
 
 // Color palette for categories
 const CATEGORY_COLORS = [
@@ -99,7 +100,7 @@ export function KnowledgeSidebar({
   }
 
   return (
-    <div className="w-64 min-w-64 border-r flex flex-col h-full bg-muted/30">
+    <div className="w-64 min-w-64 border-r flex flex-col h-full min-h-0 bg-muted/30">
       {/* Header with New Page button */}
       <div className="p-3 border-b flex items-center justify-between shrink-0">
         <span className="text-sm font-medium text-muted-foreground">Pages</span>
@@ -114,7 +115,7 @@ export function KnowledgeSidebar({
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 overflow-hidden">
         <div className="p-2 space-y-1">
           {/* Quick Search Link */}
           <Link
@@ -183,27 +184,15 @@ export function KnowledgeSidebar({
             <CollapsibleContent>
               <div className="pl-4 space-y-0.5">
                 {categories.map((category) => (
-                  <button
+                  <DroppableCategory
                     key={category.id}
+                    category={category}
+                    isSelected={selectedCategoryId === category.id}
                     onClick={() => onSelectCategory(
                       selectedCategoryId === category.id ? null : category.id
                     )}
-                    className={cn(
-                      "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm w-full transition-colors",
-                      selectedCategoryId === category.id
-                        ? "bg-accent text-accent-foreground"
-                        : "hover:bg-accent hover:text-accent-foreground"
-                    )}
-                  >
-                    <span
-                      className="size-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: category.color || "#6b7280" }}
-                    />
-                    <span className="truncate flex-1 text-left">{category.name}</span>
-                    <span className="text-xs text-muted-foreground mr-1">
-                      {getPageCount(category.id)}
-                    </span>
-                  </button>
+                    pageCount={getPageCount(category.id)}
+                  />
                 ))}
                 {isAddingCategory ? (
                   <div className="px-2 py-1.5 space-y-2">
@@ -393,6 +382,43 @@ export function KnowledgeSidebar({
         </Button>
       </div>
     </div>
+  )
+}
+
+interface DroppableCategoryProps {
+  category: KnowledgeCategory
+  isSelected: boolean
+  onClick: () => void
+  pageCount: number
+}
+
+function DroppableCategory({ category, isSelected, onClick, pageCount }: DroppableCategoryProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `category-${category.id}`,
+    data: { type: "category", categoryId: category.id },
+  })
+
+  return (
+    <button
+      ref={setNodeRef}
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm w-full transition-colors",
+        isSelected
+          ? "bg-accent text-accent-foreground"
+          : "hover:bg-accent hover:text-accent-foreground",
+        isOver && "bg-sky-100 dark:bg-sky-900/30 ring-2 ring-sky-500"
+      )}
+    >
+      <span
+        className="size-2.5 rounded-full shrink-0"
+        style={{ backgroundColor: category.color || "#6b7280" }}
+      />
+      <span className="truncate flex-1 text-left">{category.name}</span>
+      <span className="text-xs text-muted-foreground mr-1">
+        {pageCount}
+      </span>
+    </button>
   )
 }
 

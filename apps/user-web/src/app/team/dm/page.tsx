@@ -1,43 +1,32 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
+import Link from "next/link"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { PlusIcon, SearchIcon, AtSignIcon, UserIcon, MessageSquare } from "lucide-react"
-import { MemberPresence } from "@/components/team"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { useTeamPresence } from "@/hooks/use-team-presence"
-
-const DEMO_WORKSPACE_ID = "00000000-0000-0000-0000-000000000001"
-
-// Demo team members
-const demoMembers = [
-  { id: "1", name: "Alex Johnson", email: "alex@example.com", avatar: null },
-  { id: "2", name: "Sam Wilson", email: "sam@example.com", avatar: null },
-  { id: "3", name: "Jordan Lee", email: "jordan@example.com", avatar: null },
-]
+import { PlusIcon, SearchIcon, AtSignIcon, MessageSquareIcon } from "lucide-react"
+import { StartDMDialog, MemberPresence } from "@/components/team"
+import { useTeam } from "@/providers/team-provider"
+import { useWorkspace } from "@/providers/workspace-provider"
+import { useUser } from "@/hooks/use-user"
 
 export default function DirectMessagesPage() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [showNewDM, setShowNewDM] = useState(false)
-  const [memberSearch, setMemberSearch] = useState("")
 
-  const { getUserStatus } = useTeamPresence({
-    workspaceId: DEMO_WORKSPACE_ID,
-  })
+  const { currentWorkspace } = useWorkspace()
+  const { user } = useUser()
+  const {
+    directMessages,
+    showStartDM,
+    setShowStartDM,
+    startDM,
+  } = useTeam()
 
-  const filteredMembers = demoMembers.filter(
-    (member) =>
-      member.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
-      member.email.toLowerCase().includes(memberSearch.toLowerCase())
+  const filteredDMs = directMessages.filter((dm) =>
+    dm.participant.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const getInitials = (name: string) =>
@@ -49,107 +38,106 @@ export default function DirectMessagesPage() {
       .slice(0, 2)
 
   return (
-    <div className="p-6">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Direct Messages</h1>
-          <p className="text-muted-foreground">
-            Private conversations with team members
-          </p>
-        </div>
-        <Button onClick={() => setShowNewDM(true)}>
-          <PlusIcon className="size-4 mr-2" />
-          New Message
-        </Button>
-      </div>
-
-      {/* Search */}
-      <div className="mb-6">
-        <div className="relative max-w-sm">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            placeholder="Search conversations..."
-            className="pl-9"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* Empty State */}
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-16">
-          <div className="size-16 rounded-full bg-muted flex items-center justify-center mb-4">
-            <AtSignIcon className="size-8 text-muted-foreground" />
+    <ScrollArea className="flex-1 overflow-hidden">
+      <div className="p-6">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Direct Messages</h1>
+            <p className="text-muted-foreground">
+              Private conversations with team members
+            </p>
           </div>
-          <CardTitle className="mb-2">No direct messages yet</CardTitle>
-          <CardDescription className="text-center max-w-sm mb-4">
-            Start a private conversation with a team member.
-          </CardDescription>
-          <Button onClick={() => setShowNewDM(true)}>
-            <UserIcon className="size-4 mr-2" />
-            Find People
+          <Button onClick={() => setShowStartDM(true)}>
+            <PlusIcon className="size-4 mr-2" />
+            New Message
           </Button>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* New DM Dialog */}
-      <Dialog open={showNewDM} onOpenChange={setShowNewDM}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New Direct Message</DialogTitle>
-            <DialogDescription>
-              Select a team member to start a conversation
-            </DialogDescription>
-          </DialogHeader>
+        {/* Search */}
+        <div className="mb-6">
+          <div className="relative max-w-sm">
+            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Search conversations..."
+              className="pl-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
 
-          <div className="space-y-4">
-            <div className="relative">
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name or email..."
-                className="pl-9"
-                value={memberSearch}
-                onChange={(e) => setMemberSearch(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {filteredMembers.map((member) => (
-                <button
-                  key={member.id}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left"
-                  onClick={() => {
-                    // In production, this would start a DM
-                    setShowNewDM(false)
-                  }}
-                >
+        {/* DM List */}
+        <div className="grid gap-4">
+          {filteredDMs.map((dm) => (
+            <Link key={dm.id} href={`/team/dm/${dm.id}`}>
+              <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
+                <CardContent className="flex items-center gap-4 p-4">
                   <div className="relative">
-                    <Avatar>
-                      <AvatarImage src={member.avatar || undefined} />
-                      <AvatarFallback>{getInitials(member.name)}</AvatarFallback>
+                    <Avatar className="size-10">
+                      <AvatarImage src={dm.participant.avatar} />
+                      <AvatarFallback>{getInitials(dm.participant.name)}</AvatarFallback>
                     </Avatar>
                     <div className="absolute -bottom-0.5 -right-0.5">
-                      <MemberPresence status={getUserStatus(member.id)} />
+                      <MemberPresence status={dm.status} />
                     </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium">{member.name}</p>
-                    <p className="text-sm text-muted-foreground">{member.email}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium">{dm.participant.name}</h3>
+                      {dm.unreadCount && dm.unreadCount > 0 && (
+                        <span className="size-5 rounded-full bg-sky-500 text-white text-xs flex items-center justify-center">
+                          {dm.unreadCount}
+                        </span>
+                      )}
+                    </div>
+                    {dm.lastMessage && (
+                      <p className="text-sm text-muted-foreground truncate">
+                        {dm.lastMessage}
+                      </p>
+                    )}
                   </div>
-                  <MessageSquare className="size-4 text-muted-foreground" />
-                </button>
-              ))}
+                  <MessageSquareIcon className="size-4 text-muted-foreground" />
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
 
-              {filteredMembers.length === 0 && (
-                <p className="text-center text-muted-foreground py-4">
-                  No members found
+          {filteredDMs.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <div className="size-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <AtSignIcon className="size-8 text-muted-foreground" />
+                </div>
+                <h3 className="font-semibold mb-2">
+                  {searchQuery
+                    ? "No conversations match your search"
+                    : "No direct messages yet"}
+                </h3>
+                <p className="text-muted-foreground text-center max-w-sm mb-4">
+                  {searchQuery
+                    ? "Try a different search term"
+                    : "Start a private conversation with a team member."}
                 </p>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+                {!searchQuery && (
+                  <Button onClick={() => setShowStartDM(true)}>
+                    <PlusIcon className="size-4 mr-2" />
+                    Find People
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Start DM Dialog */}
+        <StartDMDialog
+          open={showStartDM}
+          onOpenChange={setShowStartDM}
+          workspaceId={currentWorkspace?.id}
+          currentUserId={user?.id}
+          onStartDM={startDM}
+        />
+      </div>
+    </ScrollArea>
   )
 }

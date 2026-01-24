@@ -99,7 +99,7 @@ export async function PATCH(
 
     const allowedFields = [
       "name", "description", "status", "priority", "color", "icon",
-      "start_date", "target_end_date", "actual_end_date", "budget"
+      "start_date", "target_end_date", "actual_end_date", "budget", "position"
     ]
 
     for (const field of allowedFields) {

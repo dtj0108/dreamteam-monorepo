@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@dreamteam/ui/button"
 import { Input } from "@dreamteam/ui/input"
 import { Label } from "@dreamteam/ui/label"
-import { Switch } from "@dreamteam/ui/switch"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@dreamteam/ui/textarea"
 import {
   Dialog,
@@ -574,7 +574,7 @@ export function PipelinesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
         <div>
           <h2 className="text-lg font-medium">Lead Pipelines</h2>
           <p className="text-sm text-muted-foreground">
@@ -647,6 +647,7 @@ export function PipelinesTab() {
                 id="pipeline-default"
                 checked={pipelineIsDefault}
                 onCheckedChange={setPipelineIsDefault}
+                className="data-[state=unchecked]:!bg-gray-400 data-[state=checked]:!bg-sky-500"
               />
               <Label htmlFor="pipeline-default">Set as default pipeline</Label>
             </div>

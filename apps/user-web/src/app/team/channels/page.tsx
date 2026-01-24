@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { PlusIcon, SearchIcon, HashIcon, LockIcon, UsersIcon } from "lucide-react"
 import { CreateChannelDialog } from "@/components/team"
 import { useTeam } from "@/providers/team-provider"
@@ -32,7 +33,8 @@ export default function ChannelsPage() {
   }
 
   return (
-    <div className="p-6">
+    <ScrollArea className="flex-1 overflow-hidden">
+      <div className="p-6">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Channels</h1>
@@ -100,12 +102,13 @@ export default function ChannelsPage() {
         )}
       </div>
 
-      {/* Create Channel Dialog */}
-      <CreateChannelDialog
-        open={showCreateChannel}
-        onOpenChange={setShowCreateChannel}
-        onCreateChannel={handleCreateChannel}
-      />
-    </div>
+        {/* Create Channel Dialog */}
+        <CreateChannelDialog
+          open={showCreateChannel}
+          onOpenChange={setShowCreateChannel}
+          onCreateChannel={handleCreateChannel}
+        />
+      </div>
+    </ScrollArea>
   )
 }

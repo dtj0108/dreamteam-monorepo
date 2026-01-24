@@ -92,7 +92,7 @@ export function BundlesGrid({
           <Card
             key={bundle}
             className={cn(
-              'relative flex flex-col transition-all duration-200 hover:shadow-lg hover:border-sky-300',
+              'relative flex flex-col transition-all duration-200 hover:shadow-lg hover:border-sky-300 overflow-visible',
               isPopular && 'border-sky-300 ring-2 ring-sky-200 bg-sky-50/30',
               isPro && 'bg-gradient-to-br from-slate-50 to-slate-100'
             )}

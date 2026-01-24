@@ -1,105 +1,294 @@
+"use client"
+
+import { useState, useCallback, useRef, useEffect } from "react"
+import { useConversations } from "@/providers/conversations-provider"
+import { useConversationsCompose } from "./layout"
+import { ConversationsList, ConversationTimeline } from "@/components/conversations"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { SearchIcon, MessageCircleIcon, MailIcon, PhoneIcon } from "lucide-react"
-
-const mockConversations = [
-  {
-    id: 1,
-    contact: "Sarah Johnson",
-    company: "TechCorp Inc.",
-    lastMessage: "Thanks for the proposal! I'll review it with my team and get back to you by Friday.",
-    channel: "email",
-    time: "2 hours ago",
-    unread: true,
-  },
-  {
-    id: 2,
-    contact: "Mike Chen",
-    company: "StartupXYZ",
-    lastMessage: "Can we schedule a call to discuss the implementation timeline?",
-    channel: "email",
-    time: "Yesterday",
-    unread: false,
-  },
-  {
-    id: 3,
-    contact: "Lisa Park",
-    company: "Enterprise Co.",
-    lastMessage: "Great demo today! Very impressed with the features.",
-    channel: "call",
-    time: "2 days ago",
-    unread: false,
-  },
-]
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@dreamteam/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Search, Loader2, AlertCircle, X, MessageCircle, Mail } from "lucide-react"
+import { GoogleSignInButton, MicrosoftSignInButton } from "@/components/nylas"
 
 export default function ConversationsPage() {
-  return (
-    <div className="p-6">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Conversations</h1>
-          <p className="text-muted-foreground">All your customer communications in one place</p>
-        </div>
-        <Button>
-          <MailIcon className="size-4 mr-2" />
-          Compose
-        </Button>
-      </div>
+  const {
+    contacts,
+    loading,
+    error,
+    clearError,
+    selectedContactId,
+    selectedContact,
+    setSelectedContactId,
+    timeline,
+    loadingTimeline,
+    timelineContact,
+    searchQuery,
+    setSearchQuery,
+    grantId,
+    grants,
+    fetchGrants,
+    refreshTimeline,
+  } = useConversations()
 
-      {/* Search */}
-      <div className="mb-6">
-        <div className="relative max-w-sm">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input placeholder="Search conversations..." className="pl-9" />
-        </div>
-      </div>
+  const { openCompose } = useConversationsCompose()
 
-      {/* Conversations List */}
-      <div className="space-y-2">
-        {mockConversations.map((conv) => (
-          <Card key={conv.id} className={`cursor-pointer hover:bg-muted/50 transition-colors ${conv.unread ? "border-primary" : ""}`}>
-            <CardContent className="flex items-start gap-4 p-4">
-              <Avatar>
-                <AvatarFallback>{conv.contact.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className={`font-medium ${conv.unread ? "font-semibold" : ""}`}>{conv.contact}</h3>
-                  <span className="text-sm text-muted-foreground">· {conv.company}</span>
-                  {conv.unread && <Badge className="bg-primary text-primary-foreground">New</Badge>}
-                </div>
-                <p className={`text-sm truncate ${conv.unread ? "text-foreground" : "text-muted-foreground"}`}>
-                  {conv.lastMessage}
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className="text-xs text-muted-foreground">{conv.time}</span>
-                {conv.channel === "email" ? (
-                  <MailIcon className="size-4 text-muted-foreground" />
-                ) : (
-                  <PhoneIcon className="size-4 text-muted-foreground" />
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+  const [localSearch, setLocalSearch] = useState("")
+  const debounceRef = useRef<NodeJS.Timeout | null>(null)
 
-      {mockConversations.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <MessageCircleIcon className="size-12 text-muted-foreground mb-4" />
-            <CardTitle className="mb-2">No conversations yet</CardTitle>
-            <CardDescription className="text-center max-w-sm">
-              Start communicating with your contacts to see conversations here.
+  // SMS Dialog state
+  const [smsDialogOpen, setSmsDialogOpen] = useState(false)
+  const [smsText, setSmsText] = useState("")
+  const [sendingSms, setSendingSms] = useState(false)
+
+  // Handle search input with debounce
+  const handleSearchChange = useCallback((value: string) => {
+    setLocalSearch(value)
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+    }
+
+    debounceRef.current = setTimeout(() => {
+      setSearchQuery(value)
+    }, 300)
+  }, [setSearchQuery])
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+      }
+    }
+  }, [])
+
+  // Handle reply email
+  const handleReplyEmail = useCallback(() => {
+    if (timelineContact?.email && grantId) {
+      openCompose('reply', null, timelineContact.email)
+    }
+  }, [timelineContact, grantId, openCompose])
+
+  // Handle send text
+  const handleSendText = useCallback(() => {
+    setSmsText("")
+    setSmsDialogOpen(true)
+  }, [])
+
+  // Actually send the SMS
+  const handleSendSms = useCallback(async () => {
+    if (!timelineContact?.phone || !smsText.trim()) return
+
+    setSendingSms(true)
+    try {
+      const res = await fetch('/api/communications/sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: timelineContact.phone,
+          body: smsText,
+          contactId: timelineContact.id,
+        }),
+      })
+
+      if (res.ok) {
+        setSmsDialogOpen(false)
+        setSmsText("")
+        // Refresh timeline to show the new message
+        refreshTimeline()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        console.error('Failed to send SMS:', data.error)
+      }
+    } catch (err) {
+      console.error('Failed to send SMS:', err)
+    } finally {
+      setSendingSms(false)
+    }
+  }, [timelineContact, smsText, refreshTimeline])
+
+  // Handle call
+  const handleCall = useCallback(async () => {
+    if (!timelineContact?.phone) return
+
+    try {
+      const res = await fetch('/api/communications/call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: timelineContact.phone,
+          contactId: timelineContact.id,
+        }),
+      })
+
+      if (res.ok) {
+        // Call initiated - timeline will update when call completes via webhook
+        refreshTimeline()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        console.error('Failed to initiate call:', data.error)
+      }
+    } catch (err) {
+      console.error('Failed to initiate call:', err)
+    }
+  }, [timelineContact, refreshTimeline])
+
+  // No contacts state
+  if (!loading && contacts.length === 0 && !searchQuery) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8">
+        <Card className="max-w-md">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <MessageCircle className="h-16 w-16 text-muted-foreground mb-6" />
+            <CardTitle className="mb-2">No Conversations Yet</CardTitle>
+            <CardDescription className="mb-6">
+              Add contacts to your leads to start conversations. You can communicate
+              via email, text, or phone calls.
             </CardDescription>
+            {grants.length === 0 && (
+              <>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Connect your email to include emails in conversations:
+                </p>
+                <div className="flex flex-col gap-3 w-full">
+                  <GoogleSignInButton onSuccess={() => fetchGrants()} />
+                  <MicrosoftSignInButton onSuccess={() => fetchGrants()} />
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
-      )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* Contacts List Panel */}
+      <div className="w-[450px] shrink-0 border-r flex flex-col">
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive" className="m-3 mb-0">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between flex-1">
+              <span>{error}</span>
+              <Button variant="ghost" size="icon" className="h-6 w-6 -mr-2" onClick={clearError}>
+                <X className="h-3 w-3" />
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Email connection prompt */}
+        {grants.length === 0 && (
+          <div className="p-3 border-b bg-muted/30">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+              <Mail className="h-4 w-4" />
+              <span>Connect email for full conversations</span>
+            </div>
+            <div className="flex gap-2">
+              <GoogleSignInButton onSuccess={() => fetchGrants()} className="text-xs py-1.5 px-2.5" />
+              <MicrosoftSignInButton onSuccess={() => fetchGrants()} className="text-xs py-1.5 px-2.5" />
+            </div>
+          </div>
+        )}
+
+        {/* Search */}
+        <div className="p-3 border-b">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search conversations..."
+              value={localSearch}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-8"
+            />
+            {localSearch && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1 h-6 w-6"
+                onClick={() => handleSearchChange("")}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Contacts List */}
+        <ScrollArea className="flex-1 h-0">
+          {loading && contacts.length === 0 ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <ConversationsList
+              contacts={contacts}
+              selectedId={selectedContactId}
+              onSelect={(contact) => setSelectedContactId(contact.id)}
+            />
+          )}
+        </ScrollArea>
+      </div>
+
+      {/* Timeline Panel */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <ConversationTimeline
+          contact={timelineContact}
+          timeline={timeline}
+          loading={loadingTimeline}
+          grantId={grantId}
+          onReplyEmail={handleReplyEmail}
+          onSendText={handleSendText}
+          onCall={handleCall}
+        />
+      </div>
+
+      {/* SMS Dialog */}
+      <Dialog open={smsDialogOpen} onOpenChange={setSmsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Text Message</DialogTitle>
+            <DialogDescription>
+              Send a text message to {timelineContact?.first_name} {timelineContact?.last_name} at {timelineContact?.phone}
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Type your message..."
+            value={smsText}
+            onChange={(e) => setSmsText(e.target.value)}
+            rows={4}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSmsDialogOpen(false)} disabled={sendingSms}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendSms} disabled={sendingSms || !smsText.trim()}>
+              {sendingSms ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                'Send'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }
-

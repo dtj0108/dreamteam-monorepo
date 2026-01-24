@@ -41,6 +41,15 @@ export interface TokenExchangeData {
   scopes: string[]
 }
 
+export interface NylasAttachment {
+  id: string
+  filename: string | null
+  contentType: string
+  size: number
+  contentId: string | null
+  isInline: boolean
+}
+
 export interface NylasEmail {
   id: string
   threadId: string | null
@@ -55,11 +64,13 @@ export interface NylasEmail {
   starred: boolean
   folders: string[]
   hasAttachments: boolean
+  attachments?: NylasAttachment[]
 }
 
 export interface NylasEmailDetail extends NylasEmail {
   body: string
   replyTo: Array<{ email: string; name?: string }>
+  attachments: NylasAttachment[]
 }
 
 export interface NylasCalendar {
@@ -193,12 +204,14 @@ async function nylasRequest<T>(
  * @param userId - Internal user ID to include in state
  * @param provider - 'google' or 'microsoft'
  * @param scopes - OAuth scopes to request
+ * @param returnUrl - URL to redirect to after OAuth completes
  */
 export function generateAuthUrl(
   userId: string,
   workspaceId: string,
   provider: 'google' | 'microsoft',
-  scopes: string[] = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/calendar']
+  scopes: string[] = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/calendar'],
+  returnUrl?: string
 ): NylasResult<AuthUrlData> {
   if (!NYLAS_CLIENT_ID || !NYLAS_REDIRECT_URI) {
     return {
@@ -213,6 +226,7 @@ export function generateAuthUrl(
     workspaceId,
     provider,
     timestamp: Date.now(),
+    returnUrl: returnUrl || '/sales/inbox',
   }
   const state = Buffer.from(JSON.stringify(stateData)).toString('base64url')
 
@@ -251,6 +265,7 @@ export function parseOAuthState(state: string): {
   userId?: string
   workspaceId?: string
   provider?: 'google' | 'microsoft'
+  returnUrl?: string
   error?: string
 } {
   try {
@@ -268,6 +283,7 @@ export function parseOAuthState(state: string): {
       userId: data.userId,
       workspaceId: data.workspaceId,
       provider: data.provider,
+      returnUrl: data.returnUrl,
     }
   } catch {
     return { valid: false, error: 'Invalid OAuth state' }
@@ -469,7 +485,14 @@ export async function getEmail(
       unread: boolean
       starred: boolean
       folders: string[]
-      attachments?: unknown[]
+      attachments?: Array<{
+        id: string
+        filename: string | null
+        content_type: string
+        size: number
+        content_id: string | null
+        is_inline: boolean
+      }>
     }
   }>(`/messages/${messageId}`, { grantId })
 
@@ -482,6 +505,15 @@ export async function getEmail(
   }
 
   const msg = result.data.data
+  const attachments: NylasAttachment[] = (msg.attachments || []).map(att => ({
+    id: att.id,
+    filename: att.filename,
+    contentType: att.content_type,
+    size: att.size,
+    contentId: att.content_id,
+    isInline: att.is_inline,
+  }))
+
   return {
     success: true,
     data: {
@@ -499,7 +531,8 @@ export async function getEmail(
       unread: msg.unread,
       starred: msg.starred,
       folders: msg.folders || [],
-      hasAttachments: (msg.attachments?.length || 0) > 0,
+      hasAttachments: attachments.length > 0,
+      attachments,
     },
   }
 }
@@ -553,6 +586,354 @@ export async function sendEmail(
     grantId,
     method: 'POST',
     body,
+  })
+
+  if (!result.success || !result.data?.data) {
+    return {
+      success: false,
+      error: result.error,
+      errorCode: result.errorCode,
+    }
+  }
+
+  return {
+    success: true,
+    data: { id: result.data.data.id },
+  }
+}
+
+/**
+ * Delete an email.
+ */
+export async function deleteEmail(
+  grantId: string,
+  messageId: string
+): Promise<NylasResult<void>> {
+  return nylasRequest(`/messages/${messageId}`, {
+    grantId,
+    method: 'DELETE',
+  })
+}
+
+/**
+ * Download an attachment from an email.
+ * Returns the raw attachment data as a Buffer.
+ */
+export async function downloadAttachment(
+  grantId: string,
+  messageId: string,
+  attachmentId: string
+): Promise<NylasResult<{ data: Buffer; contentType: string; filename: string | null }>> {
+  const url = `${NYLAS_API_URI}/v3/grants/${grantId}/messages/${messageId}/attachments/${attachmentId}/download`
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${NYLAS_API_KEY}`,
+      },
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      return {
+        success: false,
+        error: errorData.error?.message || errorData.message || 'Failed to download attachment',
+        errorCode: errorData.error?.type || errorData.type,
+      }
+    }
+
+    const contentType = response.headers.get('content-type') || 'application/octet-stream'
+    const contentDisposition = response.headers.get('content-disposition')
+    let filename: string | null = null
+
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+      if (match) {
+        filename = match[1].replace(/['"]/g, '')
+      }
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    return {
+      success: true,
+      data: {
+        data: buffer,
+        contentType,
+        filename,
+      },
+    }
+  } catch (error) {
+    console.error('Download attachment failed:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Download failed',
+    }
+  }
+}
+
+// ============================================
+// Draft Functions
+// ============================================
+
+export interface NylasDraft {
+  id: string
+  threadId: string | null
+  subject: string | null
+  body: string
+  from: Array<{ email: string; name?: string }>
+  to: Array<{ email: string; name?: string }>
+  cc: Array<{ email: string; name?: string }>
+  bcc: Array<{ email: string; name?: string }>
+  date: number
+  attachments: NylasAttachment[]
+}
+
+/**
+ * List drafts from a connected account.
+ */
+export async function listDrafts(
+  grantId: string,
+  options: { limit?: number } = {}
+): Promise<NylasResult<{ drafts: NylasDraft[] }>> {
+  const params = new URLSearchParams()
+  if (options.limit) params.set('limit', options.limit.toString())
+
+  const queryString = params.toString()
+  const path = `/drafts${queryString ? `?${queryString}` : ''}`
+
+  const result = await nylasRequest<{
+    data: Array<{
+      id: string
+      thread_id: string | null
+      subject: string | null
+      body: string
+      from: Array<{ email: string; name?: string }>
+      to: Array<{ email: string; name?: string }>
+      cc: Array<{ email: string; name?: string }>
+      bcc: Array<{ email: string; name?: string }>
+      date: number
+      attachments?: Array<{
+        id: string
+        filename: string | null
+        content_type: string
+        size: number
+        content_id: string | null
+        is_inline: boolean
+      }>
+    }>
+  }>(path, { grantId })
+
+  if (!result.success || !result.data) {
+    return {
+      success: false,
+      error: result.error,
+      errorCode: result.errorCode,
+    }
+  }
+
+  const drafts: NylasDraft[] = (result.data.data || []).map((draft) => ({
+    id: draft.id,
+    threadId: draft.thread_id,
+    subject: draft.subject,
+    body: draft.body || '',
+    from: draft.from || [],
+    to: draft.to || [],
+    cc: draft.cc || [],
+    bcc: draft.bcc || [],
+    date: draft.date,
+    attachments: (draft.attachments || []).map(att => ({
+      id: att.id,
+      filename: att.filename,
+      contentType: att.content_type,
+      size: att.size,
+      contentId: att.content_id,
+      isInline: att.is_inline,
+    })),
+  }))
+
+  return {
+    success: true,
+    data: { drafts },
+  }
+}
+
+/**
+ * Get a specific draft by ID.
+ */
+export async function getDraft(
+  grantId: string,
+  draftId: string
+): Promise<NylasResult<NylasDraft>> {
+  const result = await nylasRequest<{
+    data: {
+      id: string
+      thread_id: string | null
+      subject: string | null
+      body: string
+      from: Array<{ email: string; name?: string }>
+      to: Array<{ email: string; name?: string }>
+      cc: Array<{ email: string; name?: string }>
+      bcc: Array<{ email: string; name?: string }>
+      date: number
+      attachments?: Array<{
+        id: string
+        filename: string | null
+        content_type: string
+        size: number
+        content_id: string | null
+        is_inline: boolean
+      }>
+    }
+  }>(`/drafts/${draftId}`, { grantId })
+
+  if (!result.success || !result.data?.data) {
+    return {
+      success: false,
+      error: result.error,
+      errorCode: result.errorCode,
+    }
+  }
+
+  const draft = result.data.data
+  return {
+    success: true,
+    data: {
+      id: draft.id,
+      threadId: draft.thread_id,
+      subject: draft.subject,
+      body: draft.body || '',
+      from: draft.from || [],
+      to: draft.to || [],
+      cc: draft.cc || [],
+      bcc: draft.bcc || [],
+      date: draft.date,
+      attachments: (draft.attachments || []).map(att => ({
+        id: att.id,
+        filename: att.filename,
+        contentType: att.content_type,
+        size: att.size,
+        contentId: att.content_id,
+        isInline: att.is_inline,
+      })),
+    },
+  }
+}
+
+/**
+ * Create a new draft.
+ */
+export async function createDraft(
+  grantId: string,
+  draft: {
+    to?: Array<{ email: string; name?: string }>
+    cc?: Array<{ email: string; name?: string }>
+    bcc?: Array<{ email: string; name?: string }>
+    subject?: string
+    body?: string
+    replyToMessageId?: string
+  }
+): Promise<NylasResult<{ id: string }>> {
+  const body: Record<string, unknown> = {}
+  if (draft.to?.length) body.to = draft.to
+  if (draft.cc?.length) body.cc = draft.cc
+  if (draft.bcc?.length) body.bcc = draft.bcc
+  if (draft.subject) body.subject = draft.subject
+  if (draft.body) body.body = draft.body
+  if (draft.replyToMessageId) body.reply_to_message_id = draft.replyToMessageId
+
+  const result = await nylasRequest<{
+    data: { id: string }
+  }>('/drafts', {
+    grantId,
+    method: 'POST',
+    body,
+  })
+
+  if (!result.success || !result.data?.data) {
+    return {
+      success: false,
+      error: result.error,
+      errorCode: result.errorCode,
+    }
+  }
+
+  return {
+    success: true,
+    data: { id: result.data.data.id },
+  }
+}
+
+/**
+ * Update an existing draft.
+ */
+export async function updateDraft(
+  grantId: string,
+  draftId: string,
+  updates: {
+    to?: Array<{ email: string; name?: string }>
+    cc?: Array<{ email: string; name?: string }>
+    bcc?: Array<{ email: string; name?: string }>
+    subject?: string
+    body?: string
+  }
+): Promise<NylasResult<{ id: string }>> {
+  const body: Record<string, unknown> = {}
+  if (updates.to) body.to = updates.to
+  if (updates.cc) body.cc = updates.cc
+  if (updates.bcc) body.bcc = updates.bcc
+  if (updates.subject !== undefined) body.subject = updates.subject
+  if (updates.body !== undefined) body.body = updates.body
+
+  const result = await nylasRequest<{
+    data: { id: string }
+  }>(`/drafts/${draftId}`, {
+    grantId,
+    method: 'PUT',
+    body,
+  })
+
+  if (!result.success || !result.data?.data) {
+    return {
+      success: false,
+      error: result.error,
+      errorCode: result.errorCode,
+    }
+  }
+
+  return {
+    success: true,
+    data: { id: result.data.data.id },
+  }
+}
+
+/**
+ * Delete a draft.
+ */
+export async function deleteDraft(
+  grantId: string,
+  draftId: string
+): Promise<NylasResult<void>> {
+  return nylasRequest(`/drafts/${draftId}`, {
+    grantId,
+    method: 'DELETE',
+  })
+}
+
+/**
+ * Send a draft.
+ */
+export async function sendDraft(
+  grantId: string,
+  draftId: string
+): Promise<NylasResult<{ id: string }>> {
+  const result = await nylasRequest<{
+    data: { id: string }
+  }>(`/drafts/${draftId}`, {
+    grantId,
+    method: 'POST',
   })
 
   if (!result.success || !result.data?.data) {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@dreamteam/ui/button"
 import { Input } from "@dreamteam/ui/input"
 import { Label } from "@dreamteam/ui/label"
@@ -23,15 +23,30 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@dreamteam/ui/alert-dialog"
-import { XIcon, InfoIcon, Trash2Icon } from "lucide-react"
-import type { WorkflowAction } from "@/types/workflow"
-import { getActionDefinition } from "@/types/workflow"
+import { XIcon, InfoIcon, Trash2Icon, Loader2 } from "lucide-react"
+
+interface NylasGrant {
+  id: string
+  email: string
+  provider: string
+}
+import type {
+  WorkflowAction,
+  TriggerType,
+  ConditionActionConfig,
+  WorkflowCondition,
+  ConditionOperator,
+} from "@/types/workflow"
+import { getActionDefinition, CONDITION_OPERATORS } from "@/types/workflow"
+import { ConditionFieldPicker } from "./condition-field-picker"
 
 interface ConfigSidePanelProps {
   action: WorkflowAction | null
   onClose: () => void
   onSave: (action: WorkflowAction) => void
   onDelete: (actionId: string) => void
+  triggerType?: TriggerType
+  allActions?: WorkflowAction[]  // For getting previous actions for condition checks
 }
 
 export function ConfigSidePanel({
@@ -39,14 +54,43 @@ export function ConfigSidePanel({
   onClose,
   onSave,
   onDelete,
+  triggerType = "lead_created",
+  allActions = [],
 }: ConfigSidePanelProps) {
   const [config, setConfig] = useState<Record<string, unknown>>({})
+  const [emailGrants, setEmailGrants] = useState<NylasGrant[]>([])
+  const [loadingGrants, setLoadingGrants] = useState(false)
+
+  // Get actions that come before this action (for condition checking)
+  const previousActions = action
+    ? allActions.filter((a) => a.order < action.order && a.id !== action.id)
+    : []
+
+  // Fetch email grants when email action is selected
+  const fetchEmailGrants = useCallback(async () => {
+    setLoadingGrants(true)
+    try {
+      const res = await fetch('/api/nylas/grants')
+      if (res.ok) {
+        const data = await res.json()
+        setEmailGrants(data.grants || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch email grants:', error)
+    } finally {
+      setLoadingGrants(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (action) {
       setConfig(action.config || {})
+      // Fetch grants for email action
+      if (action.type === 'send_email') {
+        fetchEmailGrants()
+      }
     }
-  }, [action])
+  }, [action, fetchEmailGrants])
 
   if (!action) return null
 
@@ -66,8 +110,40 @@ export function ConfigSidePanel({
       case "send_email":
         return (
           <div className="space-y-4">
+            {/* Email Account Selector */}
             <div className="space-y-2">
-              <Label htmlFor="recipient">Recipient</Label>
+              <Label htmlFor="nylas_grant_id">Send From</Label>
+              {loadingGrants ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading accounts...
+                </div>
+              ) : emailGrants.length > 0 ? (
+                <Select
+                  value={(config.nylas_grant_id as string) || "default"}
+                  onValueChange={(v) => updateConfig("nylas_grant_id", v === "default" ? undefined : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Use default account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Use default account</SelectItem>
+                    {emailGrants.map((grant) => (
+                      <SelectItem key={grant.id} value={grant.id}>
+                        {grant.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No email accounts connected. Will use default account.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="recipient">To</Label>
               <Select
                 value={(config.recipient as string) || "lead_email"}
                 onValueChange={(v) => updateConfig("recipient", v)}
@@ -93,6 +169,28 @@ export function ConfigSidePanel({
                 />
               </div>
             )}
+
+            {/* CC and BCC */}
+            <div className="space-y-2">
+              <Label htmlFor="email_cc">CC</Label>
+              <Input
+                id="email_cc"
+                value={(config.email_cc as string) || ""}
+                onChange={(e) => updateConfig("email_cc", e.target.value)}
+                placeholder="cc1@example.com, cc2@example.com"
+              />
+              <p className="text-xs text-muted-foreground">Separate multiple emails with commas</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email_bcc">BCC</Label>
+              <Input
+                id="email_bcc"
+                value={(config.email_bcc as string) || ""}
+                onChange={(e) => updateConfig("email_bcc", e.target.value)}
+                placeholder="bcc@example.com"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="subject">Subject</Label>
               <Input
@@ -395,16 +493,113 @@ export function ConfigSidePanel({
           </div>
         )
 
-      case "condition":
+      case "condition": {
+        // Initialize condition config if not present
+        const condConfig = config as Partial<ConditionActionConfig>
+        const condition = condConfig.condition || {} as Partial<WorkflowCondition>
+        const ifBranchCount = (condConfig.if_branch || []).length
+        const elseBranchCount = (condConfig.else_branch || []).length
+
+        const updateCondition = (updates: Partial<WorkflowCondition>) => {
+          setConfig((prev) => ({
+            ...prev,
+            condition: { ...(prev.condition as WorkflowCondition || {}), ...updates },
+            if_branch: (prev as unknown as ConditionActionConfig).if_branch || [],
+            else_branch: (prev as unknown as ConditionActionConfig).else_branch || [],
+          }))
+        }
+
+        // Get the operator definition to check if value is required
+        const selectedOperator = CONDITION_OPERATORS.find(
+          (op) => op.operator === condition.operator
+        )
+        const requiresValue = selectedOperator?.requiresValue ?? true
+
         return (
           <div className="space-y-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-              <p className="text-sm text-yellow-800">
-                Conditional branching is coming soon. This will allow you to create if/then logic in your workflows.
+            {/* Field selector */}
+            <div className="space-y-2">
+              <Label>Field to check</Label>
+              <ConditionFieldPicker
+                triggerType={triggerType}
+                value={
+                  condition.field_path
+                    ? {
+                        source: condition.field_source || "trigger",
+                        path: condition.field_path,
+                        fieldId: condition.field_id,
+                      }
+                    : null
+                }
+                onChange={(field) =>
+                  updateCondition({
+                    field_source: field.source,
+                    field_path: field.path,
+                    field_id: field.fieldId,
+                  })
+                }
+                previousActions={previousActions}
+              />
+            </div>
+
+            {/* Operator selector */}
+            <div className="space-y-2">
+              <Label>Condition</Label>
+              <Select
+                value={condition.operator || ""}
+                onValueChange={(v) => updateCondition({ operator: v as ConditionOperator })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select comparison" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONDITION_OPERATORS.map((op) => (
+                    <SelectItem key={op.operator} value={op.operator}>
+                      {op.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Value input (only shown if operator requires a value) */}
+            {requiresValue && (
+              <div className="space-y-2">
+                <Label>Value</Label>
+                <Input
+                  value={condition.value || ""}
+                  onChange={(e) => updateCondition({ value: e.target.value })}
+                  placeholder="Enter value to compare"
+                />
+              </div>
+            )}
+
+            {/* Branch summary */}
+            <div className="mt-4 pt-4 border-t space-y-2">
+              <p className="text-sm font-medium">Branches</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                  <p className="text-xs text-green-600 font-medium">If True</p>
+                  <p className="text-lg font-semibold text-green-700">{ifBranchCount}</p>
+                  <p className="text-xs text-green-600">
+                    {ifBranchCount === 1 ? "action" : "actions"}
+                  </p>
+                </div>
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-center">
+                  <p className="text-xs text-orange-600 font-medium">Else</p>
+                  <p className="text-lg font-semibold text-orange-700">{elseBranchCount}</p>
+                  <p className="text-xs text-orange-600">
+                    {elseBranchCount === 1 ? "action" : "actions"}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Add actions to each branch in the workflow canvas
               </p>
             </div>
           </div>
         )
+      }
 
       default:
         return (

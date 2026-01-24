@@ -46,14 +46,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { userId, workspaceId, provider } = stateData
+    const { userId, workspaceId, provider, returnUrl } = stateData
+    const redirectBase = returnUrl || '/sales/inbox'
 
     // Exchange code for access token
     const tokenResult = await exchangeCodeForToken(code)
     if (!tokenResult.success) {
       console.error('Token exchange failed:', tokenResult.error)
       return NextResponse.redirect(
-        new URL(`/sales/inbox?error=${encodeURIComponent(tokenResult.error || 'token_exchange_failed')}`, request.url)
+        new URL(`${redirectBase}?error=${encodeURIComponent(tokenResult.error || 'token_exchange_failed')}`, request.url)
       )
     }
 
@@ -85,7 +86,7 @@ export async function GET(request: NextRequest) {
       if (updateError) {
         console.error('Failed to update grant:', updateError)
         return NextResponse.redirect(
-          new URL('/sales/inbox?error=failed_to_update', request.url)
+          new URL(`${redirectBase}?error=failed_to_update`, request.url)
         )
       }
 
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest) {
       )
 
       return NextResponse.redirect(
-        new URL('/sales/inbox?success=nylas_reconnected', request.url)
+        new URL(`${redirectBase}?success=nylas_reconnected`, request.url)
       )
     }
 
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest) {
     if (insertError) {
       console.error('Failed to store grant:', insertError)
       return NextResponse.redirect(
-        new URL('/sales/inbox?error=failed_to_store', request.url)
+        new URL(`${redirectBase}?error=failed_to_store`, request.url)
       )
     }
 
@@ -152,7 +153,7 @@ export async function GET(request: NextRequest) {
     )
 
     return NextResponse.redirect(
-      new URL('/sales/inbox?success=nylas_connected', request.url)
+      new URL(`${redirectBase}?success=nylas_connected`, request.url)
     )
   } catch (error) {
     console.error('Nylas callback error:', error)

@@ -26,7 +26,8 @@ export async function GET(
       .from("leads")
       .select(`
         *,
-        contacts(*)
+        contacts(*),
+        stage:lead_pipeline_stages(id, name, color, position, pipeline_id)
       `)
       .eq("id", id)
       .eq("user_id", session.id)

@@ -1,6 +1,8 @@
 import { sendSMS, makeCall, formatE164, getTwilioPhoneNumber } from './twilio'
+import { sendEmail as sendNylasEmail, isNylasConfigured } from './nylas'
 import { createAdminClient } from './supabase-server'
-import type { WorkflowAction, ActionType, TriggerType } from '@/types/workflow'
+import type { WorkflowAction, ActionType, TriggerType, ConditionActionConfig } from '@/types/workflow'
+import { evaluateCondition } from './workflow-condition-evaluator'
 
 export interface WorkflowContext {
   userId: string
@@ -26,6 +28,18 @@ export interface WorkflowContext {
     status?: string
     stage_id?: string
   }
+  activity?: {
+    id: string
+    type: string
+    subject: string
+    is_completed: boolean
+  }
+  leadTask?: {
+    id: string
+    title: string
+    is_completed: boolean
+  }
+  customFieldValues?: Record<string, string>  // field_id -> value for custom fields
 }
 
 interface ActionConfig {
@@ -51,6 +65,14 @@ interface ActionConfig {
   // For wait
   wait_duration?: number
   wait_unit?: 'minutes' | 'hours' | 'days'
+  // For send_email
+  email_to?: 'contact_email' | 'custom'
+  custom_email?: string
+  email_subject?: string
+  email_body?: string
+  nylas_grant_id?: string  // Specific grant ID to use for sending
+  email_cc?: string  // Comma-separated CC emails
+  email_bcc?: string  // Comma-separated BCC emails
 }
 
 export interface ExecutionResult {
@@ -604,14 +626,127 @@ export async function executeWorkflowAction(
         }
       }
 
-      case 'send_email':
+      case 'send_email': {
+        // Check if Nylas is configured
+        if (!isNylasConfigured()) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'Nylas email is not configured',
+            executedAt,
+          }
+        }
+
+        // Get recipient email
+        let recipientEmail: string | null = null
+        if (config.email_to === 'custom' && config.custom_email) {
+          recipientEmail = config.custom_email
+        } else {
+          // Default to contact email
+          recipientEmail = context.contact?.email || null
+        }
+
+        if (!recipientEmail) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No recipient email available',
+            executedAt,
+          }
+        }
+
+        const emailSubject = replaceTemplateVariables(config.email_subject || '', context)
+        const emailBody = replaceTemplateVariables(config.email_body || '', context)
+
+        if (!emailSubject || !emailBody) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'Email subject and body are required',
+            executedAt,
+          }
+        }
+
+        // Get the user's Nylas grant - use specified grant or fall back to first one
+        let grantId: string | null = null
+
+        if (config.nylas_grant_id) {
+          // Verify the specified grant belongs to this user
+          const { data: specifiedGrant, error: specifiedError } = await supabase
+            .from('nylas_grants')
+            .select('grant_id')
+            .eq('id', config.nylas_grant_id)
+            .eq('user_id', context.userId)
+            .single()
+
+          if (!specifiedError && specifiedGrant) {
+            grantId = specifiedGrant.grant_id
+          }
+        }
+
+        if (!grantId) {
+          // Fall back to user's first grant
+          const { data: nylasGrant, error: grantError } = await supabase
+            .from('nylas_grants')
+            .select('grant_id')
+            .eq('user_id', context.userId)
+            .limit(1)
+            .single()
+
+          if (grantError || !nylasGrant) {
+            return {
+              success: false,
+              actionType: action.type,
+              actionId: action.id,
+              error: 'No connected email account found. Please connect your email in Settings.',
+              executedAt,
+            }
+          }
+          grantId = nylasGrant.grant_id
+        }
+
+        // Parse CC/BCC emails
+        const ccEmails = config.email_cc
+          ? config.email_cc.split(',').map(e => ({ email: e.trim() })).filter(e => e.email)
+          : undefined
+        const bccEmails = config.email_bcc
+          ? config.email_bcc.split(',').map(e => ({ email: e.trim() })).filter(e => e.email)
+          : undefined
+
+        // Send email via Nylas (grantId is guaranteed to be non-null after the checks above)
+        const emailResult = await sendNylasEmail(grantId!, {
+          to: [{ email: recipientEmail }],
+          cc: ccEmails,
+          bcc: bccEmails,
+          subject: emailSubject,
+          body: emailBody,
+        })
+
+        if (!emailResult.success) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: emailResult.error || 'Failed to send email',
+            executedAt,
+          }
+        }
+
         return {
-          success: false,
+          success: true,
           actionType: action.type,
           actionId: action.id,
-          error: 'Email sending not configured - skipping',
+          data: {
+            messageId: emailResult.data?.id,
+            to: recipientEmail,
+            subject: emailSubject,
+          },
           executedAt,
         }
+      }
 
       case 'wait':
         // Wait actions are handled specially in executeWorkflow
@@ -625,13 +760,14 @@ export async function executeWorkflowAction(
         }
 
       case 'condition':
-        // Condition actions require branching logic
-        // For now, return not implemented
+        // Condition actions are handled in the main execution loop (executeWorkflowActions)
+        // This should not be called directly - if it is, return success
+        // The actual condition evaluation happens in executeWorkflowActions
         return {
-          success: false,
+          success: true,
           actionType: action.type,
           actionId: action.id,
-          error: 'Condition branching not yet implemented',
+          data: { note: 'Condition evaluated in main loop' },
           executedAt,
         }
 
@@ -706,38 +842,36 @@ async function createScheduledAction(
 }
 
 /**
- * Execute all actions in a workflow with execution logging
+ * Helper to execute actions recursively, handling conditions
+ * Returns { results, paused, remainingActions } where paused is true if a wait was encountered
  */
-export async function executeWorkflow(
-  workflowId: string,
+interface ExecuteActionsResult {
+  results: ExecutionResult[]
+  paused: boolean
+  remainingActions?: WorkflowAction[]
+  scheduledTime?: Date
+}
+
+async function executeActionsRecursive(
   actions: WorkflowAction[],
   context: WorkflowContext,
-  triggerType: TriggerType = 'lead_created'
-): Promise<ExecutionResult[]> {
-  const results: ExecutionResult[] = []
-
-  // Create execution record
-  const executionId = await createExecutionRecord(
-    workflowId,
-    context.userId,
-    triggerType,
-    context
-  )
-
-  // Sort actions by order
+  workflowId: string,
+  previousResults: ExecutionResult[],
+  executionId: string | null,
+  updateProgress: (results: ExecutionResult[]) => Promise<void>
+): Promise<ExecuteActionsResult> {
+  const results: ExecutionResult[] = [...previousResults]
   const sortedActions = [...actions].sort((a, b) => a.order - b.order)
-
-  let hasError = false
 
   for (let i = 0; i < sortedActions.length; i++) {
     const action = sortedActions[i]
+    const executedAt = new Date().toISOString()
 
-    // Handle wait actions specially
+    // Handle wait actions - pause execution
     if (action.type === 'wait') {
       const config = action.config as ActionConfig
       const scheduledTime = calculateScheduledTime(config)
 
-      // Record the wait action as successful
       results.push({
         success: true,
         actionType: action.type,
@@ -747,54 +881,155 @@ export async function executeWorkflow(
           duration: config.wait_duration,
           unit: config.wait_unit,
         },
-        executedAt: new Date().toISOString(),
+        executedAt,
       })
 
-      // Get remaining actions (after this wait)
       const remainingActions = sortedActions.slice(i + 1)
+      return {
+        results,
+        paused: remainingActions.length > 0,
+        remainingActions,
+        scheduledTime,
+      }
+    }
 
-      if (remainingActions.length > 0 && executionId) {
-        // Schedule the remaining actions
-        await createScheduledAction(
-          executionId,
-          workflowId,
-          context.userId,
-          i + 1,
-          remainingActions,
-          context,
-          scheduledTime
-        )
+    // Handle condition actions - evaluate and execute appropriate branch
+    if (action.type === 'condition') {
+      const condConfig = action.config as unknown as ConditionActionConfig
 
-        // Mark execution as paused
-        await updateExecutionRecord(executionId, 'paused', results)
-
-        console.log(
-          `[Workflows] Paused workflow ${workflowId} - resuming at ${scheduledTime.toISOString()}`
-        )
-
-        return results
+      // Validate condition is configured
+      if (!condConfig.condition?.field_path || !condConfig.condition?.operator) {
+        results.push({
+          success: false,
+          actionType: action.type,
+          actionId: action.id,
+          error: 'Condition not configured - missing field or operator',
+          executedAt,
+        })
+        continue
       }
 
-      // No remaining actions, just complete
+      // Evaluate the condition
+      const conditionMet = evaluateCondition(condConfig.condition, context, results)
+
+      // Record the condition evaluation result
+      results.push({
+        success: true,
+        actionType: action.type,
+        actionId: action.id,
+        data: {
+          conditionMet,
+          field: condConfig.condition.field_path,
+          operator: condConfig.condition.operator,
+          expectedValue: condConfig.condition.value,
+        },
+        executedAt,
+      })
+
+      await updateProgress(results)
+
+      // Execute the appropriate branch
+      const branchActions = conditionMet
+        ? (condConfig.if_branch || [])
+        : (condConfig.else_branch || [])
+
+      if (branchActions.length > 0) {
+        const branchResult = await executeActionsRecursive(
+          branchActions,
+          context,
+          workflowId,
+          results,
+          executionId,
+          updateProgress
+        )
+
+        // If branch paused on a wait, we need to handle that
+        if (branchResult.paused) {
+          // The remaining branch actions plus remaining top-level actions
+          const topLevelRemaining = sortedActions.slice(i + 1)
+          return {
+            results: branchResult.results,
+            paused: true,
+            remainingActions: [...(branchResult.remainingActions || []), ...topLevelRemaining],
+            scheduledTime: branchResult.scheduledTime,
+          }
+        }
+
+        // Branch completed, update results
+        results.length = 0
+        results.push(...branchResult.results)
+      }
+
       continue
     }
 
+    // Execute regular action
     const result = await executeWorkflowAction(action, context, workflowId)
     results.push(result)
 
-    if (!result.success) {
-      hasError = true
-    }
+    await updateProgress(results)
+  }
 
-    // Update execution record with progress
+  return { results, paused: false }
+}
+
+/**
+ * Execute all actions in a workflow with execution logging
+ */
+export async function executeWorkflow(
+  workflowId: string,
+  actions: WorkflowAction[],
+  context: WorkflowContext,
+  triggerType: TriggerType = 'lead_created'
+): Promise<ExecutionResult[]> {
+  // Create execution record
+  const executionId = await createExecutionRecord(
+    workflowId,
+    context.userId,
+    triggerType,
+    context
+  )
+
+  // Helper to update progress
+  const updateProgress = async (results: ExecutionResult[]) => {
     if (executionId) {
-      await updateExecutionRecord(
-        executionId,
-        'running',
-        results
-      )
+      await updateExecutionRecord(executionId, 'running', results)
     }
   }
+
+  // Execute actions recursively (handles conditions and waits)
+  const { results, paused, remainingActions, scheduledTime } = await executeActionsRecursive(
+    actions,
+    context,
+    workflowId,
+    [],
+    executionId,
+    updateProgress
+  )
+
+  // Check if we paused for a wait action
+  if (paused && remainingActions && remainingActions.length > 0 && executionId && scheduledTime) {
+    await createScheduledAction(
+      executionId,
+      workflowId,
+      context.userId,
+      0, // Index doesn't matter much for nested structures
+      remainingActions,
+      context,
+      scheduledTime
+    )
+
+    await updateExecutionRecord(executionId, 'paused', results)
+
+    console.log(
+      `[Workflows] Paused workflow ${workflowId} - resuming at ${scheduledTime.toISOString()}`
+    )
+
+    return results
+  }
+
+  // Check for any errors in results
+  const hasError = results.some(r => !r.success)
 
   // Finalize execution record
   if (executionId) {
@@ -820,25 +1055,44 @@ export async function resumeWorkflow(
   context: WorkflowContext,
   previousResults: ExecutionResult[] = []
 ): Promise<ExecutionResult[]> {
-  const results: ExecutionResult[] = [...previousResults]
-
-  let hasError = false
-
-  for (const action of remainingActions) {
-    const result = await executeWorkflowAction(action, context, workflowId)
-    results.push(result)
-
-    if (!result.success) {
-      hasError = true
-    }
-
-    // Update execution record with progress
-    await updateExecutionRecord(
-      executionId,
-      'running',
-      results
-    )
+  // Helper to update progress
+  const updateProgress = async (results: ExecutionResult[]) => {
+    await updateExecutionRecord(executionId, 'running', results)
   }
+
+  // Execute remaining actions recursively (handles conditions and waits)
+  const { results, paused, remainingActions: moreRemaining, scheduledTime } = await executeActionsRecursive(
+    remainingActions,
+    context,
+    workflowId,
+    previousResults,
+    executionId,
+    updateProgress
+  )
+
+  // Check if we paused again for another wait action
+  if (paused && moreRemaining && moreRemaining.length > 0 && scheduledTime) {
+    await createScheduledAction(
+      executionId,
+      workflowId,
+      context.userId,
+      0,
+      moreRemaining,
+      context,
+      scheduledTime
+    )
+
+    await updateExecutionRecord(executionId, 'paused', results)
+
+    console.log(
+      `[Workflows] Paused workflow ${workflowId} again - resuming at ${scheduledTime.toISOString()}`
+    )
+
+    return results
+  }
+
+  // Check for any errors in results
+  const hasError = results.some(r => !r.success)
 
   // Finalize execution record
   await updateExecutionRecord(

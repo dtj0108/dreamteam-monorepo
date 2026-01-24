@@ -4,23 +4,35 @@ import { useState, useCallback, useRef, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Send, Loader2, ChevronDown, Trash2 } from "lucide-react"
+import { Send, Loader2, ChevronDown, Trash2, Save } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MailDetail } from "./mail-display"
 import { EmailEditor, EmailEditorRef } from "./email-editor"
 
-export type ComposeMode = 'compose' | 'reply' | 'reply-all' | 'forward'
+export type ComposeMode = 'compose' | 'reply' | 'reply-all' | 'forward' | 'draft'
+
+export interface DraftData {
+  id: string
+  to: Array<{ email: string; name?: string }>
+  cc: Array<{ email: string; name?: string }>
+  bcc: Array<{ email: string; name?: string }>
+  subject: string | null
+  body: string
+}
 
 interface ComposeDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   mode?: ComposeMode
   originalEmail?: MailDetail | null
+  draft?: DraftData | null
   grantId: string | null
   senderEmail?: string
   onSend?: () => void
+  onDraftSaved?: () => void
 }
 
 export function ComposeDialog({
@@ -28,9 +40,11 @@ export function ComposeDialog({
   onOpenChange,
   mode = 'compose',
   originalEmail,
+  draft,
   grantId,
   senderEmail,
   onSend,
+  onDraftSaved,
 }: ComposeDialogProps) {
   const [to, setTo] = useState("")
   const [cc, setCc] = useState("")
@@ -38,12 +52,33 @@ export function ComposeDialog({
   const [subject, setSubject] = useState("")
   const [showCcBcc, setShowCcBcc] = useState(false)
   const [sending, setSending] = useState(false)
+  const [savingDraft, setSavingDraft] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
   const editorRef = useRef<EmailEditorRef>(null)
   const [initialContent, setInitialContent] = useState("")
 
   // Initialize fields based on mode and original email
   const initializeFields = useCallback(() => {
+    const formatRecipients = (recipients: Array<{ email: string; name?: string }>) =>
+      recipients.map(r => r.name ? `${r.name} <${r.email}>` : r.email).join(", ")
+
+    // Handle draft mode
+    if (mode === 'draft' && draft) {
+      setTo(formatRecipients(draft.to))
+      setCc(formatRecipients(draft.cc))
+      setBcc(formatRecipients(draft.bcc))
+      setSubject(draft.subject || "")
+      setInitialContent(draft.body || "")
+      setShowCcBcc(draft.cc.length > 0 || draft.bcc.length > 0)
+      setCurrentDraftId(draft.id)
+      setError(null)
+      return
+    }
+
+    // Reset draft ID for non-draft modes
+    setCurrentDraftId(null)
+
     if (!originalEmail) {
       setTo("")
       setCc("")
@@ -51,14 +86,11 @@ export function ComposeDialog({
       setSubject("")
       setInitialContent("")
       setShowCcBcc(false)
+      setError(null)
       return
     }
 
-    const formatRecipients = (recipients: Array<{ email: string; name?: string }>) =>
-      recipients.map(r => r.name ? `${r.name} <${r.email}>` : r.email).join(", ")
-
     const originalFrom = formatRecipients(originalEmail.from)
-    const originalTo = formatRecipients(originalEmail.to)
 
     switch (mode) {
       case 'reply':
@@ -89,7 +121,7 @@ export function ComposeDialog({
     }
 
     // Add quoted original message for reply/forward
-    if (mode !== 'compose') {
+    if (mode !== 'compose' && mode !== 'draft') {
       const date = new Date(originalEmail.date * 1000).toLocaleString()
       const quotedHtml = `
         <br><br>
@@ -109,7 +141,7 @@ export function ComposeDialog({
 
     setBcc("")
     setError(null)
-  }, [originalEmail, mode, senderEmail])
+  }, [originalEmail, mode, senderEmail, draft])
 
   // Reset fields when dialog opens
   useEffect(() => {
@@ -154,31 +186,129 @@ export function ComposeDialog({
     setError(null)
 
     try {
-      const response = await fetch("/api/nylas/emails/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          grantId,
-          to: toRecipients,
-          cc: parseRecipients(cc),
-          bcc: parseRecipients(bcc),
-          subject,
-          body,
-          replyToMessageId: mode !== 'compose' && mode !== 'forward' ? originalEmail?.id : undefined,
-        }),
-      })
+      // If editing a draft, send the draft directly
+      if (currentDraftId) {
+        // First update the draft with latest content
+        await fetch(`/api/nylas/drafts/${currentDraftId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            grantId,
+            to: toRecipients,
+            cc: parseRecipients(cc),
+            bcc: parseRecipients(bcc),
+            subject,
+            body,
+          }),
+        })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || "Failed to send email")
+        // Then send the draft
+        const response = await fetch(`/api/nylas/drafts/${currentDraftId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ grantId }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Failed to send email")
+        }
+      } else {
+        const response = await fetch("/api/nylas/emails/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            grantId,
+            to: toRecipients,
+            cc: parseRecipients(cc),
+            bcc: parseRecipients(bcc),
+            subject,
+            body,
+            replyToMessageId: mode !== 'compose' && mode !== 'forward' && mode !== 'draft' ? originalEmail?.id : undefined,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Failed to send email")
+        }
       }
 
       onOpenChange(false)
       onSend?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send email")
+      const errorMessage = err instanceof Error ? err.message : "Failed to send email"
+      setError(errorMessage)
     } finally {
       setSending(false)
+    }
+  }
+
+  const handleSaveDraft = async () => {
+    if (!grantId) {
+      setError("No email account connected")
+      return
+    }
+
+    const body = editorRef.current?.getHTML() || ""
+    const toRecipients = parseRecipients(to)
+    const ccRecipients = parseRecipients(cc)
+    const bccRecipients = parseRecipients(bcc)
+
+    setSavingDraft(true)
+    setError(null)
+
+    try {
+      if (currentDraftId) {
+        // Update existing draft
+        const response = await fetch(`/api/nylas/drafts/${currentDraftId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            grantId,
+            to: toRecipients,
+            cc: ccRecipients,
+            bcc: bccRecipients,
+            subject,
+            body,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Failed to save draft")
+        }
+      } else {
+        // Create new draft
+        const response = await fetch("/api/nylas/drafts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            grantId,
+            to: toRecipients,
+            cc: ccRecipients,
+            bcc: bccRecipients,
+            subject,
+            body,
+            replyToMessageId: mode !== 'compose' && mode !== 'forward' && mode !== 'draft' ? originalEmail?.id : undefined,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Failed to save draft")
+        }
+
+        const data = await response.json()
+        setCurrentDraftId(data.id)
+      }
+
+      onDraftSaved?.()
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to save draft"
+      setError(errorMessage)
+    } finally {
+      setSavingDraft(false)
     }
   }
 
@@ -187,6 +317,7 @@ export function ComposeDialog({
       case 'reply': return 'Reply'
       case 'reply-all': return 'Reply All'
       case 'forward': return 'Forward'
+      case 'draft': return 'Edit Draft'
       default: return 'New Message'
     }
   }
@@ -196,7 +327,7 @@ export function ComposeDialog({
       <DialogContent className="sm:max-w-[700px] max-h-[85vh] p-0 gap-0 overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3 border-b bg-muted/30">
-          <h2 className="font-semibold text-base">{getTitle()}</h2>
+          <DialogTitle className="font-semibold text-base">{getTitle()}</DialogTitle>
         </div>
 
         <div className="flex flex-col flex-1 overflow-hidden">
@@ -284,20 +415,36 @@ export function ComposeDialog({
               variant="ghost"
               size="sm"
               onClick={() => onOpenChange(false)}
-              disabled={sending}
+              disabled={sending || savingDraft}
               className="text-muted-foreground hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
 
-            <Button onClick={handleSend} disabled={sending} size="sm">
-              {sending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4 mr-2" />
-              )}
-              Send
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSaveDraft}
+                disabled={sending || savingDraft}
+              >
+                {savingDraft ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Save Draft
+              </Button>
+
+              <Button onClick={handleSend} disabled={sending || savingDraft} size="sm">
+                {sending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Send
+              </Button>
+            </div>
           </div>
         </div>
       </DialogContent>

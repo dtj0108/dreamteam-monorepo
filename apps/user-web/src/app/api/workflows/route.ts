@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, description, trigger_type, trigger_config, is_active, nodes, edges } = body
+    const { name, description, trigger_type, trigger_config, is_active, actions } = body
 
     if (!name) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 })
@@ -56,8 +56,7 @@ export async function POST(request: NextRequest) {
         trigger_type,
         trigger_config: trigger_config || {},
         is_active: is_active || false,
-        nodes: nodes || [],
-        edges: edges || [],
+        actions: actions || [],
       })
       .select()
       .single()

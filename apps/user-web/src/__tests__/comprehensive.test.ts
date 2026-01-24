@@ -1693,259 +1693,218 @@ describe('Lead Duplicate Detector', () => {
 })
 
 // ============================================================================
-// SECTION: API Validation Utility Tests (src/lib/api-validation.ts)
+// SECTION: Workflow Condition Evaluator Tests (src/lib/workflow-condition-evaluator.ts)
 // ============================================================================
 
-import { parseRequestBody } from '@/lib/api-validation'
-import { z } from 'zod'
+import {
+  evaluateCondition,
+  getFieldValue,
+  applyOperator,
+} from '@/lib/workflow-condition-evaluator'
+import type { WorkflowCondition } from '@/types/workflow'
+import type { WorkflowContext, ExecutionResult } from '@/lib/workflow-executor'
 
-describe('API Validation', () => {
-  describe('parseRequestBody', () => {
-    it('should return 400 for malformed JSON', async () => {
-      const request = new Request('http://localhost/api/test', {
-        method: 'POST',
-        body: 'not valid json',
-        headers: { 'Content-Type': 'application/json' },
-      })
+describe('Workflow Condition Evaluator', () => {
+  // Sample context for testing
+  const sampleContext: WorkflowContext = {
+    userId: 'user-123',
+    leadId: 'lead-456',
+    contactId: 'contact-789',
+    lead: {
+      id: 'lead-456',
+      name: 'Test Company',
+      status: 'hot',
+    },
+    contact: {
+      id: 'contact-789',
+      first_name: 'John',
+      last_name: 'Doe',
+      email: 'john@test.com',
+      phone: '+1234567890',
+    },
+    customFieldValues: {
+      'cf-1': 'Custom Value',
+      'cf-2': '100',
+    },
+  }
 
-      const result = await parseRequestBody(request)
-      expect('error' in result).toBe(true)
-      if ('error' in result) {
-        expect(result.error.status).toBe(400)
-        const data = await result.error.json()
-        expect(data.error).toBe('Invalid JSON in request body')
+  const sampleResults: ExecutionResult[] = [
+    {
+      success: true,
+      actionType: 'send_sms',
+      actionId: 'action-1',
+      executedAt: '2024-01-15T10:00:00Z',
+      data: { sid: 'sms-123' },
+    },
+    {
+      success: false,
+      actionType: 'send_email',
+      actionId: 'action-2',
+      error: 'Email not configured',
+      executedAt: '2024-01-15T10:01:00Z',
+    },
+  ]
+
+  describe('getFieldValue', () => {
+    it('should get trigger field value from lead', () => {
+      const condition: WorkflowCondition = {
+        field_source: 'trigger',
+        field_path: 'lead.status',
+        operator: 'equals',
+        value: 'hot',
       }
+      const value = getFieldValue(condition, sampleContext, [])
+      expect(value).toBe('hot')
     })
 
-    it('should return 400 for schema validation errors', async () => {
-      const schema = z.object({
-        name: z.string().min(1, 'name is required'),
-        age: z.number(),
-      })
-
-      const request = new Request('http://localhost/api/test', {
-        method: 'POST',
-        body: JSON.stringify({ name: '', age: 'not a number' }),
-        headers: { 'Content-Type': 'application/json' },
-      })
-
-      const result = await parseRequestBody(request, schema)
-      expect('error' in result).toBe(true)
-      if ('error' in result) {
-        expect(result.error.status).toBe(400)
-        const data = await result.error.json()
-        expect(data.error).toBe('Validation failed')
-        expect(data.details).toBeDefined()
+    it('should get trigger field value from contact', () => {
+      const condition: WorkflowCondition = {
+        field_source: 'trigger',
+        field_path: 'contact.email',
+        operator: 'equals',
+        value: 'test@test.com',
       }
+      const value = getFieldValue(condition, sampleContext, [])
+      expect(value).toBe('john@test.com')
     })
 
-    it('should return parsed data on success without schema', async () => {
-      const request = new Request('http://localhost/api/test', {
-        method: 'POST',
-        body: JSON.stringify({ foo: 'bar', num: 42 }),
-        headers: { 'Content-Type': 'application/json' },
-      })
-
-      const result = await parseRequestBody<{ foo: string; num: number }>(request)
-      expect('data' in result).toBe(true)
-      if ('data' in result) {
-        expect(result.data.foo).toBe('bar')
-        expect(result.data.num).toBe(42)
+    it('should get custom field value', () => {
+      const condition: WorkflowCondition = {
+        field_source: 'custom_field',
+        field_path: 'my_field',
+        field_id: 'cf-1',
+        operator: 'equals',
+        value: 'test',
       }
+      const value = getFieldValue(condition, sampleContext, [])
+      expect(value).toBe('Custom Value')
     })
 
-    it('should return typed data on success with schema', async () => {
-      const schema = z.object({
-        name: z.string(),
-        count: z.number(),
-      })
-
-      const request = new Request('http://localhost/api/test', {
-        method: 'POST',
-        body: JSON.stringify({ name: 'test', count: 5 }),
-        headers: { 'Content-Type': 'application/json' },
-      })
-
-      const result = await parseRequestBody(request, schema)
-      expect('data' in result).toBe(true)
-      if ('data' in result) {
-        expect(result.data.name).toBe('test')
-        expect(result.data.count).toBe(5)
+    it('should get previous action success result', () => {
+      const condition: WorkflowCondition = {
+        field_source: 'previous_action',
+        field_path: 'action.action-1.success',
+        operator: 'equals',
+        value: 'true',
       }
+      const value = getFieldValue(condition, sampleContext, sampleResults)
+      expect(value).toBe(true)
     })
 
-    it('should include flattened validation details', async () => {
-      const schema = z.object({
-        email: z.string().email('Invalid email'),
-        password: z.string().min(8, 'Password must be at least 8 characters'),
-      })
-
-      const request = new Request('http://localhost/api/test', {
-        method: 'POST',
-        body: JSON.stringify({ email: 'invalid', password: 'short' }),
-        headers: { 'Content-Type': 'application/json' },
-      })
-
-      const result = await parseRequestBody(request, schema)
-      expect('error' in result).toBe(true)
-      if ('error' in result) {
-        const data = await result.error.json()
-        expect(data.details.fieldErrors).toBeDefined()
-        // Zod v4 returns field errors keyed by field name
-        expect(data.details.fieldErrors.email).toBeDefined()
-        expect(data.details.fieldErrors.password).toBeDefined()
+    it('should return undefined for missing field', () => {
+      const condition: WorkflowCondition = {
+        field_source: 'trigger',
+        field_path: 'lead.nonexistent',
+        operator: 'equals',
+        value: 'test',
       }
-    })
-
-    it('should handle empty body as JSON parse error', async () => {
-      const request = new Request('http://localhost/api/test', {
-        method: 'POST',
-        body: '',
-        headers: { 'Content-Type': 'application/json' },
-      })
-
-      const result = await parseRequestBody(request)
-      expect('error' in result).toBe(true)
-      if ('error' in result) {
-        expect(result.error.status).toBe(400)
-        const data = await result.error.json()
-        expect(data.error).toBe('Invalid JSON in request body')
-      }
-    })
-  })
-})
-
-// ============================================================================
-// SECTION: Agent Messaging Tests (src/lib/agent-messaging.ts)
-// ============================================================================
-
-import { getWorkspaceAdminIds, formatTaskCompletionMessage } from '@/lib/agent-messaging'
-
-describe('Agent Messaging', () => {
-  describe('getWorkspaceAdminIds', () => {
-    it('should return profile IDs for owners and admins', async () => {
-      const mockSupabase = {
-        from: vi.fn().mockReturnThis(),
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        in: vi.fn().mockResolvedValue({
-          data: [
-            { profile_id: 'profile-1' },
-            { profile_id: 'profile-2' },
-          ],
-        }),
-      } as any
-
-      const result = await getWorkspaceAdminIds('workspace-123', mockSupabase)
-
-      expect(mockSupabase.from).toHaveBeenCalledWith('workspace_members')
-      expect(mockSupabase.in).toHaveBeenCalledWith('role', ['owner', 'admin'])
-      expect(result).toEqual(['profile-1', 'profile-2'])
-    })
-
-    it('should return empty array when no admins found', async () => {
-      const mockSupabase = {
-        from: vi.fn().mockReturnThis(),
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        in: vi.fn().mockResolvedValue({
-          data: [],
-        }),
-      } as any
-
-      const result = await getWorkspaceAdminIds('workspace-123', mockSupabase)
-
-      expect(result).toEqual([])
-    })
-
-    it('should return empty array when data is null', async () => {
-      const mockSupabase = {
-        from: vi.fn().mockReturnThis(),
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        in: vi.fn().mockResolvedValue({
-          data: null,
-        }),
-      } as any
-
-      const result = await getWorkspaceAdminIds('workspace-123', mockSupabase)
-
-      expect(result).toEqual([])
-    })
-
-    it('should filter out null profile_ids', async () => {
-      const mockSupabase = {
-        from: vi.fn().mockReturnThis(),
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        in: vi.fn().mockResolvedValue({
-          data: [
-            { profile_id: 'profile-1' },
-            { profile_id: null },
-            { profile_id: 'profile-3' },
-          ],
-        }),
-      } as any
-
-      const result = await getWorkspaceAdminIds('workspace-123', mockSupabase)
-
-      expect(result).toEqual(['profile-1', 'profile-3'])
+      const value = getFieldValue(condition, sampleContext, [])
+      expect(value).toBeUndefined()
     })
   })
 
-  describe('formatTaskCompletionMessage', () => {
-    it('should format completed task message', () => {
-      const message = formatTaskCompletionMessage({
-        scheduleName: 'Daily Report',
-        taskPrompt: 'Generate a summary',
-        status: 'completed',
-        resultText: 'Report generated successfully',
-        durationMs: 5000,
-      })
-
-      expect(message).toContain('**Scheduled Task Completed**')
-      expect(message).toContain('Daily Report')
-      expect(message).toContain('Generate a summary')
-      expect(message).toContain('Report generated successfully')
-      expect(message).toContain('5.0s')
+  describe('applyOperator', () => {
+    it('should handle equals operator (case insensitive)', () => {
+      expect(applyOperator('hello', 'equals', 'hello')).toBe(true)
+      expect(applyOperator('Hello', 'equals', 'hello')).toBe(true)
+      expect(applyOperator('hello', 'equals', 'world')).toBe(false)
     })
 
-    it('should format failed task message', () => {
-      const message = formatTaskCompletionMessage({
-        scheduleName: 'Daily Report',
-        taskPrompt: 'Generate a summary',
-        status: 'failed',
-        resultText: 'Connection timeout',
-      })
-
-      expect(message).toContain('**Scheduled Task Failed**')
-      expect(message).toContain('Daily Report')
-      expect(message).toContain('Generate a summary')
-      expect(message).toContain('Connection timeout')
+    it('should handle not_equals operator', () => {
+      expect(applyOperator('hello', 'not_equals', 'world')).toBe(true)
+      expect(applyOperator('hello', 'not_equals', 'hello')).toBe(false)
     })
 
-    it('should truncate long result text for completed tasks', () => {
-      const longResult = 'A'.repeat(600)
-      const message = formatTaskCompletionMessage({
-        scheduleName: 'Test',
-        taskPrompt: 'Test prompt',
-        status: 'completed',
-        resultText: longResult,
-      })
-
-      expect(message).toContain('...')
-      expect(message.length).toBeLessThan(longResult.length + 200)
+    it('should handle contains operator', () => {
+      expect(applyOperator('hello world', 'contains', 'world')).toBe(true)
+      expect(applyOperator('hello world', 'contains', 'foo')).toBe(false)
     })
 
-    it('should handle completion without duration', () => {
-      const message = formatTaskCompletionMessage({
-        scheduleName: 'Test',
-        taskPrompt: 'Test prompt',
-        status: 'completed',
-        resultText: 'Done',
-      })
+    it('should handle starts_with operator', () => {
+      expect(applyOperator('hello world', 'starts_with', 'hello')).toBe(true)
+      expect(applyOperator('hello world', 'starts_with', 'world')).toBe(false)
+    })
 
-      expect(message).not.toContain('Completed in')
+    it('should handle greater_than operator', () => {
+      expect(applyOperator(100, 'greater_than', '50')).toBe(true)
+      expect(applyOperator('100', 'greater_than', '50')).toBe(true)
+      expect(applyOperator(30, 'greater_than', '50')).toBe(false)
+    })
+
+    it('should handle less_than operator', () => {
+      expect(applyOperator(30, 'less_than', '50')).toBe(true)
+      expect(applyOperator(100, 'less_than', '50')).toBe(false)
+    })
+
+    it('should handle is_empty operator', () => {
+      expect(applyOperator('', 'is_empty', '')).toBe(true)
+      expect(applyOperator(null, 'is_empty', '')).toBe(true)
+      expect(applyOperator(undefined, 'is_empty', '')).toBe(true)
+      expect(applyOperator('   ', 'is_empty', '')).toBe(true)
+      expect(applyOperator('hello', 'is_empty', '')).toBe(false)
+    })
+
+    it('should handle is_not_empty operator', () => {
+      expect(applyOperator('hello', 'is_not_empty', '')).toBe(true)
+      expect(applyOperator('', 'is_not_empty', '')).toBe(false)
+      expect(applyOperator(null, 'is_not_empty', '')).toBe(false)
+    })
+
+    it('should return false for invalid numeric comparisons', () => {
+      expect(applyOperator('not a number', 'greater_than', '50')).toBe(false)
+      expect(applyOperator(100, 'greater_than', 'not a number')).toBe(false)
+    })
+  })
+
+  describe('evaluateCondition', () => {
+    it('should evaluate trigger field condition', () => {
+      const condition: WorkflowCondition = {
+        field_source: 'trigger',
+        field_path: 'lead.status',
+        operator: 'equals',
+        value: 'hot',
+      }
+      expect(evaluateCondition(condition, sampleContext, [])).toBe(true)
+    })
+
+    it('should evaluate condition with not_equals', () => {
+      const condition: WorkflowCondition = {
+        field_source: 'trigger',
+        field_path: 'lead.status',
+        operator: 'not_equals',
+        value: 'cold',
+      }
+      expect(evaluateCondition(condition, sampleContext, [])).toBe(true)
+    })
+
+    it('should evaluate previous action result condition', () => {
+      const condition: WorkflowCondition = {
+        field_source: 'previous_action',
+        field_path: 'action.action-1.success',
+        operator: 'equals',
+        value: 'true',
+      }
+      expect(evaluateCondition(condition, sampleContext, sampleResults)).toBe(true)
+    })
+
+    it('should return false for missing required fields', () => {
+      const condition: WorkflowCondition = {
+        field_source: 'trigger',
+        field_path: '',  // Missing field path
+        operator: 'equals',
+        value: 'test',
+      }
+      expect(evaluateCondition(condition, sampleContext, [])).toBe(false)
+    })
+
+    it('should handle is_empty check on missing field', () => {
+      const condition: WorkflowCondition = {
+        field_source: 'trigger',
+        field_path: 'lead.nonexistent',
+        operator: 'is_empty',
+        value: '',
+      }
+      expect(evaluateCondition(condition, sampleContext, [])).toBe(true)
     })
   })
 })

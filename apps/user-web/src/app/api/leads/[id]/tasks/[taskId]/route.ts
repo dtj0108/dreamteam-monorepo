@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 import { getSession } from "@/lib/session"
+import { triggerTaskCompleted } from "@/lib/workflow-trigger-service"
 
 // PATCH /api/leads/[id]/tasks/[taskId] - Update a task
 export async function PATCH(
@@ -19,10 +20,10 @@ export async function PATCH(
 
     const supabase = createAdminClient()
 
-    // Verify lead ownership
+    // Verify lead ownership and get lead data for workflow trigger
     const { data: lead } = await supabase
       .from("leads")
-      .select("id")
+      .select("id, name, status, notes, user_id")
       .eq("id", id)
       .eq("user_id", session.id)
       .single()
@@ -30,6 +31,16 @@ export async function PATCH(
     if (!lead) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 })
     }
+
+    // Get existing task to check previous completion state
+    const { data: existingTask } = await supabase
+      .from("lead_tasks")
+      .select("is_completed")
+      .eq("id", taskId)
+      .eq("lead_id", id)
+      .single()
+
+    const previouslyCompleted = existingTask?.is_completed || false
 
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -54,6 +65,31 @@ export async function PATCH(
     if (error) {
       console.error("Error updating task:", error)
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Trigger task_completed workflow if task was just completed
+    if (is_completed === true && !previouslyCompleted) {
+      triggerTaskCompleted(
+        {
+          id: task.id,
+          lead_id: task.lead_id,
+          title: task.title,
+          description: task.description,
+          is_completed: task.is_completed,
+          completed_at: task.completed_at,
+          due_date: task.due_date,
+        },
+        {
+          id: lead.id,
+          name: lead.name,
+          status: lead.status,
+          notes: lead.notes,
+          user_id: lead.user_id,
+        },
+        session.id
+      ).catch((err) => {
+        console.error("Error triggering task_completed workflows:", err)
+      })
     }
 
     return NextResponse.json({ task })

@@ -98,6 +98,7 @@ export interface Project {
   budget: number | null
   owner_id: string | null
   department_id: string | null
+  position: number
   created_at: string
   updated_at: string
   owner?: {
@@ -144,6 +145,7 @@ interface ProjectsContextType {
   createDepartment: (data: Partial<Department>) => Promise<Department | null>
   updateDepartment: (id: string, data: Partial<Department>) => Promise<void>
   deleteDepartment: (id: string) => Promise<void>
+  reorderProjects: (projectIds: string[]) => Promise<void>
 }
 
 const ProjectsContext = createContext<ProjectsContextType | undefined>(undefined)
@@ -313,6 +315,37 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
     }
   }, [currentProject?.id])
 
+  const reorderProjects = useCallback(async (projectIds: string[]) => {
+    // Optimistically update local state
+    const previousProjects = [...projects]
+    const reorderedProjects = projectIds
+      .map((id, index) => {
+        const project = projects.find(p => p.id === id)
+        return project ? { ...project, position: index } : null
+      })
+      .filter((p): p is Project => p !== null)
+
+    // Merge reordered projects with any that weren't in the reorder list
+    const reorderedIds = new Set(projectIds)
+    const otherProjects = projects.filter(p => !reorderedIds.has(p.id))
+    setProjects([...reorderedProjects, ...otherProjects])
+
+    try {
+      const response = await fetch("/api/projects/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projects: projectIds.map((id, index) => ({ id, position: index })),
+        }),
+      })
+      if (!response.ok) throw new Error("Failed to reorder projects")
+    } catch (err) {
+      // Rollback on failure
+      setProjects(previousProjects)
+      setError(err instanceof Error ? err.message : "Failed to reorder projects")
+    }
+  }, [projects])
+
   const fetchTasks = useCallback(async (projectId: string) => {
     try {
       const response = await fetch(`/api/projects/${projectId}/tasks`)
@@ -410,6 +443,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
         createDepartment,
         updateDepartment,
         deleteDepartment,
+        reorderProjects,
       }}
     >
       {children}

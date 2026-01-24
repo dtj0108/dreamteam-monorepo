@@ -20,8 +20,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@dreamteam/ui/tooltip"
-import type { ActionType, WorkflowAction } from "@/types/workflow"
-import { getActionDefinition } from "@/types/workflow"
+import type { ActionType, WorkflowAction, ConditionActionConfig } from "@/types/workflow"
+import { getActionDefinition, getOperatorDefinition } from "@/types/workflow"
 
 const actionIcons: Record<ActionType, React.ReactNode> = {
   send_sms: <MessageSquareIcon className="size-5" />,
@@ -67,8 +67,19 @@ function getActionSummary(action: WorkflowAction): string | null {
         return `Wait ${config.wait_duration} ${config.wait_unit}`
       }
       return null
-    case "condition":
+    case "condition": {
+      const condConfig = config as unknown as ConditionActionConfig
+      if (condConfig.condition?.field_path && condConfig.condition?.operator) {
+        const operatorDef = getOperatorDefinition(condConfig.condition.operator)
+        const fieldName = condConfig.condition.field_path.split(".").pop() || condConfig.condition.field_path
+        const operatorLabel = operatorDef?.label.toLowerCase() || condConfig.condition.operator
+        if (operatorDef?.requiresValue && condConfig.condition.value) {
+          return `If ${fieldName} ${operatorLabel} "${condConfig.condition.value}"`
+        }
+        return `If ${fieldName} ${operatorLabel}`
+      }
       return "Conditional branch"
+    }
     default:
       return null
   }

@@ -11,7 +11,13 @@ import {
   MailOpen,
   Mail,
   MoreVertical,
-  Paperclip
+  Paperclip,
+  Download,
+  FileText,
+  FileImage,
+  FileArchive,
+  FileSpreadsheet,
+  File
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -20,6 +26,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+
+export interface MailAttachment {
+  id: string
+  filename: string | null
+  contentType: string
+  size: number
+  contentId: string | null
+  isInline: boolean
+}
 
 export interface MailDetail {
   id: string
@@ -33,10 +48,12 @@ export interface MailDetail {
   unread: boolean
   starred: boolean
   hasAttachments: boolean
+  attachments?: MailAttachment[]
 }
 
 interface MailDisplayProps {
   email: MailDetail | null
+  grantId?: string | null
   onToggleStar?: (starred: boolean) => void
   onToggleRead?: (unread: boolean) => void
   onDelete?: () => void
@@ -46,7 +63,7 @@ interface MailDisplayProps {
   loading?: boolean
 }
 
-export function MailDisplay({ email, onToggleStar, onToggleRead, onDelete, onReply, onReplyAll, onForward, loading }: MailDisplayProps) {
+export function MailDisplay({ email, grantId, onToggleStar, onToggleRead, onDelete, onReply, onReplyAll, onForward, loading }: MailDisplayProps) {
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
@@ -99,6 +116,36 @@ export function MailDisplay({ email, onToggleStar, onToggleRead, onDelete, onRep
   const formatRecipients = (recipients: Array<{ email: string; name?: string }>) => {
     return recipients.map(r => r.name || r.email).join(', ')
   }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const getFileIcon = (contentType: string) => {
+    if (contentType.startsWith('image/')) return FileImage
+    if (contentType.includes('pdf')) return FileText
+    if (contentType.includes('spreadsheet') || contentType.includes('excel') || contentType.includes('csv')) return FileSpreadsheet
+    if (contentType.includes('zip') || contentType.includes('compressed') || contentType.includes('archive')) return FileArchive
+    return File
+  }
+
+  const handleDownloadAttachment = (attachmentId: string, filename: string | null) => {
+    if (!grantId) return
+    const url = `/api/nylas/emails/${email.id}/attachments/${attachmentId}?grantId=${grantId}`
+
+    // Create a temporary link to trigger download
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename || 'attachment'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  // Filter out inline attachments (used in HTML body)
+  const downloadableAttachments = email.attachments?.filter(att => !att.isInline) || []
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -184,11 +231,45 @@ export function MailDisplay({ email, onToggleStar, onToggleRead, onDelete, onRep
           </div>
         </div>
 
-        {/* Attachments indicator */}
-        {email.hasAttachments && (
-          <div className="flex items-center gap-2 mb-4 p-2 bg-muted rounded-md text-sm">
-            <Paperclip className="h-4 w-4" />
-            <span>This email has attachments</span>
+        {/* Attachments */}
+        {downloadableAttachments.length > 0 && (
+          <div className="mb-4 p-3 bg-muted rounded-md">
+            <div className="flex items-center gap-2 mb-2 text-sm font-medium">
+              <Paperclip className="h-4 w-4" />
+              <span>{downloadableAttachments.length} Attachment{downloadableAttachments.length > 1 ? 's' : ''}</span>
+            </div>
+            <div className="space-y-2">
+              {downloadableAttachments.map((attachment) => {
+                const FileIcon = getFileIcon(attachment.contentType)
+                return (
+                  <div
+                    key={attachment.id}
+                    className="flex items-center gap-3 p-2 bg-background rounded border hover:bg-muted/50 transition-colors"
+                  >
+                    <FileIcon className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {attachment.filename || 'Untitled attachment'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatFileSize(attachment.size)}
+                      </p>
+                    </div>
+                    {grantId && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0"
+                        onClick={() => handleDownloadAttachment(attachment.id, attachment.filename)}
+                        title="Download attachment"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 

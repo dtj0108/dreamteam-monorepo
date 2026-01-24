@@ -43,6 +43,7 @@ import {
   Compass,
   Activity,
   Package,
+  SlidersHorizontal,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -71,7 +72,6 @@ const financeNav = [
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
-    isActive: true,
   },
   {
     title: "Accounts",
@@ -148,7 +148,6 @@ const salesNav = [
     title: "Inbox",
     url: "/sales/inbox",
     icon: Inbox,
-    isActive: true,
   },
   {
     title: "Calendar",
@@ -204,6 +203,11 @@ const salesNav = [
       { title: "Email & Calendar", url: "/sales/settings/email" },
     ],
   },
+  {
+    title: "Customize",
+    url: "/sales/customize",
+    icon: SlidersHorizontal,
+  },
 ]
 
 // Team navigation
@@ -212,7 +216,6 @@ const teamNav = [
     title: "Messages",
     url: "/team",
     icon: MessageSquare,
-    isActive: true,
   },
   {
     title: "Channels",
@@ -242,7 +245,6 @@ const projectsNav = [
     title: "Dashboard",
     url: "/projects/dashboard",
     icon: LayoutDashboard,
-    isActive: true,
   },
   {
     title: "All Projects",
@@ -282,11 +284,10 @@ const knowledgeNav = [
     title: "All Pages",
     url: "/knowledge",
     icon: FileText,
-    isActive: true,
   },
   {
     title: "Favorites",
-    url: "/knowledge?filter=favorites",
+    url: "/knowledge/all?filter=favorites",
     icon: Star,
   },
   {
@@ -307,7 +308,6 @@ const agentsNav = [
     title: "Dashboard",
     url: "/agents",
     icon: LayoutDashboard,
-    isActive: true,
   },
   {
     title: "Discover",
@@ -350,26 +350,48 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   }
 }
 
+// Helper to check if a nav item is active based on current pathname
+function isNavItemActive(url: string, pathname: string): boolean {
+  // Exact match for root paths
+  if (url === "/" && pathname === "/") return true
+  if (url === "/") return false
+  // Check if pathname matches or starts with the URL (for nested routes)
+  return pathname === url || pathname.startsWith(url + "/")
+}
+
 export function AppSidebar({ user, ...props }: AppSidebarProps) {
   const currentProduct = useCurrentProduct()
+  const pathname = usePathname()
 
-  // Get navigation items based on current product
+  // Get navigation items based on current product, with dynamic isActive
   const navItems = React.useMemo(() => {
+    let baseNav
     switch (currentProduct) {
       case "sales":
-        return salesNav
+        baseNav = salesNav
+        break
       case "team":
-        return teamNav
+        baseNav = teamNav
+        break
       case "projects":
-        return projectsNav
+        baseNav = projectsNav
+        break
       case "knowledge":
-        return knowledgeNav
+        baseNav = knowledgeNav
+        break
       case "agents":
-        return agentsNav
+        baseNav = agentsNav
+        break
       default:
-        return financeNav
+        baseNav = financeNav
     }
-  }, [currentProduct])
+
+    // Calculate isActive dynamically based on current pathname
+    return baseNav.map(item => ({
+      ...item,
+      isActive: isNavItemActive(item.url, pathname)
+    }))
+  }, [currentProduct, pathname])
 
   return (
     <Sidebar collapsible="icon" {...props}>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@dreamteam/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CustomFieldsTab } from "@/components/sales/customize/custom-fields-tab"
 import { LeadStatusesTab } from "@/components/sales/customize/lead-statuses-tab"
 import { PipelinesTab } from "@/components/sales/customize/pipelines-tab"
@@ -19,10 +19,25 @@ export default function CustomizePage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-6">
-          <TabsTrigger value="custom-fields">Custom Fields</TabsTrigger>
-          <TabsTrigger value="lead-statuses">Lead Statuses</TabsTrigger>
-          <TabsTrigger value="pipelines">Pipelines</TabsTrigger>
+        <TabsList className="mb-6 inline-flex h-auto gap-1 rounded-lg bg-muted/50 p-1">
+          <TabsTrigger
+            value="custom-fields"
+            className="rounded-md px-3 py-1.5 text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm text-muted-foreground hover:text-foreground"
+          >
+            Custom Fields
+          </TabsTrigger>
+          <TabsTrigger
+            value="lead-statuses"
+            className="rounded-md px-3 py-1.5 text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm text-muted-foreground hover:text-foreground"
+          >
+            Lead Statuses
+          </TabsTrigger>
+          <TabsTrigger
+            value="pipelines"
+            className="rounded-md px-3 py-1.5 text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm text-muted-foreground hover:text-foreground"
+          >
+            Pipelines
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="custom-fields">

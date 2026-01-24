@@ -43,6 +43,7 @@ interface ActivityFormProps {
   contacts: Contact[]
   activity?: Activity
   onSubmit: (activity: Activity) => Promise<void>
+  defaultType?: "call" | "email" | "meeting" | "note" | "task"
 }
 
 const activityTypes = [
@@ -53,7 +54,7 @@ const activityTypes = [
   { value: "task", label: "Task" },
 ]
 
-export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit }: ActivityFormProps) {
+export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit, defaultType }: ActivityFormProps) {
   const [isLoading, setIsLoading] = React.useState(false)
   const [formData, setFormData] = React.useState<Activity>({
     type: "call",
@@ -70,7 +71,7 @@ export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit 
     } else {
       const firstContactWithId = contacts.find(c => c.id)
       setFormData({
-        type: "call",
+        type: defaultType || "call",
         subject: "",
         description: "",
         contact_id: firstContactWithId?.id || "",
@@ -78,7 +79,7 @@ export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit 
         is_completed: false,
       })
     }
-  }, [activity, open, contacts])
+  }, [activity, open, contacts, defaultType])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

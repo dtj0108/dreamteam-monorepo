@@ -2,11 +2,12 @@
 
 import { ReactNode, useState, createContext, useContext, useCallback } from "react"
 import { InboxProvider, useInbox } from "@/providers/inbox-provider"
-import { MailSidebar, ComposeDialog, type ComposeMode, type MailDetail } from "@/components/mail"
+import { MailSidebar, ComposeDialog, type ComposeMode, type MailDetail, type DraftData } from "@/components/mail"
 
 // Compose context for sharing compose state across components
 interface ComposeContextValue {
   openCompose: (mode?: ComposeMode, email?: MailDetail | null) => void
+  openDraft: (draft: DraftData) => void
 }
 
 const ComposeContext = createContext<ComposeContextValue | null>(null)
@@ -35,10 +36,19 @@ function InboxLayoutContent({ children }: { children: ReactNode }) {
   const [composeOpen, setComposeOpen] = useState(false)
   const [composeMode, setComposeMode] = useState<ComposeMode>('compose')
   const [composeEmail, setComposeEmail] = useState<MailDetail | null>(null)
+  const [composeDraft, setComposeDraft] = useState<DraftData | null>(null)
 
   const openCompose = useCallback((mode: ComposeMode = 'compose', email: MailDetail | null = null) => {
     setComposeMode(mode)
     setComposeEmail(email)
+    setComposeDraft(null)
+    setComposeOpen(true)
+  }, [])
+
+  const openDraft = useCallback((draft: DraftData) => {
+    setComposeMode('draft')
+    setComposeEmail(null)
+    setComposeDraft(draft)
     setComposeOpen(true)
   }, [])
 
@@ -49,7 +59,7 @@ function InboxLayoutContent({ children }: { children: ReactNode }) {
   // No connected accounts - show only onboarding (no sidebar)
   if (!loading && grants.length === 0) {
     return (
-      <ComposeContext.Provider value={{ openCompose }}>
+      <ComposeContext.Provider value={{ openCompose, openDraft }}>
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {children}
         </div>
@@ -59,7 +69,7 @@ function InboxLayoutContent({ children }: { children: ReactNode }) {
 
   // Connected accounts - show full inbox UI with sidebar
   return (
-    <ComposeContext.Provider value={{ openCompose }}>
+    <ComposeContext.Provider value={{ openCompose, openDraft }}>
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Mail Sidebar */}
         <MailSidebar
@@ -85,9 +95,11 @@ function InboxLayoutContent({ children }: { children: ReactNode }) {
           onOpenChange={setComposeOpen}
           mode={composeMode}
           originalEmail={composeEmail}
+          draft={composeDraft}
           grantId={selectedGrantId}
           senderEmail={senderEmail}
           onSend={() => fetchEmails()}
+          onDraftSaved={() => fetchEmails()}
         />
       </div>
     </ComposeContext.Provider>

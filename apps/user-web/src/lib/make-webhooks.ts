@@ -150,6 +150,7 @@ export const WEBHOOK_EVENTS = {
   // CRM - Leads
   "lead.created": "Triggered when a new lead is created",
   "lead.status_changed": "Triggered when a lead's status changes",
+  "lead.stage_changed": "Triggered when a lead moves to a different pipeline stage",
 
   // CRM - Contacts
   "contact.created": "Triggered when a new contact is created",

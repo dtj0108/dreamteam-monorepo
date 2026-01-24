@@ -308,7 +308,7 @@ export function CustomFieldsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
         <div>
           <h2 className="text-lg font-medium">Custom Fields</h2>
           <p className="text-sm text-muted-foreground">

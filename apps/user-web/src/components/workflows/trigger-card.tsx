@@ -20,6 +20,7 @@ import { getTriggerDefinition } from "@/types/workflow"
 const triggerIcons: Record<TriggerType, React.ReactNode> = {
   lead_created: <UserPlusIcon className="size-5" />,
   lead_status_changed: <RefreshCwIcon className="size-5" />,
+  lead_stage_changed: <ArrowRightIcon className="size-5" />,
   lead_contacted: <PhoneIcon className="size-5" />,
   deal_created: <DollarSignIcon className="size-5" />,
   deal_stage_changed: <ArrowRightIcon className="size-5" />,

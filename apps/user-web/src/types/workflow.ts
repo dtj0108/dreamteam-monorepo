@@ -3,6 +3,7 @@ export type TriggerType =
   // Lead events
   | "lead_created"
   | "lead_status_changed"
+  | "lead_stage_changed"
   | "lead_contacted"
   // Deal events
   | "deal_created"
@@ -29,6 +30,39 @@ export type ActionType =
   // Flow control actions
   | "wait"
   | "condition"
+
+// Condition operators for branching logic
+export type ConditionOperator =
+  | "equals"
+  | "not_equals"
+  | "contains"
+  | "starts_with"
+  | "greater_than"
+  | "less_than"
+  | "is_empty"
+  | "is_not_empty"
+
+// Where the condition field value comes from
+export type ConditionFieldSource =
+  | "trigger"          // Lead/deal/contact fields from trigger context
+  | "custom_field"     // User-defined custom fields
+  | "previous_action"  // Result from a previous workflow action
+
+// A single condition definition
+export interface WorkflowCondition {
+  field_source: ConditionFieldSource
+  field_path: string        // e.g., "lead.status", "contact.email", "action.<id>.success"
+  field_id?: string         // UUID for custom fields
+  operator: ConditionOperator
+  value: string             // Value to compare against
+}
+
+// Config structure for condition actions
+export interface ConditionActionConfig {
+  condition: WorkflowCondition
+  if_branch: WorkflowAction[]   // Actions to run if condition is true
+  else_branch: WorkflowAction[] // Actions to run if condition is false
+}
 
 // Workflow action - a single step in the workflow
 export interface WorkflowAction {
@@ -85,6 +119,7 @@ export const TRIGGERS: TriggerDefinition[] = [
   // Lead triggers
   { type: "lead_created", label: "Lead Created", description: "When a new lead is added", icon: "UserPlus", category: "lead" },
   { type: "lead_status_changed", label: "Lead Status Changed", description: "When a lead's status changes", icon: "RefreshCw", category: "lead" },
+  { type: "lead_stage_changed", label: "Lead Stage Changed", description: "When a lead moves to a new pipeline stage", icon: "ArrowRight", category: "lead" },
   { type: "lead_contacted", label: "Lead Contacted", description: "When a lead is first contacted", icon: "Phone", category: "lead" },
   // Deal triggers
   { type: "deal_created", label: "Deal Created", description: "When a new deal is created", icon: "DollarSign", category: "deal" },
@@ -122,4 +157,85 @@ export function getTriggerDefinition(type: TriggerType): TriggerDefinition | und
 // Helper to get action by type
 export function getActionDefinition(type: ActionType): ActionDefinition | undefined {
   return ACTIONS.find(a => a.type === type)
+}
+
+// Condition operator definitions for UI
+export interface ConditionOperatorDefinition {
+  operator: ConditionOperator
+  label: string
+  description: string
+  requiresValue: boolean  // false for is_empty, is_not_empty
+}
+
+export const CONDITION_OPERATORS: ConditionOperatorDefinition[] = [
+  { operator: "equals", label: "Equals", description: "Value is exactly equal", requiresValue: true },
+  { operator: "not_equals", label: "Does not equal", description: "Value is not equal", requiresValue: true },
+  { operator: "contains", label: "Contains", description: "Value contains text", requiresValue: true },
+  { operator: "starts_with", label: "Starts with", description: "Value starts with text", requiresValue: true },
+  { operator: "greater_than", label: "Greater than", description: "Value is greater (numeric)", requiresValue: true },
+  { operator: "less_than", label: "Less than", description: "Value is less (numeric)", requiresValue: true },
+  { operator: "is_empty", label: "Is empty", description: "Value is empty or null", requiresValue: false },
+  { operator: "is_not_empty", label: "Is not empty", description: "Value has a value", requiresValue: false },
+]
+
+// Available trigger fields by category
+export interface ConditionFieldDefinition {
+  path: string           // Field path like "lead.status" or "activity.type"
+  label: string          // Display label
+  category: "lead" | "contact" | "deal" | "activity"  // activity includes both Activity and LeadTask fields
+  fieldType: "string" | "number" | "boolean"
+}
+
+export const TRIGGER_CONDITION_FIELDS: ConditionFieldDefinition[] = [
+  // Lead fields
+  { path: "lead.name", label: "Lead Name", category: "lead", fieldType: "string" },
+  { path: "lead.status", label: "Lead Status", category: "lead", fieldType: "string" },
+  { path: "lead.source", label: "Lead Source", category: "lead", fieldType: "string" },
+  { path: "lead.industry", label: "Industry", category: "lead", fieldType: "string" },
+  { path: "lead.city", label: "City", category: "lead", fieldType: "string" },
+  { path: "lead.state", label: "State", category: "lead", fieldType: "string" },
+  { path: "lead.country", label: "Country", category: "lead", fieldType: "string" },
+  // Contact fields
+  { path: "contact.first_name", label: "First Name", category: "contact", fieldType: "string" },
+  { path: "contact.last_name", label: "Last Name", category: "contact", fieldType: "string" },
+  { path: "contact.email", label: "Email", category: "contact", fieldType: "string" },
+  { path: "contact.phone", label: "Phone", category: "contact", fieldType: "string" },
+  // Deal fields
+  { path: "deal.name", label: "Deal Name", category: "deal", fieldType: "string" },
+  { path: "deal.status", label: "Deal Status", category: "deal", fieldType: "string" },
+  { path: "deal.value", label: "Deal Value", category: "deal", fieldType: "number" },
+  // Activity fields (for activity_logged and activity_completed triggers)
+  { path: "activity.type", label: "Activity Type", category: "activity", fieldType: "string" },
+  { path: "activity.subject", label: "Activity Subject", category: "activity", fieldType: "string" },
+  { path: "activity.is_completed", label: "Activity Completed", category: "activity", fieldType: "boolean" },
+  // Lead Task fields (for task_completed trigger)
+  { path: "leadTask.title", label: "Task Title", category: "activity", fieldType: "string" },
+  { path: "leadTask.is_completed", label: "Task Completed", category: "activity", fieldType: "boolean" },
+]
+
+// Helper to get operator definition
+export function getOperatorDefinition(operator: ConditionOperator): ConditionOperatorDefinition | undefined {
+  return CONDITION_OPERATORS.find(o => o.operator === operator)
+}
+
+// Helper to get fields relevant to a trigger type
+export function getFieldsForTrigger(triggerType: TriggerType): ConditionFieldDefinition[] {
+  const triggerDef = getTriggerDefinition(triggerType)
+  if (!triggerDef) return []
+
+  // Lead triggers include lead and contact fields
+  if (triggerDef.category === "lead") {
+    return TRIGGER_CONDITION_FIELDS.filter(f => f.category === "lead" || f.category === "contact")
+  }
+  // Deal triggers include deal and contact fields
+  if (triggerDef.category === "deal") {
+    return TRIGGER_CONDITION_FIELDS.filter(f => f.category === "deal" || f.category === "contact")
+  }
+  // Activity triggers include lead, contact, and activity fields
+  if (triggerDef.category === "activity") {
+    return TRIGGER_CONDITION_FIELDS.filter(f =>
+      f.category === "lead" || f.category === "contact" || f.category === "activity"
+    )
+  }
+  return TRIGGER_CONDITION_FIELDS
 }

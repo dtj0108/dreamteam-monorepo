@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 import { getSession } from "@/lib/session"
+import { triggerLeadStageChanged } from "@/lib/workflow-trigger-service"
+import { fireWebhooks } from "@/lib/make-webhooks"
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -24,17 +26,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const supabase = createAdminClient()
 
-    // Verify lead ownership
-    const { data: lead, error: leadError } = await supabase
+    // Verify lead ownership and get current stage
+    const { data: currentLead, error: leadError } = await supabase
       .from("leads")
-      .select("id, user_id")
+      .select("id, user_id, name, status, stage_id, workspace_id")
       .eq("id", id)
       .eq("user_id", session.id)
       .single()
 
-    if (leadError || !lead) {
+    if (leadError || !currentLead) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 })
     }
+
+    const previousStageId = currentLead.stage_id
 
     // Verify stage exists and belongs to user's pipeline
     const { data: stage, error: stageError } = await supabase
@@ -79,6 +83,31 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (error) {
       console.error("Error updating lead stage:", error)
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Fire webhooks and workflows if stage changed (non-blocking)
+    if (previousStageId && stage_id !== previousStageId && currentLead.workspace_id) {
+      // Fire internal workflow triggers
+      triggerLeadStageChanged(
+        { ...data, user_id: session.id },
+        previousStageId
+      ).catch((err) => {
+        console.error("Error triggering lead_stage_changed workflows:", err)
+      })
+
+      // Fire Make.com webhooks
+      fireWebhooks(
+        "lead.stage_changed",
+        {
+          lead: data,
+          previous_stage_id: previousStageId,
+          new_stage_id: stage_id,
+          stage_name: stage.name,
+        },
+        currentLead.workspace_id
+      ).catch((err) => {
+        console.error("Error firing lead.stage_changed webhooks:", err)
+      })
     }
 
     return NextResponse.json(data)
