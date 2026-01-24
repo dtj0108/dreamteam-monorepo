@@ -1,0 +1,16 @@
+/* Override Excalidraw branding text */
+
+/* Hide "Mermaid to Excalidraw" and replace with "Mermaid to Whiteboard" */
+.excalidraw .dropdown-menu-item:has([data-testid="mermaid-to-excalidraw"]) .dropdown-menu-item__text,
+.excalidraw [data-testid="mermaid-to-excalidraw"] .dropdown-menu-item__text {
+  visibility: hidden;
+  position: relative;
+}
+
+.excalidraw .dropdown-menu-item:has([data-testid="mermaid-to-excalidraw"]) .dropdown-menu-item__text::after,
+.excalidraw [data-testid="mermaid-to-excalidraw"] .dropdown-menu-item__text::after {
+  content: "Mermaid to Whiteboard";
+  visibility: visible;
+  position: absolute;
+  left: 0;
+}

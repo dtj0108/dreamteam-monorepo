@@ -1,0 +1,5 @@
+export { KnowledgeSidebar } from "./knowledge-sidebar"
+export { CreatePageDialog } from "./create-page-dialog"
+export { PageEditor } from "./page-editor"
+export { CategoryBadge } from "./category-badge"
+export { CategoryPicker } from "./category-picker"

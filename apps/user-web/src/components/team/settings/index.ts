@@ -1,0 +1,6 @@
+export { TeamSettingsTabs } from "./team-settings-tabs"
+export { WorkspaceSettingsTab } from "./workspace-settings-tab"
+export { RolesPermissionsTab } from "./roles-permissions-tab"
+export { FeatureAccessTab } from "./feature-access-tab"
+export { BillingTab } from "./billing-tab"
+export { IntegrationsTab } from "./integrations-tab"

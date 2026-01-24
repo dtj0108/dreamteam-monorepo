@@ -1,0 +1,11 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["ChimeSdkModule"],
+    "appDelegateSubscribers": [],
+    "reactDelegateHandlers": []
+  },
+  "android": {
+    "modules": ["expo.modules.chimesdk.ChimeSdkModule"]
+  }
+}

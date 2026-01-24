@@ -1,0 +1,11 @@
+{
+  "name": "@dreamteam/config",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./typescript": "./tsconfig.base.json",
+    "./typescript/nextjs": "./tsconfig.nextjs.json",
+    "./eslint/next": "./eslint.next.mjs",
+    "./tailwind": "./tailwind.config.ts"
+  }
+}

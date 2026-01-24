@@ -1,0 +1,80 @@
+{
+  "expo": {
+    "name": "dreamteam",
+    "slug": "dreamteam-mobile",
+    "version": "1.0.6",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "orientation": "portrait",
+    "icon": "./dreamteamlogo.png",
+    "scheme": "dreamteammobile",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#ffffff"
+    },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/ab48433b-e096-4b11-9976-06ab2a034d33"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.dreamteam.app",
+      "buildNumber": "14",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "DreamTeam needs access to your camera for video calls (huddles)",
+        "NSMicrophoneUsageDescription": "DreamTeam needs access to your microphone for voice and video calls (huddles)",
+        "UIBackgroundModes": ["audio", "voip", "remote-notification"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./dreamteamlogo.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "ai.dreamteam.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./dreamteamlogo.png"
+    },
+    "plugins": [
+      "expo-router",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#0ea5e9",
+          "defaultChannel": "default"
+        }
+      ],
+      "expo-mail-composer",
+      "expo-sqlite",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "DreamTeam needs access to your camera for video calls",
+          "microphonePermission": "DreamTeam needs access to your microphone for audio calls",
+          "recordAudioAndroid": true
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ab48433b-e096-4b11-9976-06ab2a034d33"
+      }
+    }
+  }
+}

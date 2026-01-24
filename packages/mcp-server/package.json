@@ -1,0 +1,36 @@
+{
+  "name": "@dreamteam/mcp-server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "dreamteam-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.config.integration.ts",
+    "test:integration:watch": "vitest --config vitest.config.integration.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@dreamteam/database": "workspace:*",
+    "@supabase/supabase-js": "^2.89.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@dreamteam/config": "workspace:*",
+    "@types/node": "^20",
+    "@vitest/coverage-v8": "^2.0.0",
+    "typescript": "^5",
+    "vitest": "^2.0.0"
+  }
+}

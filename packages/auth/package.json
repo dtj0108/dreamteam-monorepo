@@ -1,0 +1,24 @@
+{
+  "name": "@dreamteam/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./session": "./src/session.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dreamteam/database": "workspace:*"
+  },
+  "devDependencies": {
+    "@dreamteam/config": "workspace:*",
+    "@types/node": "^20",
+    "next": "^16.1.0",
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "extends": "@dreamteam/config/typescript/nextjs",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@dreamteam/ui": ["../../packages/ui/src"],
+      "@dreamteam/ui/*": ["../../packages/ui/src/*"],
+      "@dreamteam/database": ["../../packages/database/src"],
+      "@dreamteam/database/*": ["../../packages/database/src/*"],
+      "@dreamteam/auth": ["../../packages/auth/src"],
+      "@dreamteam/auth/*": ["../../packages/auth/src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}
+
