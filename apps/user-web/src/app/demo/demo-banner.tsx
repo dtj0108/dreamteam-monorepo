@@ -16,7 +16,7 @@ export function DemoBanner() {
         description: "Exploring the Dream Team Agents",
         icon: Users,
         color: "bg-blue-600",
-        ctaText: "View Pricing",
+        ctaText: "Start Now",
         ctaHref: "/pricing",
         secondaryText: "See Workspace",
         secondaryHref: "/demo",
@@ -90,7 +90,7 @@ export function DemoBanner() {
             )}
             <Link href={product.ctaHref || "/pricing"}>
               <Button size="sm" variant="secondary" className="bg-white text-gray-900 hover:bg-white/90">
-                {product.ctaText || "Start Free Trial"}
+                {product.ctaText || "Start Now"}
               </Button>
             </Link>
             <Link href="/" className="text-white/80 hover:text-white transition-colors">

@@ -39,8 +39,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, CreditCard, Settings, Trash2, Users } from 'lucide-react'
-import type { PlanWithTeam } from '@/types/teams'
+import { Plus, CreditCard, Settings, Trash2, Users, Clock } from 'lucide-react'
+import type { PlanWithTeam, PlanType } from '@/types/teams'
 
 interface Team {
   id: string
@@ -70,6 +70,8 @@ export default function PlansPage() {
   const [newTeamId, setNewTeamId] = useState('')
   const [newPriceMonthly, setNewPriceMonthly] = useState('')
   const [newPriceYearly, setNewPriceYearly] = useState('')
+  const [newPlanType, setNewPlanType] = useState<PlanType | ''>('')
+  const [newIsComingSoon, setNewIsComingSoon] = useState(false)
 
   const fetchPlans = useCallback(async () => {
     try {
@@ -129,7 +131,9 @@ export default function PlansPage() {
           description: newDescription || null,
           team_id: newTeamId || null,
           price_monthly: newPriceMonthly ? Math.round(parseFloat(newPriceMonthly) * 100) : null,
-          price_yearly: newPriceYearly ? Math.round(parseFloat(newPriceYearly) * 100) : null
+          price_yearly: newPriceYearly ? Math.round(parseFloat(newPriceYearly) * 100) : null,
+          plan_type: newPlanType || null,
+          is_coming_soon: newIsComingSoon
         })
       })
 
@@ -142,6 +146,8 @@ export default function PlansPage() {
         setNewTeamId('')
         setNewPriceMonthly('')
         setNewPriceYearly('')
+        setNewPlanType('')
+        setNewIsComingSoon(false)
         router.push(`/admin/plans/${data.plan.id}`)
       } else {
         const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
@@ -259,6 +265,27 @@ export default function PlansPage() {
                   />
                 </div>
               </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Plan Type</Label>
+                  <Select value={newPlanType || '_none'} onValueChange={(v) => setNewPlanType(v === '_none' ? '' : v as PlanType)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select plan type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Not set</SelectItem>
+                      <SelectItem value="workspace_plan">Workspace Plan</SelectItem>
+                      <SelectItem value="agent_tier">Agent Tier</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end pb-2">
+                  <div className="flex items-center gap-2">
+                    <Switch checked={newIsComingSoon} onCheckedChange={setNewIsComingSoon} />
+                    <Label>Coming Soon</Label>
+                  </div>
+                </div>
+              </div>
               {createError && (
                 <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
                   {createError}
@@ -328,7 +355,7 @@ export default function PlansPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Slug</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>Team</TableHead>
               <TableHead>Monthly</TableHead>
               <TableHead>Yearly</TableHead>
@@ -361,7 +388,15 @@ export default function PlansPage() {
               plans.map((plan) => (
                 <TableRow key={plan.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/admin/plans/${plan.id}`)}>
                   <TableCell>
-                    <div className="font-medium">{plan.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{plan.name}</span>
+                      {plan.is_coming_soon && (
+                        <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">
+                          <Clock className="mr-1 h-3 w-3" />
+                          Soon
+                        </Badge>
+                      )}
+                    </div>
                     {plan.description && (
                       <p className="text-sm text-muted-foreground truncate max-w-[200px]">
                         {plan.description}
@@ -369,11 +404,17 @@ export default function PlansPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{plan.slug}</Badge>
+                    {plan.plan_type ? (
+                      <Badge variant={plan.plan_type === 'workspace_plan' ? 'default' : 'secondary'}>
+                        {plan.plan_type === 'workspace_plan' ? 'Workspace' : 'Agent Tier'}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {plan.team ? (
-                      <Badge variant="secondary">{plan.team.name}</Badge>
+                      <Badge variant="outline">{plan.team.name}</Badge>
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}

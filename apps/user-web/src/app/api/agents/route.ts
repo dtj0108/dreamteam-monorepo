@@ -1,9 +1,38 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createAdminClient } from "@dreamteam/database/server"
+import { createAdminClient, getWorkspaceDeployment } from "@dreamteam/database"
 import { getSession } from "@dreamteam/auth/session"
 import type { AgentWithHireStatus } from "@/lib/types/agents"
 
-// GET /api/agents - List agents from ai_agents table with hire status
+// Type for deployed agent from active_config
+interface DeployedAgent {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  avatar_url: string | null
+  system_prompt: string
+  model: string
+  provider?: string
+  is_enabled: boolean
+  tools: unknown[]
+  skills: unknown[]
+  mind: unknown[]
+  rules: unknown[]
+}
+
+interface DeployedTeamConfig {
+  team: {
+    id: string
+    name: string
+    slug: string
+    head_agent_id: string | null
+  }
+  agents: DeployedAgent[]
+  delegations: unknown[]
+  team_mind: unknown[]
+}
+
+// GET /api/agents - List agents from deployed team config
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession()
@@ -15,7 +44,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const workspaceId = searchParams.get("workspaceId")
     const search = searchParams.get("search")
-    const category = searchParams.get("category")
     const departmentId = searchParams.get("department_id")
     const hiredOnly = searchParams.get("hired_only") === "true"
     const limit = parseInt(searchParams.get("limit") || "50")
@@ -40,7 +68,67 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get hired agents for this workspace (to check hire status)
+    // Get deployed team configuration for this workspace
+    const deployment = await getWorkspaceDeployment(workspaceId)
+
+    if (deployment) {
+      // NEW: Read agents from deployed team config
+      const activeConfig = deployment.active_config as DeployedTeamConfig
+      const deployedAt = deployment.deployed_at
+
+      let agents: AgentWithHireStatus[] = (activeConfig?.agents || []).map((agent: DeployedAgent) => ({
+        id: agent.id,
+        name: agent.name,
+        slug: agent.slug,
+        description: agent.description,
+        department_id: null, // Deployed config doesn't include department
+        avatar_url: agent.avatar_url,
+        model: (agent.model || "sonnet") as "sonnet" | "opus" | "haiku",
+        system_prompt: agent.system_prompt,
+        permission_mode: "default" as const,
+        max_turns: 10,
+        is_enabled: true, // Template level enablement
+        is_head: activeConfig.team.head_agent_id === agent.id,
+        config: {},
+        current_version: 1,
+        published_version: 1,
+        created_at: deployedAt,
+        updated_at: deployedAt,
+        // New fields for auto-hire model
+        isHired: agent.is_enabled, // Hired = in deployed team AND enabled
+        isInPlan: true, // All agents from deployed team are part of the plan
+        isEnabled: agent.is_enabled, // Agent's enabled state in customizations
+        localAgentId: agent.id, // Use the agent ID directly
+        hiredAt: agent.is_enabled ? deployedAt : null,
+      }))
+
+      // Apply search filter
+      if (search) {
+        const searchLower = search.toLowerCase()
+        agents = agents.filter(a =>
+          a.name.toLowerCase().includes(searchLower) ||
+          (a.description?.toLowerCase().includes(searchLower) ?? false)
+        )
+      }
+
+      // Apply department filter (if we had department info)
+      if (departmentId) {
+        agents = agents.filter(a => a.department_id === departmentId)
+      }
+
+      // Filter to hired only if requested (enabled agents from deployed team)
+      if (hiredOnly) {
+        agents = agents.filter(a => a.isHired)
+      }
+
+      // Apply pagination
+      const total = agents.length
+      agents = agents.slice(offset, offset + limit)
+
+      return NextResponse.json({ agents, total })
+    }
+
+    // FALLBACK: If no deployment, check for legacy hired agents in agents table
     const { data: hiredAgents } = await supabase
       .from("agents")
       .select("id, ai_agent_id, hired_at")
@@ -119,6 +207,8 @@ export async function GET(request: NextRequest) {
           created_at: agent.created_at as string,
           updated_at: agent.updated_at as string,
           isHired: true,
+          isInPlan: false, // Legacy agents not from plan
+          isEnabled: true,
           localAgentId: agent.id as string,
           hiredAt: agent.created_at as string,
         }))
@@ -128,7 +218,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Combine with hire status
+    // Combine with hire status (legacy path)
     let agents: AgentWithHireStatus[] = (aiAgents || []).map((agent: Record<string, unknown>) => {
       const hireInfo = hiredMap.get(agent.id as string)
       return {
@@ -150,6 +240,8 @@ export async function GET(request: NextRequest) {
         created_at: agent.created_at as string,
         updated_at: agent.updated_at as string,
         isHired: !!hireInfo,
+        isInPlan: false, // No deployment = not from plan
+        isEnabled: !!hireInfo,
         localAgentId: hireInfo?.localAgentId || null,
         hiredAt: hireInfo?.hiredAt || null,
       }

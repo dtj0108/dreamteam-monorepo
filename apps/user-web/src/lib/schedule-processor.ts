@@ -19,6 +19,8 @@ interface ScheduleRow {
     id: string
     name: string
     system_prompt: string
+    provider: string | null
+    model: string | null
   } | null
 }
 
@@ -28,6 +30,8 @@ interface LocalAgentRow {
   tools: string[]
   system_prompt: string | null
   reports_to: string[] | null
+  style_presets: Record<string, unknown> | null
+  custom_instructions: string | null
 }
 
 interface ExecutionRow {
@@ -37,6 +41,8 @@ interface ExecutionRow {
   schedule: ScheduleRow & {
     ai_agent: {
       system_prompt: string
+      provider: string | null
+      model: string | null
     } | null
   }
 }
@@ -54,12 +60,12 @@ export async function processAgentSchedules(): Promise<{
   let processed = 0
   let errors = 0
 
-  // 1. Find due schedules with AI agent data
+  // 1. Find due schedules with AI agent data (including provider and model)
   const { data: dueSchedules, error: scheduleError } = await supabase
     .from("agent_schedules")
     .select(`
       *,
-      ai_agent:ai_agents(id, name, system_prompt)
+      ai_agent:ai_agents(id, name, system_prompt, provider, model)
     `)
     .eq("is_enabled", true)
     .lte("next_run_at", now)
@@ -72,10 +78,10 @@ export async function processAgentSchedules(): Promise<{
 
   for (const schedule of (dueSchedules as ScheduleRow[]) || []) {
     try {
-      // 2. Find local agent (for workspace_id, tools, and reports_to)
+      // 2. Find local agent (for workspace_id, tools, reports_to, and personality settings)
       const { data: localAgent } = await supabase
         .from("agents")
-        .select("id, workspace_id, tools, system_prompt, reports_to")
+        .select("id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions")
         .eq("ai_agent_id", schedule.agent_id)
         .eq("is_active", true)
         .single()
@@ -164,7 +170,7 @@ export async function processApprovedExecutions(): Promise<{
     .select(`
       *,
       schedule:agent_schedules(*,
-        ai_agent:ai_agents(system_prompt)
+        ai_agent:ai_agents(system_prompt, provider, model)
       )
     `)
     .eq("status", "approved")
@@ -177,10 +183,10 @@ export async function processApprovedExecutions(): Promise<{
 
   for (const exec of (approved as ExecutionRow[]) || []) {
     try {
-      // Get local agent for workspace context, tools, and reports_to
+      // Get local agent for workspace context, tools, reports_to, and personality settings
       const { data: localAgent } = await supabase
         .from("agents")
-        .select("id, workspace_id, tools, system_prompt, reports_to")
+        .select("id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions")
         .eq("ai_agent_id", exec.agent_id)
         .single()
 
@@ -240,6 +246,17 @@ async function runExecution(
   supabase: SupabaseClient,
   notifyUserId?: string | null
 ): Promise<void> {
+  // #region agent log
+  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'schedule-processor.ts:runExecution:raw-ai-agent',message:'Raw ai_agent data from DB',data:{executionId,aiAgentExists:!!schedule.ai_agent,aiAgentFull:schedule.ai_agent,rawProvider:schedule.ai_agent?.provider,rawProviderType:typeof schedule.ai_agent?.provider,rawModel:schedule.ai_agent?.model,providerIsNull:schedule.ai_agent?.provider===null,providerIsUndefined:schedule.ai_agent?.provider===undefined,providerIsEmptyString:schedule.ai_agent?.provider===''},timestamp:Date.now(),sessionId:'debug-session',runId:'provider-debug',hypothesisId:'A-raw-data'})}).catch(()=>{});
+  // #endregion
+
+  // Get provider and model from AI agent config
+  const provider = (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) || "anthropic"
+  const model = schedule.ai_agent?.model || undefined
+
+  // #region agent log
+  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'schedule-processor.ts:runExecution:after-fallback',message:'Provider after fallback logic',data:{executionId,scheduleName:schedule.name,agentId:schedule.agent_id,rawProvider:schedule.ai_agent?.provider,resolvedProvider:provider,resolvedModel:model,hasXaiKey:!!process.env.XAI_API_KEY,hasAnthropicKey:!!process.env.ANTHROPIC_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'provider-debug',hypothesisId:'B-fallback'})}).catch(()=>{});
+  // #endregion
   try {
     // Prefer local agent's system prompt, fall back to AI agent's
     const systemPrompt =
@@ -247,12 +264,20 @@ async function runExecution(
       schedule.ai_agent?.system_prompt ||
       "You are a helpful AI assistant."
 
+    // #region agent log
+    fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'schedule-processor.ts:runExecution:beforeExecute',message:'About to call executeAgentTask with provider',data:{executionId,provider,model,systemPromptLength:systemPrompt.length,toolCount:localAgent.tools?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'F-provider-fix'})}).catch(()=>{});
+    // #endregion
+
     const result = await executeAgentTask({
       taskPrompt: schedule.task_prompt,
       systemPrompt,
       tools: localAgent.tools || [],
       workspaceId: localAgent.workspace_id,
       supabase,
+      provider,
+      model,
+      stylePresets: localAgent.style_presets as Record<string, unknown> | null,
+      customInstructions: localAgent.custom_instructions,
     })
 
     await supabase

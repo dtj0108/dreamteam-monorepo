@@ -99,6 +99,9 @@ async function loadConversationHistory(
  * Main agent chat handler for Express
  */
 export async function agentChatHandler(req: Request, res: Response) {
+  // #region agent log
+  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:entry',message:'agentChatHandler called',data:{method:req.method,path:req.path},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C'})}).catch(()=>{});
+  // #endregion
   try {
     // DEBUG: Log request origin
     const origin = req.headers.origin || req.headers.referer || "unknown"
@@ -481,10 +484,14 @@ ${skillsContent}`
       await loadSession(supabase, conversationId)
     } else {
       // Create new conversation
-      // Use effectiveAgentId (head agent in team mode, agentId in single mode)
+      // Use the original agentId from the request (exists in agents table for FK constraint)
+      // effectiveAgentId is only used for determining which agent config to use (tools, prompt)
+      // #region agent log
+      fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:createConversation',message:'Creating conversation',data:{agentIdUsed:agentId,effectiveAgentId,workspaceId,hasDeployedConfig:!!deployedConfig},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D',runId:'post-fix'})}).catch(()=>{});
+      // #endregion
       conversationId = await createConversation(supabase, {
         workspaceId,
-        agentId: effectiveAgentId || "team-mode",
+        agentId: agentId,
         userId: session.id,
         title: message.slice(0, 50) + (message.length > 50 ? "..." : ""),
       })
@@ -628,6 +635,18 @@ Remember: A tool error is information, not a stop sign.
       // Get target agent for provider check (in team mode)
       const targetAgentForProvider = deployedConfig?.agents.find(a => a.id === effectiveAgentId)
 
+      // #region agent log
+      const providerInfo = {
+        targetAgentProvider: targetAgentForProvider?.provider,
+        targetAgentModel: targetAgentForProvider?.model,
+        effectiveAgentId,
+        willUseVercelAI: shouldUseVercelAI(targetAgentForProvider?.provider),
+        anthropicModelId: modelId,
+      };
+      console.log('[Provider Debug] Provider decision:', providerInfo);
+      fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:providerCheck',message:'Provider decision',data:providerInfo,timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+
       // ========================================
       // VERCEL AI SDK PATH - For non-Anthropic providers
       // ========================================
@@ -640,37 +659,39 @@ Remember: A tool error is information, not a stop sign.
         console.log(`[Agent Chat] Using Vercel AI SDK with provider: ${provider}, model: ${model}`)
         console.log(`[Agent Chat] xAI tools enabled: ${toolNames.length > 0 ? toolNames.join(', ') : 'none'}`)
 
+        // Check API key for the provider
+        const apiKeyEnvVars: Record<string, string> = {
+          xai: "XAI_API_KEY",
+          openai: "OPENAI_API_KEY",
+          google: "GOOGLE_GENERATIVE_AI_API_KEY",
+          groq: "GROQ_API_KEY",
+        };
+        const apiKeyEnvVar = apiKeyEnvVars[provider] || `${provider.toUpperCase()}_API_KEY`;
+        const hasApiKey = !!process.env[apiKeyEnvVar];
+        console.log(`[Agent Chat] ${apiKeyEnvVar} present: ${hasApiKey}, length: ${process.env[apiKeyEnvVar]?.length || 0}`);
+
+        // #region agent log
+        fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:vercelAIPath',message:'Entering Vercel AI SDK path',data:{provider,model,apiKeyEnvVar,hasApiKey,apiKeyLength:process.env[apiKeyEnvVar]?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+
+        if (!hasApiKey) {
+          console.error(`[Agent Chat] ERROR: ${apiKeyEnvVar} is not set! Cannot use ${provider} provider.`);
+          // #region agent log
+          fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:missingApiKey',message:'Missing API key for provider',data:{provider,model,apiKeyEnvVar},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+          sendEvent("error", {
+            type: "error",
+            message: `API key for ${provider} is not configured. Please set ${apiKeyEnvVar} environment variable.`,
+            recoverable: false,
+          } as ErrorMessage);
+          res.end();
+          return;
+        }
+
         let mcpClient: MCPClientInstance | null = null
 
-        // Create new conversation if needed
-        if (!conversationId) {
-          conversationId = await createConversation(supabase, {
-            workspaceId,
-            agentId: effectiveAgentId || "team-mode",
-            userId: session.id,
-            title: message.slice(0, 50) + (message.length > 50 ? "..." : ""),
-          })
-        }
-
-        // Save user message to database
-        await supabase.from("agent_messages").insert({
-          conversation_id: conversationId,
-          role: "user",
-          content: message,
-        })
-
-        // Set up SSE headers
-        res.setHeader("Content-Type", "text/event-stream")
-        res.setHeader("Cache-Control", "no-cache")
-        res.setHeader("Connection", "keep-alive")
-        res.setHeader("Access-Control-Allow-Origin", "*")
-        res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
-        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        res.flushHeaders()
-
-        const sendEvent = (event: string, data: ServerMessage) => {
-          res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-        }
+        // NOTE: Conversation creation, user message saving, and SSE headers are already
+        // set up before this point (lines 489-522), so we don't duplicate them here.
 
         try {
           // Send session info
@@ -708,6 +729,10 @@ Remember: A tool error is information, not a stop sign.
           ]
 
           // Use Vercel AI SDK streamText with the configured provider
+          // #region agent log
+          console.log(`[Agent Chat] Starting streamText with ${Object.keys(aiTools).length} tools`);
+          fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:streamText',message:'Starting streamText',data:{provider,model,toolCount:Object.keys(aiTools).length,messageCount:aiMessages.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
+          // #endregion
           const result = streamText({
             model: getModel(provider, model),
             system: enhancedSystemPrompt,
@@ -749,14 +774,30 @@ Remember: A tool error is information, not a stop sign.
           let totalOutputTokens = 0
 
           // Stream the response
-          for await (const textPart of result.textStream) {
-            assistantContent += textPart
-            sendEvent("text", {
-              type: "text",
-              content: textPart,
-              isComplete: false,
-            } as TextMessage)
+          // #region agent log
+          console.log(`[Agent Chat] Starting to stream response from ${provider}/${model}`);
+          fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:streamStart',message:'Starting stream iteration',data:{provider,model},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
+          // #endregion
+          try {
+            for await (const textPart of result.textStream) {
+              assistantContent += textPart
+              sendEvent("text", {
+                type: "text",
+                content: textPart,
+                isComplete: false,
+              } as TextMessage)
+            }
+          } catch (streamError) {
+            // #region agent log
+            console.error(`[Agent Chat] Stream error from ${provider}:`, streamError);
+            fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:streamError',message:'Stream error',data:{provider,model,error:String(streamError),errorMessage:(streamError as Error).message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
+            // #endregion
+            throw streamError;
           }
+          // #region agent log
+          console.log(`[Agent Chat] Stream completed, got ${assistantContent.length} chars`);
+          fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:streamComplete',message:'Stream completed',data:{provider,model,contentLength:assistantContent.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
+          // #endregion
 
           // Get final usage stats
           const usage = await result.usage
@@ -826,6 +867,10 @@ Remember: A tool error is information, not a stop sign.
       // ========================================
       // ANTHROPIC PATH - Use Claude Agent SDK
       // ========================================
+      // #region agent log
+      console.log(`[Agent Chat] Using Anthropic Claude Agent SDK with model: ${modelId}`);
+      fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:anthropicPath',message:'Entering Anthropic Claude Agent SDK path',data:{modelId,toolCount:toolNames.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
       // Create the query with full MCP server via stdio transport
       const queryGenerator = query({
         prompt: message,

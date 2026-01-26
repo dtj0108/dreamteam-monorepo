@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
 import { getSession } from "@dreamteam/auth/session"
+import { getNextRunTime, isValidCron } from "@/lib/cron-utils"
 
 // GET /api/agents/schedules/[id] - Get a single schedule with agent details
 export async function GET(
@@ -74,12 +75,12 @@ export async function POST(
     const { id } = await params
     const supabase = createAdminClient()
 
-    // Get the schedule with agent info
+    // Get the schedule with agent info (including provider and model)
     const { data: schedule, error: fetchError } = await supabase
       .from("agent_schedules")
       .select(`
         *,
-        ai_agent:ai_agents(id, name, system_prompt)
+        ai_agent:ai_agents(id, name, system_prompt, provider, model)
       `)
       .eq("id", id)
       .single()
@@ -91,7 +92,7 @@ export async function POST(
     // Verify user has access to the agent (via workspace membership)
     const { data: hiredAgent } = await supabase
       .from("agents")
-      .select("id, workspace_id, tools, system_prompt, reports_to")
+      .select("id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions")
       .eq("ai_agent_id", schedule.agent_id)
       .single()
 
@@ -144,12 +145,24 @@ export async function POST(
         schedule.ai_agent?.system_prompt ||
         "You are a helpful AI assistant."
 
+      // Get provider and model from AI agent config
+      const provider = (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) || "anthropic"
+      const model = schedule.ai_agent?.model || undefined
+
+      // #region agent log
+      fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'schedules/[id]/route:manual-run',message:'Manual schedule run with provider',data:{scheduleId:id,scheduleName:schedule.name,rawProvider:schedule.ai_agent?.provider,resolvedProvider:provider,model,hasXaiKey:!!process.env.XAI_API_KEY,hasAnthropicKey:!!process.env.ANTHROPIC_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'manual-run',hypothesisId:'D-manual-run'})}).catch(()=>{});
+      // #endregion
+
       const result = await executeAgentTask({
         taskPrompt: schedule.task_prompt,
         systemPrompt,
         tools: hiredAgent.tools || [],
         workspaceId: hiredAgent.workspace_id,
         supabase,
+        provider,
+        model,
+        stylePresets: hiredAgent.style_presets as Record<string, unknown> | null,
+        customInstructions: hiredAgent.custom_instructions as string | null,
       })
 
       // Update execution as completed
@@ -320,6 +333,198 @@ export async function PATCH(
     return NextResponse.json({ schedule: updated })
   } catch (error) {
     console.error("Error in PATCH /api/agents/schedules/[id]:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+// PUT /api/agents/schedules/[id] - Update a schedule
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getSession()
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { id } = await params
+    const body = await request.json()
+    const {
+      name,
+      description,
+      cron_expression,
+      timezone,
+      task_prompt,
+      requires_approval,
+    } = body
+
+    const supabase = createAdminClient()
+
+    // Get the schedule
+    const { data: schedule, error: fetchError } = await supabase
+      .from("agent_schedules")
+      .select("id, agent_id, created_by")
+      .eq("id", id)
+      .single()
+
+    if (fetchError || !schedule) {
+      return NextResponse.json({ error: "Schedule not found" }, { status: 404 })
+    }
+
+    // Verify user has access to the agent (via workspace membership)
+    const { data: hiredAgent } = await supabase
+      .from("agents")
+      .select("workspace_id, created_by")
+      .eq("ai_agent_id", schedule.agent_id)
+      .single()
+
+    if (!hiredAgent) {
+      return NextResponse.json(
+        { error: "Agent not found in workspace" },
+        { status: 404 }
+      )
+    }
+
+    // Check if user is creator or admin
+    const { data: membership } = await supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", hiredAgent.workspace_id)
+      .eq("profile_id", session.id)
+      .single()
+
+    const isCreatorOrAdmin =
+      schedule.created_by === session.id ||
+      membership?.role === "admin" ||
+      membership?.role === "owner"
+
+    if (!isCreatorOrAdmin) {
+      return NextResponse.json(
+        { error: "Not authorized to update this schedule" },
+        { status: 403 }
+      )
+    }
+
+    // Validate cron expression if provided
+    if (cron_expression && !isValidCron(cron_expression)) {
+      return NextResponse.json(
+        { error: "Invalid cron expression" },
+        { status: 400 }
+      )
+    }
+
+    // Build update object
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    }
+    if (name !== undefined) updateData.name = name.trim()
+    if (description !== undefined) updateData.description = description?.trim() || null
+    if (cron_expression !== undefined) {
+      updateData.cron_expression = cron_expression
+      // Recalculate next run time
+      updateData.next_run_at = getNextRunTime(cron_expression, timezone || "UTC").toISOString()
+    }
+    if (timezone !== undefined) updateData.timezone = timezone
+    if (task_prompt !== undefined) updateData.task_prompt = task_prompt.trim()
+    if (requires_approval !== undefined) updateData.requires_approval = requires_approval
+
+    // Update the schedule
+    const { data: updated, error: updateError } = await supabase
+      .from("agent_schedules")
+      .update(updateData)
+      .eq("id", id)
+      .select(`
+        *,
+        agent:ai_agents(id, name, avatar_url)
+      `)
+      .single()
+
+    if (updateError) {
+      console.error("Error updating schedule:", updateError)
+      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ schedule: updated })
+  } catch (error) {
+    console.error("Error in PUT /api/agents/schedules/[id]:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+// DELETE /api/agents/schedules/[id] - Delete a schedule
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getSession()
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { id } = await params
+    const supabase = createAdminClient()
+
+    // Get the schedule
+    const { data: schedule, error: fetchError } = await supabase
+      .from("agent_schedules")
+      .select("id, agent_id, created_by")
+      .eq("id", id)
+      .single()
+
+    if (fetchError || !schedule) {
+      return NextResponse.json({ error: "Schedule not found" }, { status: 404 })
+    }
+
+    // Verify user has access to the agent (via workspace membership)
+    const { data: hiredAgent } = await supabase
+      .from("agents")
+      .select("workspace_id")
+      .eq("ai_agent_id", schedule.agent_id)
+      .single()
+
+    if (!hiredAgent) {
+      return NextResponse.json(
+        { error: "Agent not found in workspace" },
+        { status: 404 }
+      )
+    }
+
+    // Check if user is creator or admin
+    const { data: membership } = await supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", hiredAgent.workspace_id)
+      .eq("profile_id", session.id)
+      .single()
+
+    const isCreatorOrAdmin =
+      schedule.created_by === session.id ||
+      membership?.role === "admin" ||
+      membership?.role === "owner"
+
+    if (!isCreatorOrAdmin) {
+      return NextResponse.json(
+        { error: "Not authorized to delete this schedule" },
+        { status: 403 }
+      )
+    }
+
+    // Delete the schedule
+    const { error: deleteError } = await supabase
+      .from("agent_schedules")
+      .delete()
+      .eq("id", id)
+
+    if (deleteError) {
+      console.error("Error deleting schedule:", deleteError)
+      return NextResponse.json({ error: deleteError.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Error in DELETE /api/agents/schedules/[id]:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

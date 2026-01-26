@@ -31,13 +31,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 })
     }
 
-    // Build query
+    // Build query - simplified to avoid FK join issues
     let query = supabase
       .from('workspace_deployed_teams')
       .select(`
         *,
-        workspace:workspaces(id, name),
-        deployed_by_profile:profiles!workspace_deployed_teams_deployed_by_fkey(id, email, full_name)
+        workspace:workspaces(id, name)
       `, { count: 'exact' })
       .eq('source_team_id', teamId)
       .order('deployed_at', { ascending: false })
@@ -50,6 +49,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const { data: deployments, error: queryError, count } = await query
 
     if (queryError) {
+      console.error('Deployments query error:', queryError)
       return NextResponse.json({ error: queryError.message }, { status: 500 })
     }
 

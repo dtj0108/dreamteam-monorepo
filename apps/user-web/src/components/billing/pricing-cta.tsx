@@ -19,6 +19,8 @@ interface PricingCTAProps {
   className?: string
   /** Whether user is authenticated */
   isAuthenticated?: boolean
+  /** Whether this plan is coming soon (not yet purchasable) */
+  isComingSoon?: boolean
 }
 
 /**
@@ -34,10 +36,14 @@ export function PricingCTA({
   size = "md",
   className,
   isAuthenticated = false,
+  isComingSoon = false,
 }: PricingCTAProps) {
   const [loading, setLoading] = useState(false)
 
   const handleClick = async () => {
+    // Don't do anything if coming soon
+    if (isComingSoon) return
+
     console.log('[PricingCTA] Button clicked!', { plan, tier, isAuthenticated })
     setLoading(true)
 
@@ -98,11 +104,11 @@ export function PricingCTA({
 
   return (
     <Button
-      color={color}
+      color={isComingSoon ? "secondary" : color}
       size={size}
       className={className}
       onClick={handleClick}
-      isDisabled={loading}
+      isDisabled={loading || isComingSoon}
     >
       {loading ? (
         <>

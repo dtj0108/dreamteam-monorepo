@@ -15,9 +15,11 @@ import type {
 } from "@/lib/types/agents"
 
 interface AgentsContextType {
-  // Agent Directory (from ai_agents table)
+  // Agent Directory (from deployed teams or ai_agents table)
   agents: AgentWithHireStatus[]
-  myAgents: AgentWithHireStatus[]
+  myAgents: AgentWithHireStatus[] // Agents that are enabled (hired)
+  enabledAgents: AgentWithHireStatus[] // Alias for myAgents
+  planAgents: AgentWithHireStatus[] // All agents in the plan (enabled or not)
   currentAgent: AIAgent | null
   isLoading: boolean
   isLoadingAgent: boolean
@@ -47,6 +49,7 @@ interface AgentsContextType {
   fetchAgent: (id: string) => Promise<AIAgent | null>
   hireAgent: (agentId: string) => Promise<LocalAgent | null>
   unhireAgent: (localAgentId: string) => Promise<void>
+  toggleAgent: (agentId: string, enabled: boolean) => Promise<void>
   refreshAgents: () => Promise<void>
 
   // Conversation actions
@@ -63,6 +66,24 @@ interface AgentsContextType {
   // Schedule actions
   fetchSchedules: (filters?: ScheduleFilters) => Promise<void>
   toggleSchedule: (scheduleId: string, enabled: boolean) => Promise<void>
+  createSchedule: (data: {
+    agent_id: string
+    name: string
+    description?: string
+    cron_expression: string
+    timezone?: string
+    task_prompt: string
+    requires_approval?: boolean
+  }) => Promise<AgentSchedule | null>
+  updateSchedule: (id: string, data: {
+    name?: string
+    description?: string
+    cron_expression?: string
+    timezone?: string
+    task_prompt?: string
+    requires_approval?: boolean
+  }) => Promise<AgentSchedule | null>
+  deleteSchedule: (id: string) => Promise<void>
 
   // Dialog state
   showHireAgent: boolean
@@ -107,7 +128,9 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
   const fetchedWorkspaceRef = useRef<string | null>(null)
 
   // Computed values
-  const myAgents = agents.filter(a => a.isHired)
+  const myAgents = agents.filter(a => a.isHired) // Hired = enabled in deployed team or has local agent record
+  const enabledAgents = myAgents // Alias
+  const planAgents = agents.filter(a => (a as AgentWithHireStatus & { isInPlan?: boolean }).isInPlan) // Agents from plan (may include disabled)
   const pendingApprovals = executions.filter(e => e.status === "pending_approval")
   const pendingCount = pendingApprovals.length
 
@@ -207,10 +230,10 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Unhire an agent (soft delete local record)
+  // Unhire an agent (soft delete local record or disable in deployed team)
   const unhireAgent = async (localAgentId: string): Promise<void> => {
     try {
-      const response = await fetch(`/api/agents/${localAgentId}/unhire`, {
+      const response = await fetch(`/api/agents/${localAgentId}/unhire?workspaceId=${workspaceId}`, {
         method: "DELETE",
       })
 
@@ -219,14 +242,49 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
         throw new Error(data.error || "Failed to unhire agent")
       }
 
-      // Update local state to mark agent as not hired
+      // Update local state to mark agent as not hired/disabled
       setAgents(prev => prev.map(a =>
-        a.localAgentId === localAgentId
-          ? { ...a, isHired: false, localAgentId: null, hiredAt: null }
+        a.localAgentId === localAgentId || a.id === localAgentId
+          ? { ...a, isHired: false, isEnabled: false, hiredAt: null }
           : a
       ))
     } catch (error) {
       console.error("Failed to unhire agent:", error)
+      throw error
+    }
+  }
+
+  // Toggle agent enabled/disabled state (for deployed team agents)
+  const toggleAgent = async (agentId: string, enabled: boolean): Promise<void> => {
+    if (!workspaceId) {
+      throw new Error("No workspace selected")
+    }
+
+    try {
+      const response = await fetch(`/api/agents/${agentId}/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, enabled }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to toggle agent")
+      }
+
+      // Update local state
+      setAgents(prev => prev.map(a =>
+        a.id === agentId
+          ? {
+              ...a,
+              isHired: enabled,
+              isEnabled: enabled,
+              hiredAt: enabled ? new Date().toISOString() : null
+            }
+          : a
+      ))
+    } catch (error) {
+      console.error("Failed to toggle agent:", error)
       throw error
     }
   }
@@ -442,6 +500,93 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Create a new schedule
+  const createSchedule = async (data: {
+    agent_id: string
+    name: string
+    description?: string
+    cron_expression: string
+    timezone?: string
+    task_prompt: string
+    requires_approval?: boolean
+  }): Promise<AgentSchedule | null> => {
+    if (!workspaceId) return null
+
+    try {
+      const response = await fetch("/api/agents/schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, workspaceId }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to create schedule")
+      }
+
+      // Add to local state
+      setSchedules(prev => [result.schedule, ...prev])
+      return result.schedule
+    } catch (error) {
+      console.error("Failed to create schedule:", error)
+      throw error
+    }
+  }
+
+  // Update an existing schedule
+  const updateSchedule = async (id: string, data: {
+    name?: string
+    description?: string
+    cron_expression?: string
+    timezone?: string
+    task_prompt?: string
+    requires_approval?: boolean
+  }): Promise<AgentSchedule | null> => {
+    try {
+      const response = await fetch(`/api/agents/schedules/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to update schedule")
+      }
+
+      // Update local state
+      setSchedules(prev => prev.map(s =>
+        s.id === id ? result.schedule : s
+      ))
+      return result.schedule
+    } catch (error) {
+      console.error("Failed to update schedule:", error)
+      throw error
+    }
+  }
+
+  // Delete a schedule
+  const deleteSchedule = async (id: string): Promise<void> => {
+    try {
+      const response = await fetch(`/api/agents/schedules/${id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to delete schedule")
+      }
+
+      // Remove from local state
+      setSchedules(prev => prev.filter(s => s.id !== id))
+    } catch (error) {
+      console.error("Failed to delete schedule:", error)
+      throw error
+    }
+  }
+
   // Initial fetch
   useEffect(() => {
     if (workspaceId && fetchedWorkspaceRef.current !== workspaceId) {
@@ -455,6 +600,8 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
   const value: AgentsContextType = {
     agents,
     myAgents,
+    enabledAgents,
+    planAgents,
     currentAgent,
     isLoading,
     isLoadingAgent,
@@ -474,6 +621,7 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
     fetchAgent,
     hireAgent,
     unhireAgent,
+    toggleAgent,
     refreshAgents: fetchAgents,
     fetchConversations,
     createConversation,
@@ -484,6 +632,9 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
     rejectExecution,
     fetchSchedules,
     toggleSchedule,
+    createSchedule,
+    updateSchedule,
+    deleteSchedule,
     showHireAgent,
     setShowHireAgent,
     selectedAgentForHire,

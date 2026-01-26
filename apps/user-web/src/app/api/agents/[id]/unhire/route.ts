@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createAdminClient } from "@dreamteam/database/server"
+import { createAdminClient, toggleAgentEnabled, getWorkspaceDeployment } from "@dreamteam/database"
 import { getSession } from "@dreamteam/auth/session"
 
-// DELETE /api/agents/[id]/unhire - Unhire an agent (soft delete local record)
+// DELETE /api/agents/[id]/unhire - Disable an agent in deployed team (or soft delete legacy record)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -16,14 +16,26 @@ export async function DELETE(
     const { id } = await params
     const supabase = createAdminClient()
 
-    // Get the local agent record
-    const { data: localAgent, error: fetchError } = await supabase
-      .from("agents")
-      .select("id, workspace_id")
-      .eq("id", id)
-      .single()
+    // Try to get workspaceId from query params (for deployed team path)
+    const { searchParams } = new URL(request.url)
+    const workspaceIdFromQuery = searchParams.get("workspaceId")
 
-    if (fetchError || !localAgent) {
+    // First, check if this is a deployed team agent by trying to find workspace with this agent
+    // We need the workspaceId - check query param first, then check legacy agents table
+    let workspaceId: string | null = workspaceIdFromQuery
+
+    if (!workspaceId) {
+      // Try to get workspace from legacy agents table
+      const { data: localAgent } = await supabase
+        .from("agents")
+        .select("workspace_id")
+        .eq("id", id)
+        .single()
+
+      workspaceId = localAgent?.workspace_id || null
+    }
+
+    if (!workspaceId) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 })
     }
 
@@ -31,7 +43,7 @@ export async function DELETE(
     const { data: membership, error: memberError } = await supabase
       .from("workspace_members")
       .select("id")
-      .eq("workspace_id", localAgent.workspace_id)
+      .eq("workspace_id", workspaceId)
       .eq("profile_id", session.id)
       .single()
 
@@ -40,6 +52,43 @@ export async function DELETE(
         { error: "Not a member of this workspace" },
         { status: 403 }
       )
+    }
+
+    // Check if workspace has a deployed team
+    const deployment = await getWorkspaceDeployment(workspaceId)
+
+    if (deployment) {
+      // NEW PATH: Use toggle to disable agent in deployed team
+      const activeConfig = deployment.active_config as {
+        agents: Array<{ id: string; slug: string; is_enabled: boolean }>
+      }
+
+      const agent = activeConfig?.agents?.find(a => a.id === id)
+
+      if (agent) {
+        // Found in deployed team - toggle to disabled
+        const result = await toggleAgentEnabled(workspaceId, agent.slug, false, session.id)
+
+        if (!result.success) {
+          return NextResponse.json(
+            { error: result.error || "Failed to disable agent" },
+            { status: 500 }
+          )
+        }
+
+        return NextResponse.json({ success: true, disabled: true })
+      }
+    }
+
+    // LEGACY PATH: Soft delete local agent record
+    const { data: localAgent, error: fetchError } = await supabase
+      .from("agents")
+      .select("id, workspace_id")
+      .eq("id", id)
+      .single()
+
+    if (fetchError || !localAgent) {
+      return NextResponse.json({ error: "Agent not found" }, { status: 404 })
     }
 
     // Soft delete by setting is_active to false

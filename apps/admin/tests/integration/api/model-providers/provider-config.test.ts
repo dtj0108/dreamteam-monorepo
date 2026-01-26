@@ -65,7 +65,8 @@ describe('Model Providers API', () => {
       ]
 
       const mockSelectChain = {
-        select: vi.fn().mockResolvedValue({ data: mockProviders, error: null }),
+        select: vi.fn().mockReturnThis(),
+        order: vi.fn().mockResolvedValue({ data: mockProviders, error: null }),
       }
       mockFrom.mockReturnValue(mockSelectChain)
 

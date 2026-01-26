@@ -373,6 +373,13 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentRunResult
     onMessage,
   } = options
 
+  // #region agent log
+  const fs = await import('fs')
+  const logPath = '/Users/drewbaskin/dreamteam-monorepo-1/.cursor/debug.log'
+  const logEntry = JSON.stringify({location:'agent-runtime.ts:runAgent:entry',message:'Admin runAgent called',data:{provider,model,agentId,hasApiKey:provider==='anthropic'?!!process.env.ANTHROPIC_API_KEY:!!process.env.XAI_API_KEY,taskPromptPreview:taskPrompt?.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'G-admin-path'}) + '\n'
+  try { fs.appendFileSync(logPath, logEntry) } catch {}
+  // #endregion
+
   // Resolve the model ID for the provider
   const modelId = resolveModelName(model, provider)
   const features = PROVIDER_FEATURES[provider]
@@ -897,23 +904,52 @@ export async function runScheduledExecution(
   const supabase = createAdminClient()
   const startTime = Date.now()
 
+  // #region agent log
+  const fs = require('fs')
+  const logPath = '/Users/drewbaskin/dreamteam-monorepo-1/.cursor/debug.log'
+  const logExec = (msg: string, data: Record<string, unknown>) => {
+    const entry = JSON.stringify({ location: 'agent-runtime.ts:runScheduledExecution', message: msg, data, timestamp: Date.now(), sessionId: 'debug-session', runId: 'exec-debug' }) + '\n'
+    try { fs.appendFileSync(logPath, entry) } catch {}
+    console.log(`[EXEC DEBUG] ${msg}:`, JSON.stringify(data))
+  }
+  logExec('runScheduledExecution called', { executionId, agentId, hasContext: !!context })
+  // #endregion
+
   // Fetch execution with schedule data for notifications
-  const { data: execution } = await supabase
+  // Note: workspace_id is NOT on agent_schedules - it comes from context
+  const { data: execution, error: execFetchError } = await supabase
     .from('agent_schedule_executions')
     .select(`
       *,
-      schedule:agent_schedules(id, name, task_prompt, created_by, workspace_id)
+      schedule:agent_schedules(id, name, task_prompt, created_by)
     `)
     .eq('id', executionId)
     .single()
+
+  logExec('Execution query result', { 
+    executionId, 
+    hasExecution: !!execution, 
+    error: execFetchError?.message,
+    executionStatus: execution?.status,
+    scheduleId: execution?.schedule_id
+  })
 
   const schedule = execution?.schedule as {
     id: string
     name: string
     task_prompt: string
     created_by: string | null
-    workspace_id: string | null
   } | null
+
+  // #region agent log
+  logExec('Schedule data fetched', { 
+    hasExecution: !!execution, 
+    hasSchedule: !!schedule, 
+    scheduleId: schedule?.id,
+    scheduleName: schedule?.name,
+    contextWorkspaceId: context?.workspaceId
+  })
+  // #endregion
 
   // Update execution to running
   await supabase
@@ -926,8 +962,9 @@ export async function runScheduledExecution(
 
   try {
     // Build task prompt with context if provided
+    // Note: workspaceId comes from context, not from schedule (agent_schedules has no workspace_id)
     let finalTaskPrompt = taskPrompt
-    const workspaceId = context?.workspaceId || schedule?.workspace_id || ''
+    const workspaceId = context?.workspaceId || ''
 
     if (workspaceId) {
       const contextSection = `## Current Context
@@ -970,8 +1007,23 @@ You have access to data within this workspace. Use this workspace ID when making
       .eq('id', executionId)
 
     // Send completion notification
+    logExec('About to send notification', { 
+      hasSchedule: !!schedule, 
+      workspaceId, 
+      willSendNotification: !!(schedule && workspaceId),
+      resultSuccess: result.success
+    })
     if (schedule && workspaceId) {
       try {
+        logExec('Calling sendScheduledTaskNotification', {
+          executionId,
+          aiAgentId: agentId,
+          scheduleId: schedule.id,
+          scheduleName: schedule.name,
+          status: result.success ? 'completed' : 'failed',
+          workspaceId,
+          scheduleCreatedBy: schedule.created_by
+        })
         await sendScheduledTaskNotification({
           executionId,
           aiAgentId: agentId,
@@ -985,10 +1037,14 @@ You have access to data within this workspace. Use this workspace ID when making
           scheduleCreatedBy: schedule.created_by,
           supabase,
         })
+        logExec('sendScheduledTaskNotification completed', { success: true })
       } catch (notifyError) {
+        logExec('sendScheduledTaskNotification failed', { error: String(notifyError) })
         console.error('[runScheduledExecution] Failed to send notification:', notifyError)
         // Don't fail the execution if notification fails
       }
+    } else {
+      logExec('Notification skipped', { reason: !schedule ? 'no schedule' : 'no workspaceId' })
     }
 
     return result
@@ -1007,7 +1063,8 @@ You have access to data within this workspace. Use this workspace ID when making
       .eq('id', executionId)
 
     // Send failure notification
-    const workspaceId = context?.workspaceId || schedule?.workspace_id || ''
+    // Note: workspaceId comes from context, not from schedule
+    const workspaceId = context?.workspaceId || ''
     if (schedule && workspaceId) {
       try {
         await sendScheduledTaskNotification({

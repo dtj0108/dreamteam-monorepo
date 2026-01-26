@@ -25,6 +25,9 @@ export const stripe = process.env.STRIPE_SECRET_KEY
   : null as unknown as Stripe
 
 // Price IDs from Stripe Dashboard (set in environment variables)
+// NOTE: These are now used as FALLBACK only. Primary source of truth is the
+// plans table in the database (stripe_price_id column). Set Stripe IDs via
+// Admin > Plans for each plan. These env vars are kept for backwards compatibility.
 export const STRIPE_PRICES = {
   workspace: {
     monthly: process.env.STRIPE_PRICE_WORKSPACE_MONTHLY || '',

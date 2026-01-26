@@ -12,8 +12,20 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { CreateScheduleDialog } from "@/components/agents/create-schedule-dialog"
 import {
   ArrowLeft,
   Calendar,
@@ -28,6 +40,8 @@ import {
   Timer,
   Pause,
   AlertTriangle,
+  Pencil,
+  Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import type { AgentSchedule, AgentScheduleExecution, ScheduleExecutionStatus } from "@/lib/types/agents"
@@ -137,7 +151,7 @@ function PageLoadingSkeleton() {
 export default function ScheduleDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const { toggleSchedule, workspaceId } = useAgents()
+  const { toggleSchedule, deleteSchedule, workspaceId } = useAgents()
 
   const [schedule, setSchedule] = useState<AgentSchedule | null>(null)
   const [executions, setExecutions] = useState<AgentScheduleExecution[]>([])
@@ -146,6 +160,15 @@ export default function ScheduleDetailPage() {
   const [executionOffset, setExecutionOffset] = useState(0)
   const [hasMoreExecutions, setHasMoreExecutions] = useState(true)
   const EXECUTIONS_LIMIT = 10
+
+  // Edit/Delete state
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  
+  // Manual run state
+  const [isRunning, setIsRunning] = useState(false)
+  const [runResult, setRunResult] = useState<{ success: boolean; message: string } | null>(null)
 
   // Fetch the schedule
   const fetchSchedule = useCallback(async () => {
@@ -214,6 +237,52 @@ export default function ScheduleDetailPage() {
     fetchExecutions(newOffset, true)
   }
 
+  const handleDelete = async () => {
+    if (!schedule) return
+    setIsDeleting(true)
+    try {
+      await deleteSchedule(schedule.id)
+      router.push("/agents/schedules")
+    } catch (error) {
+      console.error("Failed to delete schedule:", error)
+      setIsDeleting(false)
+      setShowDeleteDialog(false)
+    }
+  }
+
+  const handleEditSuccess = (updatedSchedule: AgentSchedule) => {
+    setSchedule(updatedSchedule)
+    setShowEditDialog(false)
+  }
+
+  const handleRunNow = async () => {
+    if (!schedule) return
+    setIsRunning(true)
+    setRunResult(null)
+    
+    try {
+      const res = await fetch(`/api/agents/schedules/${schedule.id}`, {
+        method: "POST",
+      })
+      const data = await res.json()
+      
+      if (data.success) {
+        setRunResult({ success: true, message: "Task completed successfully" })
+        // Refresh executions to show the new one
+        fetchExecutions()
+      } else {
+        setRunResult({ success: false, message: data.error || "Task failed" })
+      }
+    } catch (error) {
+      setRunResult({ 
+        success: false, 
+        message: error instanceof Error ? error.message : "Failed to run task" 
+      })
+    } finally {
+      setIsRunning(false)
+    }
+  }
+
   if (isLoading) {
     return <PageLoadingSkeleton />
   }
@@ -252,6 +321,24 @@ export default function ScheduleDetailPage() {
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRunNow}
+              disabled={isRunning}
+              className="gap-2"
+            >
+              <Play className={`size-4 ${isRunning ? "animate-pulse" : ""}`} />
+              {isRunning ? "Running..." : "Run Now"}
+            </Button>
+            {runResult && (
+              <Badge variant={runResult.success ? "default" : "destructive"} className="gap-1">
+                {runResult.success ? <CheckCircle2 className="size-3" /> : <XCircle className="size-3" />}
+                {runResult.message.slice(0, 30)}{runResult.message.length > 30 ? "..." : ""}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">
               {schedule.is_enabled ? "Enabled" : "Paused"}
             </span>
@@ -267,10 +354,16 @@ export default function ScheduleDetailPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled>
+              <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+                <Pencil className="size-4 mr-2" />
                 Edit Schedule
               </DropdownMenuItem>
-              <DropdownMenuItem disabled className="text-destructive">
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setShowDeleteDialog(true)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="size-4 mr-2" />
                 Delete Schedule
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -406,6 +499,37 @@ export default function ScheduleDetailPage() {
           </ScrollArea>
         </div>
       </div>
+
+      {/* Edit Schedule Dialog */}
+      <CreateScheduleDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        schedule={schedule}
+        onSuccess={handleEditSuccess}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Schedule</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{schedule?.name}"? This action cannot be undone.
+              All execution history will also be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

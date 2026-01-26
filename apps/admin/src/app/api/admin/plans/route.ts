@@ -55,7 +55,10 @@ export async function POST(request: NextRequest) {
       price_yearly,
       features = [],
       limits = {},
-      is_active = true
+      is_active = true,
+      is_coming_soon = false,
+      plan_type,
+      display_config = {}
     } = body
 
     if (!name || name.trim() === '') {
@@ -78,7 +81,10 @@ export async function POST(request: NextRequest) {
         price_yearly: price_yearly ?? null,
         features,
         limits,
-        is_active
+        is_active,
+        is_coming_soon,
+        plan_type: plan_type || null,
+        display_config
       })
       .select(`
         *,
@@ -99,7 +105,7 @@ export async function POST(request: NextRequest) {
       'plan_created',
       'plan',
       data.id,
-      { name, slug: finalSlug },
+      { name, slug: finalSlug, plan_type },
       request
     )
 

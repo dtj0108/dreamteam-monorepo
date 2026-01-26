@@ -26,6 +26,7 @@ const publicRoutes = [
   '/api/checkout',          // Public checkout (guest checkout for pay-first flow)
   '/api/billing/webhook',   // Stripe webhook (handles own auth via signature)
   '/api/agent-chat',        // Proxied to Railway (handles own auth)
+  '/api/plans',             // Public pricing plans endpoint
   '/api/cron',              // Cron endpoints (handle own auth via CRON_SECRET)
   '/pricing',
   '/about',

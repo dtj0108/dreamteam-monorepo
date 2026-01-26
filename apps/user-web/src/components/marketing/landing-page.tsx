@@ -651,94 +651,196 @@ const WhySection = () => {
 
 const ProductsSection = () => {
     return (
-        <section className="bg-white py-16 md:py-24">
-            <div className="mx-auto w-full max-w-container px-4 md:px-8">
-                <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col items-center text-center md:mb-16">
-                    <span className="text-sm font-semibold uppercase tracking-wider text-blue-600">The Platform</span>
-                    <h2 className="mt-3 text-display-sm font-semibold text-gray-900 md:text-display-md">
-                        Five products. One brain.
-                    </h2>
-                    <p className="mt-4 text-lg text-gray-600 md:mt-5 md:text-xl">
-                        Everything you need to run your business, unified with AI agents that share context.
-                    </p>
-                </div>
+        <section className="bg-slate-100 pb-16 md:pb-0">
+            <div className="bg-white pt-16 pb-28 md:pt-24 md:pb-40">
+                <div className="mx-auto w-full max-w-container px-4 md:px-8">
+                    <div className="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
+                        <span className="text-sm font-semibold uppercase tracking-wider text-blue-600 md:text-md">The Platform</span>
 
-                {/* First row: 3 products */}
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {products.slice(0, 3).map((product) => (
-                        <div
-                            key={product.name}
-                            className="group flex flex-col rounded-2xl border border-gray-200 bg-white p-6 transition-all hover:border-gray-300 hover:shadow-lg"
-                        >
-                            <div className="mb-4 flex items-center justify-between">
-                                <div className={cx(
-                                    "flex size-12 items-center justify-center rounded-xl",
-                                    product.color
-                                )}>
-                                    <span className="text-2xl">{product.emoji}</span>
+                        <h2 className="mt-3 text-display-sm font-semibold text-gray-900 md:text-display-md">Your people work here too.</h2>
+                        <p className="mt-4 text-lg text-gray-600 md:mt-5 md:text-xl">
+                            Everything you need to run your business, unified with AI agents that share context.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="mx-auto -mt-17 w-full max-w-container px-4 pt-1 md:-mt-26 md:overflow-hidden md:px-8 md:pt-2">
+                <div className="flex flex-col md:items-start">
+                    <div className="flex h-full w-full items-center justify-center md:w-full">
+                        {/* Dashboard Mockup */}
+                        <div className="w-full rounded-xl bg-gray-50 ring-4 ring-gray-200 md:ring-8 overflow-hidden shadow-2xl dark:bg-gray-900 dark:ring-gray-700">
+                            {/* Browser Chrome */}
+                            <div className="flex items-center gap-2 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+                                <div className="flex gap-1.5">
+                                    <div className="size-3 rounded-full bg-red-400" />
+                                    <div className="size-3 rounded-full bg-yellow-400" />
+                                    <div className="size-3 rounded-full bg-green-400" />
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <div className="size-2 animate-pulse rounded-full bg-emerald-500" />
-                                    <span className="text-xs font-medium text-emerald-600">Agent active</span>
+                                <div className="ml-4 flex-1 rounded-md bg-gray-100 px-3 py-1 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                                    app.dreamteam.so/dashboard
                                 </div>
                             </div>
-                            <h3 className="text-xl font-semibold text-gray-900">{product.name}</h3>
-                            <p className="mt-1 text-sm font-medium text-blue-600">{product.tagline}</p>
-                            <p className="mt-3 flex-1 text-sm text-gray-600">{product.description}</p>
-                            <ul className="mt-4 flex flex-wrap gap-1.5">
-                                {product.features.map((feature) => (
-                                    <li key={feature} className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                                        {feature}
-                                    </li>
-                                ))}
-                            </ul>
-                            <div className="mt-6">
-                                <Button href={product.href} color="secondary" size="md" iconTrailing={<ArrowRight />} className="w-full justify-center">
-                                    Explore {product.name}
-                                </Button>
+
+                            {/* Dashboard Content */}
+                            <div className="flex">
+                                {/* Sidebar */}
+                                <div className="hidden w-56 shrink-0 border-r border-gray-200 bg-white p-4 md:block dark:border-gray-700 dark:bg-gray-800">
+                                    <div className="mb-6 flex items-center gap-2">
+                                        <div className="size-8 rounded-lg bg-blue-400 flex items-center justify-center">
+                                            <span className="text-white text-sm font-bold">D</span>
+                                        </div>
+                                        <span className="font-semibold text-gray-900 dark:text-white">DreamTeam</span>
+                                    </div>
+                                    <nav className="space-y-1">
+                                        <div className="flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-500 dark:bg-sky-900/30 dark:text-sky-400">
+                                            <span>📊</span>
+                                            Dashboard
+                                        </div>
+                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+                                            <span>🤝</span>
+                                            Sales CRM
+                                        </div>
+                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+                                            <span>📋</span>
+                                            Projects
+                                        </div>
+                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+                                            <span>💵</span>
+                                            Finance
+                                        </div>
+                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+                                            <span>💬</span>
+                                            Team Chat
+                                        </div>
+                                    </nav>
+                                    <div className="mt-6 border-t border-gray-200 pt-4 dark:border-gray-700">
+                                        <p className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-500">AGENTS</p>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-2 text-sm">
+                                                <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                <span className="text-gray-600 dark:text-gray-400">Sales Agent</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm">
+                                                <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                <span className="text-gray-600 dark:text-gray-400">Finance Agent</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm">
+                                                <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                <span className="text-gray-600 dark:text-gray-400">Project Agent</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Main Content */}
+                                <div className="flex-1 bg-gray-50 p-4 md:p-6 dark:bg-gray-900">
+                                    <div className="mb-4">
+                                        <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Dashboard</h1>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">Welcome back, here&apos;s what&apos;s happening</p>
+                                    </div>
+
+                                    {/* Stats Grid */}
+                                    <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                                        <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">Total Balance</p>
+                                            <p className="text-lg font-bold text-gray-900 dark:text-white">$284,392</p>
+                                            <p className="text-xs text-emerald-500">+12.5%</p>
+                                        </div>
+                                        <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">Revenue</p>
+                                            <p className="text-lg font-bold text-emerald-600">$48,250</p>
+                                            <p className="text-xs text-emerald-500">+8.2%</p>
+                                        </div>
+                                        <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">Deals Closed</p>
+                                            <p className="text-lg font-bold text-gray-900 dark:text-white">24</p>
+                                            <p className="text-xs text-emerald-500">+4 this week</p>
+                                        </div>
+                                        <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">Active Projects</p>
+                                            <p className="text-lg font-bold text-gray-900 dark:text-white">12</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">3 due soon</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Activity Feed */}
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+                                            <h3 className="mb-3 text-sm font-medium text-gray-900 dark:text-white">Agent Activity</h3>
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex size-8 items-center justify-center rounded-full bg-sky-100 text-sm dark:bg-sky-900">🤝</div>
+                                                    <div className="flex-1">
+                                                        <p className="text-sm text-gray-900 dark:text-white">Sales Agent closed deal</p>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">Acme Corp - $12,500</p>
+                                                    </div>
+                                                    <span className="text-xs text-gray-400">2m ago</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-sm dark:bg-emerald-900">💵</div>
+                                                    <div className="flex-1">
+                                                        <p className="text-sm text-gray-900 dark:text-white">Finance Agent categorized</p>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">42 transactions</p>
+                                                    </div>
+                                                    <span className="text-xs text-gray-400">5m ago</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex size-8 items-center justify-center rounded-full bg-purple-100 text-sm dark:bg-purple-900">📋</div>
+                                                    <div className="flex-1">
+                                                        <p className="text-sm text-gray-900 dark:text-white">Project Agent created tasks</p>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">Website Redesign</p>
+                                                    </div>
+                                                    <span className="text-xs text-gray-400">12m ago</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+                                            <h3 className="mb-3 text-sm font-medium text-gray-900 dark:text-white">Recent Transactions</h3>
+                                            <div className="space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="size-8 rounded-full bg-emerald-100 flex items-center justify-center dark:bg-emerald-900">
+                                                            <span className="text-emerald-600 text-xs dark:text-emerald-400">↑</span>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm text-gray-900 dark:text-white">Acme Corp</p>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400">Invoice Payment</p>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-sm font-medium text-emerald-600">+$12,500</span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="size-8 rounded-full bg-gray-100 flex items-center justify-center dark:bg-gray-700">
+                                                            <span className="text-gray-600 text-xs dark:text-gray-400">↓</span>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm text-gray-900 dark:text-white">AWS</p>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400">Cloud Services</p>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-sm text-gray-900 dark:text-white">-$2,340</span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="size-8 rounded-full bg-emerald-100 flex items-center justify-center dark:bg-emerald-900">
+                                                            <span className="text-emerald-600 text-xs dark:text-emerald-400">↑</span>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm text-gray-900 dark:text-white">TechStart Inc</p>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400">Consulting</p>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-sm font-medium text-emerald-600">+$8,900</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    ))}
-                </div>
-
-                {/* Second row: 2 products */}
-                <div className="mt-6 grid gap-6 md:grid-cols-2">
-                    {products.slice(3).map((product) => (
-                        <div
-                            key={product.name}
-                            className="group flex flex-col rounded-2xl border border-gray-200 bg-white p-6 transition-all hover:border-gray-300 hover:shadow-lg md:flex-row md:items-start md:gap-6"
-                        >
-                            <div className="flex-1">
-                                <div className="mb-4 flex items-center justify-between md:justify-start md:gap-4">
-                                    <div className={cx(
-                                        "flex size-12 items-center justify-center rounded-xl",
-                                        product.color
-                                    )}>
-                                        <span className="text-2xl">{product.emoji}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <div className="size-2 animate-pulse rounded-full bg-emerald-500" />
-                                        <span className="text-xs font-medium text-emerald-600">Agent active</span>
-                                    </div>
-                                </div>
-                                <h3 className="text-xl font-semibold text-gray-900">{product.name}</h3>
-                                <p className="mt-1 text-sm font-medium text-blue-600">{product.tagline}</p>
-                                <p className="mt-3 text-sm text-gray-600">{product.description}</p>
-                                <ul className="mt-4 flex flex-wrap gap-1.5">
-                                    {product.features.map((feature) => (
-                                        <li key={feature} className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                                            {feature}
-                                        </li>
-                                    ))}
-                                </ul>
-                                <div className="mt-6">
-                                    <Button href={product.href} color="secondary" size="md" iconTrailing={<ArrowRight />}>
-                                        Explore {product.name}
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
+                    </div>
                 </div>
             </div>
         </section>
@@ -747,27 +849,34 @@ const ProductsSection = () => {
 
 const MetricsSection = () => {
     return (
-        <section className="bg-gray-900 py-16 md:py-24">
+        <section className="bg-gray-100 py-16 md:py-24">
             <div className="mx-auto max-w-container px-4 md:px-8">
                 <div className="flex flex-col gap-12 md:gap-16">
                     <div className="flex w-full flex-col items-center self-center text-center md:max-w-3xl">
-                        <h2 className="text-display-sm font-semibold text-white md:text-display-md">
+                        <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-blue-500/20 md:mb-6">
+                            <span className="text-2xl">⚡</span>
+                        </div>
+                        <h2 className="text-display-sm font-semibold text-gray-900 md:text-display-md">
                             Agents working around the clock
                         </h2>
-                        <p className="mt-4 text-lg text-gray-400 md:mt-5 md:text-xl">
+                        <p className="mt-4 text-lg text-gray-600 md:mt-5 md:text-xl">
                             While you're reading this, thousands of agents are closing deals, categorizing transactions, and creating projects.
                         </p>
                     </div>
-                    <dl className="grid w-full max-w-4xl grid-cols-2 gap-8 self-center md:grid-cols-4">
+                    <dl className="flex flex-col justify-between gap-10 md:flex-row md:gap-8">
                         {[
-                            { title: "7", subtitle: "Agents per workspace" },
-                            { title: "100M+", subtitle: "Agent actions" },
-                            { title: "24/7", subtitle: "Autonomous operation" },
-                            { title: "99.99%", subtitle: "Uptime" },
+                            { title: "38", subtitle: "Agents per workspace", description: "Deploy a full team of specialized AI agents." },
+                            { title: "100M+", subtitle: "Agent actions", description: "Tasks completed autonomously by our agents." },
+                            { title: "24/7", subtitle: "Autonomous operation", description: "Your agents never sleep, never take breaks." },
+                            { title: "99.99%", subtitle: "Uptime", description: "Enterprise-grade reliability you can count on." },
                         ].map((item) => (
-                            <div key={item.title} className="flex flex-col items-center gap-2 text-center">
-                                <dd className="text-display-md font-bold text-white md:text-display-lg">{item.title}</dd>
-                                <dt className="text-md font-medium text-gray-400">{item.subtitle}</dt>
+                            <div key={item.title} className="relative flex-1 overflow-hidden pt-4 md:mt-0 md:pt-0 md:pl-6">
+                                <div className="absolute top-0 left-0 h-full w-full border-t-2 border-blue-500 md:border-t-0 md:border-l-2" />
+                                <div className="flex flex-col gap-1">
+                                    <dd className="text-display-lg font-semibold text-blue-500">{item.title}</dd>
+                                    <dt className="text-lg font-semibold text-gray-900">{item.subtitle}</dt>
+                                    <p className="mt-1 text-sm text-gray-600">{item.description}</p>
+                                </div>
                             </div>
                         ))}
                     </dl>

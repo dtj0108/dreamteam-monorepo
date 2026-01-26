@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createAdminClient } from "@dreamteam/database/server"
+import { createAdminClient, toggleAgentEnabled, getWorkspaceDeployment } from "@dreamteam/database"
 import { getSession } from "@dreamteam/auth/session"
 
-// POST /api/agents/[id]/hire - Hire an agent (create local record)
+// POST /api/agents/[id]/hire - Enable an agent in deployed team (or create legacy record)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -38,6 +38,49 @@ export async function POST(
       )
     }
 
+    // Check if workspace has a deployed team
+    const deployment = await getWorkspaceDeployment(workspaceId)
+
+    if (deployment) {
+      // NEW PATH: Use toggle to enable agent in deployed team
+      const activeConfig = deployment.active_config as {
+        agents: Array<{ id: string; slug: string; is_enabled: boolean }>
+      }
+
+      const agent = activeConfig?.agents?.find(a => a.id === id)
+
+      if (!agent) {
+        return NextResponse.json(
+          { error: "Agent not found in workspace deployment. Upgrade your plan to access more agents." },
+          { status: 404 }
+        )
+      }
+
+      if (agent.is_enabled) {
+        return NextResponse.json(
+          { error: "Agent is already enabled" },
+          { status: 409 }
+        )
+      }
+
+      // Toggle to enabled
+      const result = await toggleAgentEnabled(workspaceId, agent.slug, true, session.id)
+
+      if (!result.success) {
+        return NextResponse.json(
+          { error: result.error || "Failed to enable agent" },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        id: agent.id,
+        hired_at: new Date().toISOString(),
+        enabled: true,
+      }, { status: 200 })
+    }
+
+    // LEGACY PATH: Create local agent record
     // Check if already hired
     const { data: existing } = await supabase
       .from("agents")

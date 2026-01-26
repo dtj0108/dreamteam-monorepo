@@ -1,31 +1,37 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useAgents } from "@/providers/agents-provider"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import {
   MessageSquare,
   Calendar,
   CheckCircle2,
   ArrowRight,
   Plus,
-  Bot,
+  Settings,
+  Users,
 } from "lucide-react"
+import type { AgentWithHireStatus } from "@/lib/types/agents"
 
 export default function HiredAgentsPage() {
   const {
+    agents,
     myAgents,
+    planAgents,
     executions,
     schedules,
     isLoading,
-    isLoadingActivity,
-    isLoadingSchedules,
     fetchActivity,
     fetchSchedules,
+    toggleAgent,
   } = useAgents()
+
+  const [togglingAgents, setTogglingAgents] = useState<Set<string>>(new Set())
 
   // Fetch activity and schedules on mount
   useEffect(() => {
@@ -34,7 +40,7 @@ export default function HiredAgentsPage() {
   }, [fetchActivity, fetchSchedules])
 
   // Get stats for an agent
-  const getAgentStats = (agent: typeof myAgents[0]) => {
+  const getAgentStats = (agent: AgentWithHireStatus) => {
     const agentExecutions = executions.filter(
       e => e.agent_id === agent.localAgentId || e.agent_id === agent.id
     )
@@ -47,6 +53,26 @@ export default function HiredAgentsPage() {
       scheduled: agentSchedules.length,
     }
   }
+
+  // Handle agent enable/disable toggle
+  const handleToggle = async (agent: AgentWithHireStatus, enabled: boolean) => {
+    setTogglingAgents(prev => new Set(prev).add(agent.id))
+    try {
+      await toggleAgent(agent.id, enabled)
+    } catch (error) {
+      console.error("Failed to toggle agent:", error)
+    } finally {
+      setTogglingAgents(prev => {
+        const next = new Set(prev)
+        next.delete(agent.id)
+        return next
+      })
+    }
+  }
+
+  // Determine which agents to show - all plan agents if available, otherwise only hired
+  const agentsToShow = planAgents.length > 0 ? planAgents : myAgents
+  const hasDeployedTeam = planAgents.length > 0
 
   if (isLoading) {
     return (
@@ -88,47 +114,71 @@ export default function HiredAgentsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">My Agents</h1>
           <p className="text-muted-foreground">
-            Agents you&apos;ve hired to help with your work
+            {hasDeployedTeam
+              ? "Agents included in your plan - toggle to enable or disable"
+              : "Agents you've hired to help with your work"}
           </p>
         </div>
-        <Button asChild>
-          <Link href="/agents/discover">
-            <Plus className="size-4 mr-2" />
-            Discover More
-          </Link>
-        </Button>
+        {!hasDeployedTeam && (
+          <Button asChild>
+            <Link href="/agents/discover">
+              <Plus className="size-4 mr-2" />
+              Discover More
+            </Link>
+          </Button>
+        )}
       </div>
 
-      {myAgents.length === 0 ? (
+      {agentsToShow.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <div className="size-14 rounded-xl bg-muted flex items-center justify-center text-2xl mb-4">
-              ✨
+            <div className="size-14 rounded-xl bg-muted flex items-center justify-center mb-4">
+              <Users className="size-7 text-muted-foreground" />
             </div>
-            <h3 className="font-semibold mb-1">No agents hired yet</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Discover and hire AI agents to help automate your work
+            <h3 className="font-semibold mb-1">No agents available</h3>
+            <p className="text-sm text-muted-foreground mb-4 text-center max-w-sm">
+              {hasDeployedTeam
+                ? "Your plan doesn't include any agents yet. Contact support or upgrade your plan."
+                : "Subscribe to a plan to get access to AI agents that can help automate your work."}
             </p>
             <Button asChild>
-              <Link href="/agents/discover">Browse Agents</Link>
+              <Link href="/billing">View Plans</Link>
             </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {myAgents.map((agent) => {
+          {agentsToShow.map((agent) => {
             const stats = getAgentStats(agent)
+            const isEnabled = agent.isHired
+            const isToggling = togglingAgents.has(agent.id)
+
             return (
               <div
                 key={agent.id}
-                className="rounded-lg border bg-card hover:shadow-md transition-shadow flex flex-col"
+                className={`rounded-lg border bg-card transition-all flex flex-col ${
+                  isEnabled ? "hover:shadow-md" : "opacity-60"
+                }`}
               >
-                {/* Header with avatar */}
+                {/* Header with avatar and toggle */}
                 <div className="p-4 pb-3">
-                  <div className="size-14 rounded-xl bg-muted flex items-center justify-center text-2xl mb-3">
-                    {agent.avatar_url || "✨"}
+                  <div className="flex items-start justify-between">
+                    <div className="size-14 rounded-xl bg-muted flex items-center justify-center text-2xl mb-3">
+                      {agent.avatar_url || "✨"}
+                    </div>
+                    {hasDeployedTeam && (
+                      <Switch
+                        checked={isEnabled}
+                        disabled={isToggling}
+                        onCheckedChange={(checked) => handleToggle(agent, checked)}
+                        aria-label={`${isEnabled ? "Disable" : "Enable"} ${agent.name}`}
+                      />
+                    )}
                   </div>
                   <h3 className="font-semibold truncate">{agent.name}</h3>
+                  {!isEnabled && (
+                    <span className="text-xs text-muted-foreground">Disabled</span>
+                  )}
                 </div>
 
                 {/* Stats */}
@@ -147,12 +197,22 @@ export default function HiredAgentsPage() {
                   </div>
                 </div>
 
-                {/* Action button */}
-                <div className="p-4 pt-0">
-                  <Button asChild variant="secondary" className="w-full">
+                {/* Action buttons */}
+                <div className="p-4 pt-0 flex gap-2">
+                  <Button
+                    asChild
+                    variant="secondary"
+                    className="flex-1"
+                    disabled={!isEnabled}
+                  >
                     <Link href={`/agents/${agent.localAgentId || agent.id}`}>
                       Meet Agent
                       <ArrowRight className="size-4 ml-2" />
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" size="icon">
+                    <Link href={`/agents/configure/${agent.localAgentId || agent.id}`}>
+                      <Settings className="size-4" />
                     </Link>
                   </Button>
                 </div>

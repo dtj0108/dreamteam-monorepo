@@ -92,12 +92,24 @@ export interface AIAgent {
 }
 
 /**
- * Agent with hire status - combines ai_agents with local agents table
- * Used in the agent directory to show if user has already hired an agent
+ * Agent with hire status - combines ai_agents with deployed team config
+ * Used in the agent directory to show agent status
+ *
+ * In the auto-deploy model:
+ * - isHired: true when agent is in deployed team AND enabled
+ * - isInPlan: true when agent is part of workspace's plan (from deployed team)
+ * - isEnabled: agent's enabled state in customizations
  */
 export interface AgentWithHireStatus extends AIAgent {
+  /** Agent is "hired" - exists in deployed team AND is enabled, OR has legacy local agent record */
   isHired: boolean
+  /** Agent is part of the workspace's plan (from deployed team) */
+  isInPlan?: boolean
+  /** Agent's enabled state in workspace customizations (for deployed team agents) */
+  isEnabled?: boolean
+  /** Local agent ID (for legacy agents) or agent ID (for deployed team agents) */
   localAgentId: string | null
+  /** When the agent was hired/enabled (deployed_at for deployed teams) */
   hiredAt: string | null
 }
 

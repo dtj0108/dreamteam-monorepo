@@ -36,13 +36,39 @@ export async function GET(request: NextRequest) {
     
     const supabase = createAdminClient()
     
+    // If list=true, show all schedules with their offsets
+    if (searchParams.get("list") === "true") {
+      const { data: allSchedules } = await supabase
+        .from("agent_schedules")
+        .select(`id, name, ai_agent:ai_agents(id, name, provider, model)`)
+        .eq("is_enabled", true)
+        .order("created_at", { ascending: true })
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'check-schedules:list-all',message:'All enabled schedules',data:{schedules:allSchedules?.map((s: NonNullable<typeof allSchedules>[number],i: number)=>({offset:i,scheduleId:s.id,scheduleName:s.name,agentName:s.ai_agent?.name,provider:s.ai_agent?.provider,model:s.ai_agent?.model}))},timestamp:Date.now(),sessionId:'debug-session',runId:'list-schedules',hypothesisId:'LIST'})}).catch(()=>{});
+      // #endregion
+      
+      return NextResponse.json({
+        testMode: true,
+        action: "list",
+        schedules: allSchedules?.map((s: NonNullable<typeof allSchedules>[number], i: number) => ({
+          offset: i,
+          scheduleId: s.id,
+          scheduleName: s.name,
+          agentName: s.ai_agent?.name,
+          provider: s.ai_agent?.provider,
+          model: s.ai_agent?.model,
+        })),
+      })
+    }
+    
     // Find any enabled schedule (use offset param to select different ones)
     const offset = parseInt(searchParams.get("offset") || "0", 10)
     const { data: schedules, error: scheduleError } = await supabase
       .from("agent_schedules")
       .select(`
         *,
-        ai_agent:ai_agents(id, name, system_prompt)
+        ai_agent:ai_agents(id, name, system_prompt, provider, model)
       `)
       .eq("is_enabled", true)
       .range(offset, offset)
@@ -58,6 +84,10 @@ export async function GET(request: NextRequest) {
 
     const schedule = schedules[0]
     console.log(`[Cron] TEST: Found schedule ${schedule.id} - ${schedule.name}`)
+
+    // #region agent log
+    fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'check-schedules:test-mode',message:'Schedule data from DB query',data:{scheduleId:schedule.id,scheduleName:schedule.name,agentId:schedule.agent_id,aiAgentFull:schedule.ai_agent,rawProvider:schedule.ai_agent?.provider,rawProviderType:typeof schedule.ai_agent?.provider,rawModel:schedule.ai_agent?.model,hasXaiKey:!!process.env.XAI_API_KEY,hasAnthropicKey:!!process.env.ANTHROPIC_API_KEY,xaiKeyLength:process.env.XAI_API_KEY?.length||0,anthropicKeyLength:process.env.ANTHROPIC_API_KEY?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'provider-debug',hypothesisId:'C-cron-test'})}).catch(()=>{});
+    // #endregion
 
     // Find local agent
     const { data: localAgent, error: agentError } = await supabase
@@ -105,7 +135,11 @@ export async function GET(request: NextRequest) {
         schedule.ai_agent?.system_prompt ||
         "You are a helpful AI assistant."
 
-      console.log(`[Cron] TEST: Executing task: ${schedule.task_prompt.slice(0, 50)}...`)
+      // Get provider and model from AI agent config
+      const provider = (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) || "anthropic"
+      const model = schedule.ai_agent?.model || undefined
+
+      console.log(`[Cron] TEST: Executing task with provider=${provider}, model=${model}: ${schedule.task_prompt.slice(0, 50)}...`)
 
       const result = await executeAgentTask({
         taskPrompt: schedule.task_prompt,
@@ -113,6 +147,8 @@ export async function GET(request: NextRequest) {
         tools: localAgent.tools || [],
         workspaceId: localAgent.workspace_id,
         supabase,
+        provider,
+        model,
       })
 
       console.log(`[Cron] TEST: Task completed with result length: ${result.text?.length || 0}`)
