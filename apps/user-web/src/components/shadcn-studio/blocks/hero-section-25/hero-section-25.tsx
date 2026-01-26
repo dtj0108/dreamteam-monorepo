@@ -44,15 +44,15 @@ const HeroSection = () => {
           </Badge>
 
           <h1 className='text-2xl font-semibold sm:text-3xl lg:text-5xl lg:font-bold'>
-            Hire and deploy departments of AI Agents
+            Deploy AI Agents that work autonomously
             <br />
-            <span className='underline underline-offset-3'>that work autonomously</span>
+            <span className='underline underline-offset-3'>in minutes</span>
           </h1>
 
           <p className='text-muted-foreground max-w-4xl text-xl'>
-            Complete operational teams for sales, marketing, support, finance, HR, product, and engineering.
-            <br />
             Set them up once, they work forever.
+            <br />
+            While you do, whatever.
           </p>
 
           <div className='flex flex-wrap items-center gap-4'>

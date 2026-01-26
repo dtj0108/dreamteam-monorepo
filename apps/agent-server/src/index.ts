@@ -106,4 +106,7 @@ app.listen(PORT, () => {
   console.log(`Health check: http://localhost:${PORT}/health`)
   console.log(`Agent chat: POST http://localhost:${PORT}/agent-chat`)
   console.log(`Agent channel webhook: POST http://localhost:${PORT}/agent-channel-message`)
+  // #region agent log
+  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.ts:startup',message:'Agent server started',data:{port:PORT},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
 })

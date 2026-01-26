@@ -145,12 +145,16 @@ export async function updateSessionUsage(
 
 /**
  * Create a new conversation record and return its ID
+ *
+ * Note: agentId is optional. In team mode, the agent comes from the deployed
+ * team config (workspace_deployed_teams) rather than the legacy agents table,
+ * so we pass null to avoid foreign key constraint violations.
  */
 export async function createConversation(
   supabase: SupabaseClient,
   params: {
     workspaceId: string
-    agentId: string
+    agentId?: string | null
     userId: string
     title?: string
   }
@@ -161,7 +165,7 @@ export async function createConversation(
     .from("agent_conversations")
     .insert({
       workspace_id: workspaceId,
-      agent_id: agentId,
+      agent_id: agentId || null,
       user_id: userId,
       title: title || "New Conversation",
       sdk_session_metadata: {

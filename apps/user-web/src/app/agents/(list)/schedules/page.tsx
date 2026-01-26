@@ -6,6 +6,7 @@ import { useAgents } from "@/providers/agents-provider"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { CreateScheduleDialog } from "@/components/agents/create-schedule-dialog"
 import {
   Select,
   SelectContent,
@@ -30,7 +31,7 @@ import {
   flexRender,
   type SortingState,
 } from "@tanstack/react-table"
-import { Calendar, Search, X } from "lucide-react"
+import { Calendar, Search, X, Plus } from "lucide-react"
 import { getScheduleColumns } from "./columns"
 import { addDays } from "date-fns"
 import type { ScheduleFilters } from "@/lib/types/agents"
@@ -87,6 +88,9 @@ export default function SchedulesPage() {
   const [filters, setFilters] = useState<ScheduleFilters>({})
   const [searchValue, setSearchValue] = useState("")
   const [nextRunPreset, setNextRunPreset] = useState("all")
+
+  // Dialog state
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
 
   // Debounced search
   useEffect(() => {
@@ -179,14 +183,22 @@ export default function SchedulesPage() {
     <div className="flex-1 overflow-y-auto">
       <div className="p-6 max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Calendar className="size-6" />
-            Schedules
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            View and manage agent scheduled tasks
-          </p>
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <Calendar className="size-6" />
+              Schedules
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              View and manage agent scheduled tasks
+            </p>
+          </div>
+          {myAgents.length > 0 && (
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="size-4 mr-2" />
+              Create Schedule
+            </Button>
+          )}
         </div>
 
         {/* Filter Bar */}
@@ -374,11 +386,26 @@ export default function SchedulesPage() {
             <Calendar className="size-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium">No schedules yet</h3>
             <p className="text-muted-foreground mt-1">
-              Scheduled tasks from your hired agents will appear here
+              {myAgents.length > 0
+                ? "Create a schedule to have your agents perform tasks automatically"
+                : "Scheduled tasks from your hired agents will appear here"}
             </p>
+            {myAgents.length > 0 && (
+              <Button className="mt-4" onClick={() => setShowCreateDialog(true)}>
+                <Plus className="size-4 mr-2" />
+                Create Schedule
+              </Button>
+            )}
           </div>
         )}
       </div>
+
+      {/* Create Schedule Dialog */}
+      <CreateScheduleDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onSuccess={() => fetchSchedules(filters)}
+      />
     </div>
   )
 }

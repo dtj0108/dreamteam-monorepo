@@ -75,7 +75,8 @@ describe('tool-schema-validator', () => {
 
   describe('validateToolSchema - Schema validation', () => {
     it('reports error for missing schema', () => {
-      const tool = createTool({ input_schema: null as unknown as Record<string, unknown> })
+      // Use createInvalidTool to properly test null schema (createTool uses ?? which replaces null)
+      const tool = createInvalidTool('no_schema')
       const result = validateToolSchema(tool)
 
       expect(result.isValid).toBe(false)
@@ -259,7 +260,7 @@ describe('tool-schema-validator', () => {
         type: 'object',
         properties: {
           name: { type: 'string' },
-          age: { type: 'number' },
+          age: { type: 'integer' }, // Use integer since 30 is an integer
         },
         required: ['name', 'age'],
       }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Check, ChevronDown, Clock } from "lucide-react";
 import { Header } from "@/components/marketing/header-navigation/header";
 import { DreamTeamLogo } from "@/components/foundations/logo/dreamteam-logo";
 import { Button } from "@/components/base/buttons/button";
@@ -9,6 +9,32 @@ import { Badge } from "@/components/base/badges/badges";
 import { GitHub, LinkedIn, X } from "@/components/foundations/social-icons";
 import { cx } from "@/lib/cx";
 import { PricingCTA } from "@/components/billing/pricing-cta";
+
+// Types for API response
+interface PlanDisplayConfig {
+    tagline?: string;
+    badge_text?: string;
+    human_equivalent?: string;
+    agent_count?: number;
+    savings_text?: string;
+    departments?: Array<{
+        name: string;
+        agents: string[];
+    }>;
+}
+
+interface PublicPlan {
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    plan_type: 'workspace_plan' | 'agent_tier' | null;
+    price_monthly: number | null;
+    price_yearly: number | null;
+    features: string[];
+    is_coming_soon: boolean;
+    display_config: PlanDisplayConfig;
+}
 
 const footerSocials = [
     { label: "X (formerly Twitter)", icon: X, href: "https://x.com/" },
@@ -185,8 +211,23 @@ function DepartmentAccordion({ department, isExpanded, onToggle }: {
     );
 }
 
+// Display tier type for dynamic data
+interface DisplayAgentTier {
+    id: string;
+    name: string;
+    price: number;
+    priceDisplay: string;
+    agentCount: number;
+    humanEquivalent: string;
+    tagline: string;
+    description: string;
+    popular: boolean;
+    departments: Array<{ name: string; agents: string[] }>;
+    isComingSoon: boolean;
+}
+
 // Agent Tier Card Component
-function AgentTierCard({ tier }: { tier: typeof agentTiers[0] }) {
+function AgentTierCard({ tier }: { tier: DisplayAgentTier }) {
     const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set());
 
     const toggleDept = (deptName: string) => {
@@ -205,13 +246,20 @@ function AgentTierCard({ tier }: { tier: typeof agentTiers[0] }) {
         <div
             className={cx(
                 "relative flex flex-col rounded-2xl p-6",
-                tier.popular
+                tier.popular && !tier.isComingSoon
                     ? "bg-bg-primary ring-2 ring-brand-500 shadow-xl"
                     : "bg-bg-primary ring-1 ring-border-secondary shadow-md"
             )}
         >
-            {/* Popular Badge */}
-            {tier.popular && (
+            {/* Popular/Coming Soon Badge */}
+            {tier.isComingSoon ? (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Badge color="gray" type="modern" size="sm" className="bg-amber-50 text-amber-700 border-amber-200">
+                        <Clock className="mr-1 size-3" />
+                        Coming Soon
+                    </Badge>
+                </div>
+            ) : tier.popular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <Badge color="brand" type="modern" size="sm">
                         Most Popular
@@ -222,7 +270,9 @@ function AgentTierCard({ tier }: { tier: typeof agentTiers[0] }) {
             {/* Header */}
             <div className="mb-4">
                 <h3 className="text-lg font-semibold text-text-primary">{tier.name}</h3>
-                <p className="mt-1 text-xs italic text-text-tertiary">"{tier.tagline}"</p>
+                {tier.tagline && (
+                    <p className="mt-1 text-xs italic text-text-tertiary">"{tier.tagline}"</p>
+                )}
             </div>
 
             {/* Price + Agent Count */}
@@ -234,9 +284,11 @@ function AgentTierCard({ tier }: { tier: typeof agentTiers[0] }) {
                         </span>
                         <span className="text-sm text-text-tertiary">/month</span>
                     </div>
-                    <p className="mt-1 text-xs font-medium text-success-600">
-                        ${Math.round(tier.price / tier.agentCount)}/agent/mo
-                    </p>
+                    {tier.price > 0 && tier.agentCount > 0 && (
+                        <p className="mt-1 text-xs font-medium text-success-600">
+                            ${Math.round(tier.price / tier.agentCount)}/agent/mo
+                        </p>
+                    )}
                 </div>
                 <div className="text-right">
                     <p className="text-display-xs font-bold text-brand-600">{tier.agentCount}</p>
@@ -245,44 +297,121 @@ function AgentTierCard({ tier }: { tier: typeof agentTiers[0] }) {
             </div>
 
             {/* Human Comparison */}
-            <p className="mb-4 text-xs text-text-tertiary">
-                vs <span className="font-medium text-text-secondary">{tier.humanEquivalent}/year</span> in human salaries
-            </p>
+            {tier.humanEquivalent && (
+                <p className="mb-4 text-xs text-text-tertiary">
+                    vs <span className="font-medium text-text-secondary">{tier.humanEquivalent}/year</span> in human salaries
+                </p>
+            )}
 
             {/* Description */}
-            <p className="mb-4 rounded-lg bg-bg-secondary p-3 text-center text-xs font-medium text-text-secondary">
-                {tier.description}
-            </p>
+            {tier.description && (
+                <p className="mb-4 rounded-lg bg-bg-secondary p-3 text-center text-xs font-medium text-text-secondary">
+                    {tier.description}
+                </p>
+            )}
 
             {/* Departments */}
-            <div className="mb-4 flex-1 rounded-lg bg-gray-50 p-3">
-                <p className="mb-2 text-xs font-semibold uppercase text-text-quaternary">
-                    7 Departments
-                </p>
-                {tier.departments.map((dept) => (
-                    <DepartmentAccordion
-                        key={dept.name}
-                        department={dept}
-                        isExpanded={expandedDepts.has(dept.name)}
-                        onToggle={() => toggleDept(dept.name)}
-                    />
-                ))}
-            </div>
+            {tier.departments.length > 0 && (
+                <div className="mb-4 flex-1 rounded-lg bg-gray-50 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase text-text-quaternary">
+                        {tier.departments.length} Departments
+                    </p>
+                    {tier.departments.map((dept) => (
+                        <DepartmentAccordion
+                            key={dept.name}
+                            department={dept}
+                            isExpanded={expandedDepts.has(dept.name)}
+                            onToggle={() => toggleDept(dept.name)}
+                        />
+                    ))}
+                </div>
+            )}
 
             {/* CTA */}
             <PricingCTA
                 tier={tier.id as "startup" | "teams" | "enterprise"}
-                color={tier.popular ? "primary" : "secondary"}
+                color={tier.popular && !tier.isComingSoon ? "primary" : "secondary"}
                 size="md"
                 className="w-full"
+                isComingSoon={tier.isComingSoon}
             >
-                Get Started
+                {tier.isComingSoon ? (
+                    <span className="flex items-center justify-center gap-2">
+                        <span>⏳</span> Coming Soon
+                    </span>
+                ) : "Get Started"}
             </PricingCTA>
         </div>
     );
 }
 
 export function PricingContent() {
+    // State for fetched plans
+    const [fetchedWorkspacePlans, setFetchedWorkspacePlans] = useState<PublicPlan[]>([]);
+    const [fetchedAgentTiers, setFetchedAgentTiers] = useState<PublicPlan[]>([]);
+    const [plansLoaded, setPlansLoaded] = useState(false);
+
+    // Fetch plans from API
+    useEffect(() => {
+        async function fetchPlans() {
+            try {
+                const res = await fetch('/api/plans');
+                if (res.ok) {
+                    const data = await res.json();
+                    const plans: PublicPlan[] = data.plans || [];
+
+                    // Split by plan type
+                    setFetchedWorkspacePlans(plans.filter(p => p.plan_type === 'workspace_plan'));
+                    setFetchedAgentTiers(plans.filter(p => p.plan_type === 'agent_tier'));
+                }
+            } catch (error) {
+                console.error('Failed to fetch plans:', error);
+                // Will fall back to hardcoded data
+            } finally {
+                setPlansLoaded(true);
+            }
+        }
+        fetchPlans();
+    }, []);
+
+    // Transform API plans to display format (with fallback to hardcoded)
+    const displayWorkspacePlans = fetchedWorkspacePlans.length > 0
+        ? fetchedWorkspacePlans.map(plan => ({
+            id: plan.slug,
+            name: plan.name,
+            price: plan.price_monthly ? plan.price_monthly / 100 : 0,
+            period: "/month" as const,
+            subtext: plan.slug === 'annual'
+                ? `$${plan.price_yearly ? plan.price_yearly / 100 : 0}/year, billed annually`
+                : "Billed monthly",
+            popular: plan.display_config.badge_text === 'Best Value',
+            savings: plan.display_config.savings_text || (plan.slug === 'monthly' ? "Cancel anytime" : ""),
+            isComingSoon: plan.is_coming_soon,
+            features: plan.features,
+        }))
+        : workspacePlans.map(p => ({ ...p, isComingSoon: false, features: workspaceFeatures }));
+
+    const displayAgentTiers = fetchedAgentTiers.length > 0
+        ? fetchedAgentTiers.map(plan => ({
+            id: plan.slug,
+            name: plan.name,
+            price: plan.price_monthly ? plan.price_monthly / 100 : 0,
+            priceDisplay: plan.price_monthly ? `$${Math.round(plan.price_monthly / 100 / 1000)}K` : "$0",
+            agentCount: plan.display_config.agent_count || 0,
+            humanEquivalent: plan.display_config.human_equivalent || "",
+            tagline: plan.display_config.tagline || "",
+            description: plan.description || "",
+            popular: plan.display_config.badge_text === 'Most Popular',
+            departments: plan.display_config.departments || [],
+            isComingSoon: plan.is_coming_soon,
+        }))
+        : agentTiers.map(t => ({ ...t, isComingSoon: false }));
+
+    // Use fetched features or fallback
+    const displayWorkspaceFeatures = fetchedWorkspacePlans.length > 0 && fetchedWorkspacePlans[0]?.features.length > 0
+        ? fetchedWorkspacePlans[0].features
+        : workspaceFeatures;
+
     return (
         <div className="min-h-screen bg-bg-primary">
             <Header />
@@ -323,7 +452,7 @@ export function PricingContent() {
 
                     {/* Two Workspace Cards */}
                     <div className="mx-auto grid max-w-3xl grid-cols-1 gap-6 md:grid-cols-2">
-                        {workspacePlans.map((plan) => (
+                        {displayWorkspacePlans.map((plan) => (
                             <div
                                 key={plan.id}
                                 className={cx(
@@ -333,8 +462,15 @@ export function PricingContent() {
                                         : "bg-bg-primary ring-1 ring-border-secondary shadow-md"
                                 )}
                             >
-                                {/* Popular Badge */}
-                                {plan.popular && (
+                                {/* Popular/Coming Soon Badge */}
+                                {plan.isComingSoon ? (
+                                    <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
+                                        <Badge color="gray" type="modern" size="sm" className="bg-amber-50 text-amber-700 border-amber-200">
+                                            <Clock className="mr-1 size-3" />
+                                            Coming Soon
+                                        </Badge>
+                                    </div>
+                                ) : plan.popular && (
                                     <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
                                         <Badge color="brand" type="modern" size="sm">
                                             Best Value
@@ -367,15 +503,20 @@ export function PricingContent() {
                                     color={plan.popular ? "primary" : "secondary"}
                                     size="md"
                                     className="mb-5 w-full"
+                                    isComingSoon={plan.isComingSoon}
                                 >
-                                    Get Started
+                                    {plan.isComingSoon ? (
+                                        <span className="flex items-center justify-center gap-2">
+                                            <span>⏳</span> Coming Soon
+                                        </span>
+                                    ) : "Get Started"}
                                 </PricingCTA>
 
                                 {/* Features */}
                                 <div>
                                     <p className="mb-2 text-xs font-semibold text-text-secondary">INCLUDES</p>
                                     <ul className="space-y-1.5">
-                                        {workspaceFeatures.map((feature, index) => (
+                                        {displayWorkspaceFeatures.map((feature, index) => (
                                             <li key={index} className="flex items-start gap-2">
                                                 <Check className="mt-0.5 size-4 shrink-0 text-brand-600" />
                                                 <span className="text-xs text-text-secondary">{feature}</span>
@@ -408,21 +549,23 @@ export function PricingContent() {
                     </div>
 
                     {/* Agent Count Comparison */}
-                    <div className="mb-10 flex items-center justify-center gap-2 text-center">
-                        <span className="text-2xl font-bold text-text-primary">7</span>
-                        <span className="text-text-tertiary">→</span>
-                        <span className="text-2xl font-bold text-text-primary">18</span>
-                        <span className="text-text-tertiary">→</span>
-                        <span className="text-2xl font-bold text-brand-600">38 agents</span>
-                    </div>
+                    {displayAgentTiers.length >= 3 && (
+                        <div className="mb-10 flex items-center justify-center gap-2 text-center">
+                            <span className="text-2xl font-bold text-text-primary">{displayAgentTiers[0]?.agentCount || 7}</span>
+                            <span className="text-text-tertiary">→</span>
+                            <span className="text-2xl font-bold text-text-primary">{displayAgentTiers[1]?.agentCount || 18}</span>
+                            <span className="text-text-tertiary">→</span>
+                            <span className="text-2xl font-bold text-brand-600">{displayAgentTiers[2]?.agentCount || 38} agents</span>
+                        </div>
+                    )}
 
-                    <p className="mb-8 text-center text-sm text-text-tertiary">
-                        Agent packages require an active Workspace subscription
+                    <p className="mb-8 text-center text-lg italic text-text-tertiary">
+                        Startup package customers get early access to new agent packages
                     </p>
 
                     {/* Agent Tier Cards */}
                     <div className="grid gap-6 lg:grid-cols-3">
-                        {agentTiers.map((tier) => (
+                        {displayAgentTiers.map((tier) => (
                             <AgentTierCard key={tier.id} tier={tier} />
                         ))}
                     </div>

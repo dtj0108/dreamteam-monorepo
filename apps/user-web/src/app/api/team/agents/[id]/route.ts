@@ -84,7 +84,7 @@ export async function PUT(
     const supabase = createAdminClient()
     const { id } = await params
     const body = await request.json()
-    const { name, description, systemPrompt, tools, model, avatarUrl, isActive, reportsTo } = body
+    const { name, description, systemPrompt, tools, model, avatarUrl, isActive, reportsTo, stylePresets, customInstructions } = body
 
     // Get the agent first
     const { data: agent, error: fetchError } = await supabase
@@ -136,6 +136,9 @@ export async function PUT(
     if (isActive !== undefined) updateData.is_active = isActive
     // reportsTo is now an array of profile IDs
     if (reportsTo !== undefined) updateData.reports_to = Array.isArray(reportsTo) ? reportsTo : []
+    // Style presets and custom instructions for personality customization
+    if (stylePresets !== undefined) updateData.style_presets = stylePresets
+    if (customInstructions !== undefined) updateData.custom_instructions = customInstructions?.trim() || null
 
     const { data: updated, error: updateError } = await supabase
       .from("agents")

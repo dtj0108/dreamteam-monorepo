@@ -9,6 +9,17 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ executionId: string }> }
 ) {
+  // #region agent log
+  const fs = require('fs')
+  const logPath = '/Users/drewbaskin/dreamteam-monorepo-1/.cursor/debug.log'
+  const log = (msg: string, data: Record<string, unknown>) => {
+    const entry = JSON.stringify({ location: 'approve-route.ts', message: msg, data, timestamp: Date.now(), sessionId: 'debug-session', runId: 'admin-path' }) + '\n'
+    try { fs.appendFileSync(logPath, entry) } catch {}
+    console.log(`[DEBUG] ${msg}:`, JSON.stringify(data))
+  }
+  log('Approve route called', { path: request.url })
+  // #endregion
+
   try {
     const { error, user } = await requireSuperadmin()
     if (error) return error
@@ -17,16 +28,24 @@ export async function POST(
     const supabase = createAdminClient()
     const now = new Date()
 
-    // Get execution
+    // Get execution (include provider for correct AI SDK selection)
     const { data: execution, error: execError } = await supabase
       .from('agent_schedule_executions')
       .select(`
         *,
         schedule:agent_schedules(id, name, task_prompt, created_by, workspace_id),
-        agent:ai_agents(id, name, model, system_prompt, is_enabled)
+        agent:ai_agents(id, name, model, provider, system_prompt, is_enabled)
       `)
       .eq('id', executionId)
       .single()
+
+    log('Fetched execution', { 
+      executionId, 
+      hasExecution: !!execution, 
+      error: execError?.message,
+      agentProvider: execution?.agent?.provider,
+      agentModel: execution?.agent?.model
+    })
 
     if (execError || !execution) {
       return NextResponse.json({ error: 'Execution not found' }, { status: 404 })
@@ -70,7 +89,14 @@ export async function POST(
 
     try {
       const taskPrompt = execution.schedule?.task_prompt || 'Execute scheduled task'
+      log('About to call runAgentById', { 
+        agentId: execution.agent_id, 
+        agentProvider: execution.agent?.provider,
+        agentModel: execution.agent?.model,
+        taskPromptPreview: taskPrompt.substring(0, 100)
+      })
       const result = await runAgentById(execution.agent_id, taskPrompt)
+      log('runAgentById returned', { success: result.success, error: result.error })
       const duration = Date.now() - startTime
 
       await supabase
@@ -140,6 +166,11 @@ export async function POST(
       })
     } catch (execError) {
       const duration = Date.now() - startTime
+      log('runAgentById threw error', { 
+        error: execError instanceof Error ? execError.message : String(execError),
+        errorName: execError instanceof Error ? execError.name : 'unknown',
+        duration
+      })
 
       await supabase
         .from('agent_schedule_executions')

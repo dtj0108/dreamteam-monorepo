@@ -16,6 +16,13 @@ let xaiInstance: ReturnType<typeof createXai> | null = null
  * @deprecated Use getProviderWithDbKey for production use
  */
 export function getProvider(provider: AIProvider) {
+  // #region agent log
+  const fs = require('fs')
+  const logPath = '/Users/drewbaskin/dreamteam-monorepo-1/.cursor/debug.log'
+  const logEntry = JSON.stringify({location:'ai-sdk-provider.ts:getProvider',message:'Getting provider instance',data:{provider,hasAnthropicKey:!!process.env.ANTHROPIC_API_KEY,hasXaiKey:!!process.env.XAI_API_KEY,anthropicKeyLength:process.env.ANTHROPIC_API_KEY?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H-provider-init'}) + '\n'
+  try { fs.appendFileSync(logPath, logEntry) } catch {}
+  // #endregion
+
   switch (provider) {
     case 'anthropic':
       if (!anthropicInstance) {

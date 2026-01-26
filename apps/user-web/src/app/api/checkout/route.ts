@@ -47,28 +47,48 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine price ID and session type based on request
-    let priceId: string
+    let priceId: string | null = null
     let sessionType: 'workspace_plan' | 'agent_tier'
     let targetPlan: string
     let successParam: string
 
     if (type === 'workspace_plan' && plan) {
-      priceId = STRIPE_PRICES.workspace[plan]
       sessionType = 'workspace_plan'
       targetPlan = plan
       successParam = `plan=${plan}`
+
+      // Try to get Stripe price ID from database first
+      const { data: planData } = await supabase
+        .from('plans')
+        .select('stripe_price_id')
+        .eq('slug', plan)
+        .eq('is_active', true)
+        .eq('plan_type', 'workspace_plan')
+        .single()
+
+      priceId = planData?.stripe_price_id || STRIPE_PRICES.workspace[plan]
     } else if (type === 'agent_tier' && tier) {
-      priceId = STRIPE_PRICES.agents[tier]
       sessionType = 'agent_tier'
       targetPlan = tier
       successParam = `tier=${tier}`
+
+      // Try to get Stripe price ID from database first
+      const { data: planData } = await supabase
+        .from('plans')
+        .select('stripe_price_id')
+        .eq('slug', tier)
+        .eq('is_active', true)
+        .eq('plan_type', 'agent_tier')
+        .single()
+
+      priceId = planData?.stripe_price_id || STRIPE_PRICES.agents[tier]
     } else {
       return NextResponse.json({ error: 'Invalid request. Plan or tier is required.' }, { status: 400 })
     }
 
     if (!priceId) {
       return NextResponse.json(
-        { error: 'Stripe price not configured. Please check environment variables.' },
+        { error: 'Stripe price not configured. Please set up Stripe pricing in admin or environment variables.' },
         { status: 500 }
       )
     }

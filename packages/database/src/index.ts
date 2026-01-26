@@ -10,3 +10,14 @@ export * from './types'
 // Queries
 export * from './queries'
 
+// Auto-deploy
+export {
+  autoDeployTeamForPlan,
+  getWorkspaceDeployment,
+  toggleAgentEnabled,
+  type AutoDeployResult,
+  type DeployedTeamConfig,
+  type DeployedAgent,
+  type Customizations,
+} from './auto-deploy'
+

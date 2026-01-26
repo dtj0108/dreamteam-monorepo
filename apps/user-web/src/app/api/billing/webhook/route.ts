@@ -20,6 +20,7 @@ import {
   markCallMinutesPurchaseFailed,
 } from '@/lib/addons-queries'
 import { type CreditBundle } from '@/types/addons'
+import { autoDeployTeamForPlan } from '@dreamteam/database'
 
 /**
  * POST /api/billing/webhook
@@ -112,6 +113,17 @@ export async function POST(request: NextRequest) {
 
         // Update billing from subscription
         await updateBillingFromSubscription(workspaceId, subscriptionId, sessionType as 'workspace_plan' | 'agent_tier', targetPlan)
+
+        // Auto-deploy team for agent tier subscriptions
+        if (sessionType === 'agent_tier' && targetPlan) {
+          console.log(`[auto-deploy] Triggering deployment for workspace ${workspaceId} with plan ${targetPlan}`)
+          const deployResult = await autoDeployTeamForPlan(workspaceId, targetPlan)
+          if (deployResult.deployed) {
+            console.log(`[auto-deploy] Successfully deployed team ${deployResult.teamId} to workspace ${workspaceId}`)
+          } else {
+            console.error(`[auto-deploy] Failed to deploy team for workspace ${workspaceId}: ${deployResult.error}`)
+          }
+        }
 
         console.log(`Checkout completed for workspace ${workspaceId}: ${sessionType} -> ${targetPlan}`)
         break

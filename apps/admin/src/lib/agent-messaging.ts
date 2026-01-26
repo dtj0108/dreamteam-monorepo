@@ -65,6 +65,142 @@ export function formatTaskCompletionMessage(params: {
   return `**Scheduled Task Failed**\n\nI encountered an error running: **${scheduleName}**\n\n**Task:** ${taskPrompt}\n\n**Error:** ${resultText}`
 }
 
+// ============================================================================
+// DM Messages (Teammate-style notifications)
+// ============================================================================
+
+interface SendAgentDMParams {
+  agentId: string           // agents.id (local agent ID)
+  recipientProfileId: string // User's profile_id
+  workspaceId: string
+  content: string
+  supabase: SupabaseClient
+}
+
+interface SendAgentDMResult {
+  success: boolean
+  messageId?: string
+  conversationId?: string
+  error?: string
+}
+
+/**
+ * Send a DM message as an agent to a user (like a teammate).
+ * This finds or creates a DM conversation and inserts a message
+ * using the agent's profile_id as the sender.
+ */
+export async function sendAgentDM(
+  params: SendAgentDMParams
+): Promise<SendAgentDMResult> {
+  const { agentId, recipientProfileId, workspaceId, content, supabase } = params
+
+  console.log(`[AgentMessaging] Sending DM from agent ${agentId} to user ${recipientProfileId}`)
+
+  try {
+    // 1. Get the agent's profile_id
+    const { data: agent, error: agentError } = await supabase
+      .from("agents")
+      .select("id, profile_id, name")
+      .eq("id", agentId)
+      .single()
+
+    if (agentError || !agent) {
+      console.error("[AgentMessaging] Agent not found:", agentError)
+      return { success: false, error: `Agent not found: ${agentError?.message}` }
+    }
+
+    if (!agent.profile_id) {
+      console.error("[AgentMessaging] Agent has no profile_id:", agentId)
+      return { success: false, error: "Agent has no associated profile" }
+    }
+
+    const agentProfileId = agent.profile_id
+
+    // 2. Find existing DM conversation between agent and user
+    let conversationId: string | null = null
+
+    const { data: agentConvos } = await supabase
+      .from("dm_participants")
+      .select(`conversation_id, dm_conversation:conversation_id(id, workspace_id)`)
+      .eq("profile_id", agentProfileId)
+
+    for (const convo of agentConvos || []) {
+      const dmConvoRaw = convo.dm_conversation
+      const dmConvo = Array.isArray(dmConvoRaw) ? dmConvoRaw[0] : dmConvoRaw
+      if (!dmConvo || dmConvo.workspace_id !== workspaceId) continue
+
+      const { data: recipientParticipant } = await supabase
+        .from("dm_participants")
+        .select("profile_id")
+        .eq("conversation_id", convo.conversation_id)
+        .eq("profile_id", recipientProfileId)
+        .single()
+
+      if (recipientParticipant) {
+        conversationId = convo.conversation_id
+        break
+      }
+    }
+
+    // 3. If no conversation exists, create one
+    if (!conversationId) {
+      const { data: newConvo, error: createError } = await supabase
+        .from("dm_conversations")
+        .insert({ workspace_id: workspaceId })
+        .select("id")
+        .single()
+
+      if (createError || !newConvo) {
+        console.error("[AgentMessaging] Could not create DM conversation:", createError)
+        return { success: false, error: `Failed to create conversation: ${createError?.message}` }
+      }
+
+      conversationId = newConvo.id
+
+      // Add both participants
+      const { error: participantsError } = await supabase
+        .from("dm_participants")
+        .insert([
+          { conversation_id: conversationId, profile_id: agentProfileId },
+          { conversation_id: conversationId, profile_id: recipientProfileId },
+        ])
+
+      if (participantsError) {
+        console.error("[AgentMessaging] Could not add participants:", participantsError)
+        await supabase.from("dm_conversations").delete().eq("id", conversationId)
+        return { success: false, error: `Failed to add participants: ${participantsError.message}` }
+      }
+    }
+
+    // 4. Insert the message with sender_id = agent's profile_id
+    const { data: message, error: messageError } = await supabase
+      .from("messages")
+      .insert({
+        workspace_id: workspaceId,
+        dm_conversation_id: conversationId,
+        sender_id: agentProfileId,
+        content,
+      })
+      .select("id")
+      .single()
+
+    if (messageError || !message) {
+      console.error("[AgentMessaging] Could not insert message:", messageError)
+      return { success: false, error: `Failed to send message: ${messageError?.message}` }
+    }
+
+    console.log(`[AgentMessaging] DM sent successfully: ${message.id}`)
+    return { success: true, messageId: message.id, conversationId: conversationId ?? undefined }
+  } catch (error) {
+    console.error("[AgentMessaging] Unexpected error:", error)
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+  }
+}
+
+// ============================================================================
+// Agent Chat Messages (for Agent Conversation Page) 
+// ============================================================================
+
 interface SendAgentChatMessageParams {
   agentId: string           // agents.id (local agent ID)
   userId: string            // User's profile_id
@@ -179,7 +315,7 @@ export async function sendAgentChatMessage(
 
 interface LocalAgentInfo {
   id: string
-  reports_to: string | null
+  reports_to: string | string[] | null  // Can be single ID or array of IDs
   workspace_id: string
 }
 
@@ -226,10 +362,13 @@ export async function resolveNotificationRecipients(params: {
   const { localAgent, scheduleCreatedBy, workspaceId, supabase } = params
   const recipients: string[] = []
 
-  // 1. Try reports_to from local agent
+  // 1. Try reports_to from local agent (can be string or array)
   if (localAgent?.reports_to) {
-    recipients.push(localAgent.reports_to)
-    console.log(`[AgentMessaging] Using reports_to: ${localAgent.reports_to}`)
+    const reportsToIds = Array.isArray(localAgent.reports_to) 
+      ? localAgent.reports_to 
+      : [localAgent.reports_to]
+    recipients.push(...reportsToIds.filter(Boolean))
+    console.log(`[AgentMessaging] Using reports_to: ${recipients.join(', ')}`)
     return recipients
   }
 
@@ -286,6 +425,16 @@ interface SendScheduledTaskNotificationResult {
 export async function sendScheduledTaskNotification(
   params: SendScheduledTaskNotificationParams
 ): Promise<SendScheduledTaskNotificationResult> {
+  // #region agent log
+  const fs = require('fs')
+  const logPath = '/Users/drewbaskin/dreamteam-monorepo-1/.cursor/debug.log'
+  const logMsg = (msg: string, data: Record<string, unknown>) => {
+    const entry = JSON.stringify({ location: 'agent-messaging.ts:sendScheduledTaskNotification', message: msg, data, timestamp: Date.now(), sessionId: 'debug-session', runId: 'msg-debug' }) + '\n'
+    try { fs.appendFileSync(logPath, entry) } catch {}
+    console.log(`[MSG DEBUG] ${msg}:`, JSON.stringify(data))
+  }
+  // #endregion
+
   const {
     aiAgentId,
     scheduleName,
@@ -298,18 +447,23 @@ export async function sendScheduledTaskNotification(
     supabase,
   } = params
 
+  logMsg('sendScheduledTaskNotification called', { aiAgentId, scheduleName, status, workspaceId, scheduleCreatedBy })
+
   const errors: string[] = []
 
   // If no workspace ID, we can't send notifications
   if (!workspaceId) {
+    logMsg('No workspace ID, skipping', {})
     console.log('[AgentMessaging] No workspace ID provided, skipping notification')
     return { success: false, recipientCount: 0, errors: ['No workspace ID provided'] }
   }
 
   // Find the local agent for this workspace
   const localAgent = await findLocalAgent(aiAgentId, workspaceId, supabase)
+  logMsg('findLocalAgent result', { hasLocalAgent: !!localAgent, localAgentId: localAgent?.id, reportsTo: localAgent?.reports_to })
 
   if (!localAgent) {
+    logMsg('No local agent found, skipping', { aiAgentId, workspaceId })
     console.log(`[AgentMessaging] No local agent found for ai_agent ${aiAgentId} in workspace ${workspaceId}, skipping notification`)
     return { success: false, recipientCount: 0, errors: ['No local agent found in workspace'] }
   }
@@ -321,8 +475,10 @@ export async function sendScheduledTaskNotification(
     workspaceId,
     supabase,
   })
+  logMsg('Recipients resolved', { recipientCount: recipients.length, recipients })
 
   if (recipients.length === 0) {
+    logMsg('No recipients found', {})
     return { success: false, recipientCount: 0, errors: ['No recipients found'] }
   }
 
@@ -335,16 +491,18 @@ export async function sendScheduledTaskNotification(
     durationMs,
   })
 
-  // Send to each recipient
+  // Send to each recipient via DM (like a teammate)
   let successCount = 0
   for (const recipientId of recipients) {
-    const result = await sendAgentChatMessage({
+    logMsg('Sending DM to recipient', { recipientId, localAgentId: localAgent.id })
+    const result = await sendAgentDM({
       agentId: localAgent.id,
-      userId: recipientId,
+      recipientProfileId: recipientId,
       workspaceId,
       content,
       supabase,
     })
+    logMsg('sendAgentDM result', { recipientId, success: result.success, error: result.error, conversationId: result.conversationId })
 
     if (result.success) {
       successCount++
@@ -353,6 +511,7 @@ export async function sendScheduledTaskNotification(
     }
   }
 
+  logMsg('Notification complete', { successCount, totalRecipients: recipients.length, errors })
   console.log(`[AgentMessaging] Sent scheduled task notification to ${successCount}/${recipients.length} recipients`)
 
   return {

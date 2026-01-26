@@ -103,6 +103,20 @@ export interface TeamDelegation {
 // PLAN TYPES
 // ============================================
 
+export type PlanType = 'workspace_plan' | 'agent_tier'
+
+export interface PlanDisplayConfig {
+  tagline?: string
+  badge_text?: string
+  human_equivalent?: string
+  agent_count?: number
+  savings_text?: string
+  departments?: Array<{
+    name: string
+    agents: string[]
+  }>
+}
+
 export interface Plan {
   id: string
   name: string
@@ -112,8 +126,14 @@ export interface Plan {
   price_monthly: number | null
   price_yearly: number | null
   is_active: boolean
+  is_coming_soon: boolean
+  plan_type: PlanType | null
   features: string[]
   limits: Record<string, number>
+  display_config: PlanDisplayConfig
+  stripe_price_id: string | null
+  stripe_price_id_yearly: string | null
+  stripe_product_id: string | null
   created_at: string
   updated_at: string
 }
@@ -184,6 +204,12 @@ export interface CreatePlanRequest {
   features?: string[]
   limits?: Record<string, number>
   is_active?: boolean
+  is_coming_soon?: boolean
+  plan_type?: PlanType
+  display_config?: PlanDisplayConfig
+  stripe_price_id?: string
+  stripe_price_id_yearly?: string
+  stripe_product_id?: string
 }
 
 export interface UpdatePlanRequest {
@@ -196,6 +222,12 @@ export interface UpdatePlanRequest {
   features?: string[]
   limits?: Record<string, number>
   is_active?: boolean
+  is_coming_soon?: boolean
+  plan_type?: PlanType | null
+  display_config?: PlanDisplayConfig
+  stripe_price_id?: string | null
+  stripe_price_id_yearly?: string | null
+  stripe_product_id?: string | null
 }
 
 // ============================================

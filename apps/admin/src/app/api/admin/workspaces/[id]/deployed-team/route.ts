@@ -31,14 +31,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })
     }
 
-    // Get deployed team with source team info
+    // Get deployed team with source team info (simplified - removed profile joins that had column mismatch)
     const { data: deployment, error: deployError } = await supabase
       .from('workspace_deployed_teams')
       .select(`
         *,
-        source_team:teams(id, name, slug, current_version),
-        deployed_by_profile:profiles!workspace_deployed_teams_deployed_by_fkey(id, email, full_name),
-        last_customized_by_profile:profiles!workspace_deployed_teams_last_customized_by_fkey(id, email, full_name)
+        source_team:teams(id, name, slug, current_version)
       `)
       .eq('workspace_id', workspaceId)
       .eq('status', 'active')

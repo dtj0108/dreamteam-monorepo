@@ -17,7 +17,10 @@ const nextConfig: NextConfig = {
   async rewrites() {
     const agentServerUrl = process.env.NODE_ENV === 'production'
       ? "https://agent-server-production-580f.up.railway.app"
-      : (process.env.AGENT_SERVER_URL || "http://localhost:3003");
+      : (process.env.AGENT_SERVER_URL || "http://localhost:3002");
+    // #region agent log
+    console.log(`[DEBUG] agent-server rewrite target: ${agentServerUrl}`);
+    // #endregion
     
     return {
       beforeFiles: [
