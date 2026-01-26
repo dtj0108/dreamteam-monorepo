@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react"
+import type { ScheduledSMS } from "@/types/scheduled-sms"
 
 export interface CalendarInfo {
   id: string
@@ -40,6 +41,17 @@ export interface CalendarEvent {
   }
 }
 
+export interface ScheduledSMSEvent {
+  id: string
+  type: 'scheduled_sms'
+  title: string
+  body: string
+  to_number: string
+  scheduled_for: string
+  lead_id?: string | null
+  contact_id?: string | null
+}
+
 interface CalendarContextValue {
   // Grant
   grantId: string | null
@@ -55,6 +67,11 @@ interface CalendarContextValue {
   events: CalendarEvent[]
   loadingEvents: boolean
   fetchEvents: (startTime: number, endTime: number) => Promise<void>
+
+  // Scheduled SMS
+  scheduledSMS: ScheduledSMSEvent[]
+  loadingScheduledSMS: boolean
+  fetchScheduledSMS: (startDate: string, endDate: string) => Promise<void>
 
   // Date range
   startDate: Date
@@ -127,6 +144,8 @@ export function CalendarProvider({
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loadingCalendars, setLoadingCalendars] = useState(false)
   const [loadingEvents, setLoadingEvents] = useState(false)
+  const [scheduledSMS, setScheduledSMS] = useState<ScheduledSMSEvent[]>([])
+  const [loadingScheduledSMS, setLoadingScheduledSMS] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<'month' | 'week' | 'day'>('week')
 
@@ -217,6 +236,47 @@ export function CalendarProvider({
       setLoadingEvents(false)
     }
   }, [grantId, selectedCalendarId])
+
+  // Fetch scheduled SMS
+  const fetchScheduledSMS = useCallback(async (startDateStr: string, endDateStr: string) => {
+    setLoadingScheduledSMS(true)
+
+    try {
+      const params = new URLSearchParams({
+        status: 'pending',
+        startDate: startDateStr,
+        endDate: endDateStr,
+      })
+
+      const res = await fetch(`/api/communications/sms/scheduled?${params}`)
+      if (!res.ok) {
+        console.error('Failed to fetch scheduled SMS')
+        setScheduledSMS([])
+        return
+      }
+
+      const data: ScheduledSMS[] = await res.json()
+
+      // Transform to ScheduledSMSEvent format
+      const smsEvents: ScheduledSMSEvent[] = data.map((sms) => ({
+        id: sms.id,
+        type: 'scheduled_sms' as const,
+        title: `SMS to ${formatPhoneForDisplay(sms.to_number)}`,
+        body: sms.body,
+        to_number: sms.to_number,
+        scheduled_for: sms.scheduled_for,
+        lead_id: sms.lead_id,
+        contact_id: sms.contact_id,
+      }))
+
+      setScheduledSMS(smsEvents)
+    } catch (err) {
+      console.error('Failed to fetch scheduled SMS:', err)
+      setScheduledSMS([])
+    } finally {
+      setLoadingScheduledSMS(false)
+    }
+  }, [])
 
   // Create event
   const createEventHandler = useCallback(async (input: CreateEventInput): Promise<boolean> => {
@@ -369,6 +429,11 @@ export function CalendarProvider({
     }
   }, [selectedCalendarId, startDate, endDate, fetchEvents])
 
+  // Load scheduled SMS when date range changes
+  useEffect(() => {
+    fetchScheduledSMS(startDate.toISOString(), endDate.toISOString())
+  }, [startDate, endDate, fetchScheduledSMS])
+
   return (
     <CalendarContext.Provider
       value={{
@@ -381,6 +446,9 @@ export function CalendarProvider({
         events,
         loadingEvents,
         fetchEvents,
+        scheduledSMS,
+        loadingScheduledSMS,
+        fetchScheduledSMS,
         startDate,
         endDate,
         setDateRange,
@@ -396,4 +464,12 @@ export function CalendarProvider({
       {children}
     </CalendarContext.Provider>
   )
+}
+
+function formatPhoneForDisplay(phone: string): string {
+  const match = phone.match(/^\+1(\d{3})(\d{3})(\d{4})$/)
+  if (match) {
+    return `(${match[1]}) ${match[2]}-${match[3]}`
+  }
+  return phone
 }

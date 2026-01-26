@@ -39,6 +39,9 @@ import type {
 } from "@/types/workflow"
 import { getActionDefinition, CONDITION_OPERATORS } from "@/types/workflow"
 import { ConditionFieldPicker } from "./condition-field-picker"
+import { TemplateSelector } from "@/components/email-templates/template-selector"
+import { SMSTemplateSelector } from "@/components/sms-templates"
+import { getSegmentInfo, SMS_TEMPLATE_VARIABLES } from "@/types/sms-template"
 
 interface ConfigSidePanelProps {
   action: WorkflowAction | null
@@ -110,6 +113,24 @@ export function ConfigSidePanel({
       case "send_email":
         return (
           <div className="space-y-4">
+            {/* Template Selector */}
+            <div className="space-y-2">
+              <Label>Use Template (optional)</Label>
+              <TemplateSelector
+                value={config.template_id as string | undefined}
+                onSelect={(templateId, template) => {
+                  updateConfig("template_id", templateId)
+                  if (template) {
+                    updateConfig("subject", template.subject)
+                    updateConfig("body", template.body)
+                  }
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Select a template to auto-fill subject and body
+              </p>
+            </div>
+
             {/* Email Account Selector */}
             <div className="space-y-2">
               <Label htmlFor="nylas_grant_id">Send From</Label>
@@ -216,9 +237,29 @@ export function ConfigSidePanel({
           </div>
         )
 
-      case "send_sms":
+      case "send_sms": {
+        const messageText = (config.message as string) || ""
+        const segmentInfo = getSegmentInfo(messageText)
+
         return (
           <div className="space-y-4">
+            {/* Template Selector */}
+            <div className="space-y-2">
+              <Label>Use Template (optional)</Label>
+              <SMSTemplateSelector
+                value={config.template_id as string | undefined}
+                onSelect={(templateId, template) => {
+                  updateConfig("template_id", templateId)
+                  if (template) {
+                    updateConfig("message", template.body)
+                  }
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Select a template to auto-fill the message
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="phone_source">Phone Number</Label>
               <Select
@@ -249,18 +290,24 @@ export function ConfigSidePanel({
               <Label htmlFor="message">Message</Label>
               <Textarea
                 id="message"
-                value={(config.message as string) || ""}
+                value={messageText}
                 onChange={(e) => updateConfig("message", e.target.value)}
                 placeholder="SMS message content..."
                 rows={3}
-                maxLength={160}
               />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>
+                  {segmentInfo.charCount} chars • {segmentInfo.segments} segment{segmentInfo.segments !== 1 ? "s" : ""} ({segmentInfo.encoding})
+                </span>
+                <span>{segmentInfo.remaining} remaining</span>
+              </div>
               <p className="text-xs text-muted-foreground">
-                {160 - ((config.message as string)?.length || 0)} characters remaining
+                Use {SMS_TEMPLATE_VARIABLES.slice(0, 3).map(v => v.variable).join(", ")} for dynamic content
               </p>
             </div>
           </div>
         )
+      }
 
       case "send_notification":
         return (
