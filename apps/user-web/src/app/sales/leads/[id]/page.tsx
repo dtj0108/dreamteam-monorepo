@@ -51,7 +51,7 @@ import { TaskForm, type LeadTask } from "@/components/sales/task-form"
 import { OpportunityForm, type LeadOpportunity } from "@/components/sales/opportunity-form"
 import { LeadActivityTimeline } from "@/components/sales/lead-activity-timeline"
 import { CommunicationPanel } from "@/components/sales/communication-panel"
-import { SmsDialog, NoteDialog } from "@/components/sales/lead-quick-actions"
+import { SmsDialog, NoteDialog, EmailDialog } from "@/components/sales/lead-quick-actions"
 import { useCall } from "@/providers"
 
 interface Activity {
@@ -121,6 +121,8 @@ export default function LeadDetailPage() {
   const [contactSearch, setContactSearch] = React.useState("")
   const [smsDialogOpen, setSmsDialogOpen] = React.useState(false)
   const [noteDialogOpen, setNoteDialogOpen] = React.useState(false)
+  const [emailDialogOpen, setEmailDialogOpen] = React.useState(false)
+  const [emailContact, setEmailContact] = React.useState<Contact | undefined>()
   const [ownedNumbers, setOwnedNumbers] = React.useState<{ id: string; phone_number: string; is_primary: boolean }[]>([])
   const [pipelines, setPipelines] = React.useState<Pipeline[]>([])
   const { initiateCall, deviceState } = useCall()
@@ -407,13 +409,14 @@ export default function LeadDetailPage() {
             variant="outline"
             size="sm"
             className="gap-2"
-            asChild
+            onClick={() => {
+              setEmailContact(primaryContact)
+              setEmailDialogOpen(true)
+            }}
             disabled={!primaryContact?.email}
           >
-            <a href={primaryContact?.email ? `mailto:${primaryContact.email}` : "#"}>
-              <MailIcon className="size-4" />
-              Email
-            </a>
+            <MailIcon className="size-4" />
+            Email
           </Button>
           <Button
             variant="outline"
@@ -673,10 +676,16 @@ export default function LeadDetailPage() {
                             </div>
                             <div className="flex items-center gap-1">
                               {contact.email && (
-                                <Button variant="ghost" size="icon" className="size-7" asChild>
-                                  <a href={`mailto:${contact.email}`}>
-                                    <MailIcon className="size-4" />
-                                  </a>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-7"
+                                  onClick={() => {
+                                    setEmailContact(contact)
+                                    setEmailDialogOpen(true)
+                                  }}
+                                >
+                                  <MailIcon className="size-4" />
                                 </Button>
                               )}
                               {contact.phone && (
@@ -751,6 +760,11 @@ export default function LeadDetailPage() {
                   contactId={primaryContact.id}
                   phoneNumber={primaryContact.phone}
                   contactName={`${primaryContact.first_name} ${primaryContact.last_name || ""}`.trim()}
+                  contactFirstName={primaryContact.first_name}
+                  contactLastName={primaryContact.last_name}
+                  contactEmail={primaryContact.email}
+                  leadName={lead.name}
+                  leadCompany={lead.name}
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center">
@@ -839,6 +853,26 @@ export default function LeadDetailPage() {
         leadId={lead.id}
         onSuccess={fetchLead}
       />
+
+      {emailContact && (
+        <EmailDialog
+          open={emailDialogOpen}
+          onOpenChange={(open) => {
+            setEmailDialogOpen(open)
+            if (!open) setEmailContact(undefined)
+          }}
+          leadId={lead.id}
+          contact={{
+            id: emailContact.id,
+            first_name: emailContact.first_name,
+            last_name: emailContact.last_name,
+            email: emailContact.email,
+          }}
+          leadName={lead.name}
+          leadCompany={lead.name}
+          onSuccess={fetchLead}
+        />
+      )}
     </div>
   )
 }

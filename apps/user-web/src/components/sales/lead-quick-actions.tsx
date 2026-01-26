@@ -67,7 +67,10 @@ export function SmsDialog({ open, onOpenChange, leadId, contacts, onSuccess }: Q
   const [isSending, setIsSending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
-  const contactsWithPhone = contacts.filter((c): c is Contact & { id: string; phone: string } => !!c.phone && !!c.id)
+  const contactsWithPhone = React.useMemo(
+    () => contacts.filter((c): c is Contact & { id: string; phone: string } => !!c.phone && !!c.id),
+    [contacts]
+  )
 
   // Fetch owned numbers when dialog opens
   React.useEffect(() => {
@@ -85,11 +88,13 @@ export function SmsDialog({ open, onOpenChange, leadId, contacts, onSuccess }: Q
         })
         .catch(() => setError("Failed to load phone numbers"))
         .finally(() => setIsLoading(false))
+    }
+  }, [open])
 
-      // Default to first contact with phone
-      if (contactsWithPhone.length > 0 && !selectedContactId) {
-        setSelectedContactId(contactsWithPhone[0].id)
-      }
+  // Default to first contact with phone when dialog opens
+  React.useEffect(() => {
+    if (open && contactsWithPhone.length > 0 && !selectedContactId) {
+      setSelectedContactId(contactsWithPhone[0].id)
     }
   }, [open, contactsWithPhone, selectedContactId])
 
@@ -241,6 +246,9 @@ interface NoteDialogProps {
   leadId: string
   onSuccess?: () => void
 }
+
+// Re-export EmailDialog from its own file
+export { EmailDialog } from "./email-dialog"
 
 export function NoteDialog({ open, onOpenChange, leadId, onSuccess }: NoteDialogProps) {
   const [subject, setSubject] = React.useState("")

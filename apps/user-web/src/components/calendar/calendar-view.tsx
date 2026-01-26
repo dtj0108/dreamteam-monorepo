@@ -2,30 +2,37 @@
 
 import { useMemo } from "react"
 import { cn } from "@/lib/utils"
-import { CalendarEvent } from "@/providers/calendar-provider"
+import { CalendarEvent, ScheduledSMSEvent } from "@/providers/calendar-provider"
+import { MessageSquareIcon } from "lucide-react"
 
 interface CalendarViewProps {
   events: CalendarEvent[]
+  scheduledSMS?: ScheduledSMSEvent[]
   view: 'month' | 'week' | 'day'
   startDate: Date
   onDateClick?: (date: Date) => void
   onEventClick?: (event: CalendarEvent) => void
+  onScheduledSMSClick?: (sms: ScheduledSMSEvent) => void
 }
 
 export function CalendarView({
   events,
+  scheduledSMS = [],
   view,
   startDate,
   onDateClick,
   onEventClick,
+  onScheduledSMSClick,
 }: CalendarViewProps) {
   if (view === 'week') {
     return (
       <WeekView
         events={events}
+        scheduledSMS={scheduledSMS}
         startDate={startDate}
         onDateClick={onDateClick}
         onEventClick={onEventClick}
+        onScheduledSMSClick={onScheduledSMSClick}
       />
     )
   }
@@ -34,9 +41,11 @@ export function CalendarView({
     return (
       <DayView
         events={events}
+        scheduledSMS={scheduledSMS}
         date={startDate}
         onTimeClick={onDateClick}
         onEventClick={onEventClick}
+        onScheduledSMSClick={onScheduledSMSClick}
       />
     )
   }
@@ -44,9 +53,11 @@ export function CalendarView({
   return (
     <MonthView
       events={events}
+      scheduledSMS={scheduledSMS}
       startDate={startDate}
       onDateClick={onDateClick}
       onEventClick={onEventClick}
+      onScheduledSMSClick={onScheduledSMSClick}
     />
   )
 }
@@ -54,14 +65,18 @@ export function CalendarView({
 // Week View Component
 function WeekView({
   events,
+  scheduledSMS = [],
   startDate,
   onDateClick,
   onEventClick,
+  onScheduledSMSClick,
 }: {
   events: CalendarEvent[]
+  scheduledSMS?: ScheduledSMSEvent[]
   startDate: Date
   onDateClick?: (date: Date) => void
   onEventClick?: (event: CalendarEvent) => void
+  onScheduledSMSClick?: (sms: ScheduledSMSEvent) => void
 }) {
   const days = useMemo(() => {
     const result = []
@@ -85,6 +100,18 @@ function WeekView({
     return events.filter((event) => {
       const eventStart = new Date(event.when.startTime * 1000)
       return eventStart >= dayStart && eventStart <= dayEnd
+    })
+  }
+
+  const getScheduledSMSForDay = (date: Date) => {
+    const dayStart = new Date(date)
+    dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(date)
+    dayEnd.setHours(23, 59, 59, 999)
+
+    return scheduledSMS.filter((sms) => {
+      const smsDate = new Date(sms.scheduled_for)
+      return smsDate >= dayStart && smsDate <= dayEnd
     })
   }
 
@@ -139,6 +166,7 @@ function WeekView({
           {/* Day columns */}
           {days.map((day, dayIndex) => {
             const dayEvents = getEventsForDay(day)
+            const daySMS = getScheduledSMSForDay(day)
 
             return (
               <div
@@ -193,6 +221,32 @@ function WeekView({
                     </div>
                   )
                 })}
+
+                {/* Scheduled SMS */}
+                {daySMS.map((sms) => {
+                  const smsDate = new Date(sms.scheduled_for)
+                  const startMinutes = smsDate.getHours() * 60 + smsDate.getMinutes()
+
+                  return (
+                    <div
+                      key={sms.id}
+                      className="absolute left-1 right-1 rounded px-2 py-1 text-xs overflow-hidden cursor-pointer bg-violet-500 text-white"
+                      style={{
+                        top: `${startMinutes}px`,
+                        height: '30px',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onScheduledSMSClick?.(sms)
+                      }}
+                    >
+                      <div className="font-medium truncate flex items-center gap-1">
+                        <MessageSquareIcon className="size-3" />
+                        {sms.title}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )
           })}
@@ -205,14 +259,18 @@ function WeekView({
 // Day View Component
 function DayView({
   events,
+  scheduledSMS = [],
   date,
   onTimeClick,
   onEventClick,
+  onScheduledSMSClick,
 }: {
   events: CalendarEvent[]
+  scheduledSMS?: ScheduledSMSEvent[]
   date: Date
   onTimeClick?: (date: Date) => void
   onEventClick?: (event: CalendarEvent) => void
+  onScheduledSMSClick?: (sms: ScheduledSMSEvent) => void
 }) {
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
@@ -222,6 +280,15 @@ function DayView({
       eventStart.getDate() === date.getDate() &&
       eventStart.getMonth() === date.getMonth() &&
       eventStart.getFullYear() === date.getFullYear()
+    )
+  })
+
+  const daySMS = scheduledSMS.filter((sms) => {
+    const smsDate = new Date(sms.scheduled_for)
+    return (
+      smsDate.getDate() === date.getDate() &&
+      smsDate.getMonth() === date.getMonth() &&
+      smsDate.getFullYear() === date.getFullYear()
     )
   })
 
@@ -285,6 +352,32 @@ function DayView({
             </div>
           )
         })}
+
+        {/* Scheduled SMS */}
+        {daySMS.map((sms) => {
+          const smsDate = new Date(sms.scheduled_for)
+          const startMinutes = smsDate.getHours() * 60 + smsDate.getMinutes()
+
+          return (
+            <div
+              key={sms.id}
+              className="absolute left-1 right-1 rounded px-2 py-1 text-sm overflow-hidden cursor-pointer bg-violet-500 text-white"
+              style={{
+                top: `${startMinutes}px`,
+                height: '30px',
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onScheduledSMSClick?.(sms)
+              }}
+            >
+              <div className="font-medium flex items-center gap-1">
+                <MessageSquareIcon className="size-4" />
+                {sms.title}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -293,14 +386,18 @@ function DayView({
 // Month View Component
 function MonthView({
   events,
+  scheduledSMS = [],
   startDate,
   onDateClick,
   onEventClick,
+  onScheduledSMSClick,
 }: {
   events: CalendarEvent[]
+  scheduledSMS?: ScheduledSMSEvent[]
   startDate: Date
   onDateClick?: (date: Date) => void
   onEventClick?: (event: CalendarEvent) => void
+  onScheduledSMSClick?: (sms: ScheduledSMSEvent) => void
 }) {
   const today = new Date()
 
@@ -336,6 +433,18 @@ function MonthView({
     return events.filter((event) => {
       const eventStart = new Date(event.when.startTime * 1000)
       return eventStart >= dayStart && eventStart <= dayEnd
+    })
+  }
+
+  const getScheduledSMSForDay = (date: Date) => {
+    const dayStart = new Date(date)
+    dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(date)
+    dayEnd.setHours(23, 59, 59, 999)
+
+    return scheduledSMS.filter((sms) => {
+      const smsDate = new Date(sms.scheduled_for)
+      return smsDate >= dayStart && smsDate <= dayEnd
     })
   }
 
@@ -383,7 +492,7 @@ function MonthView({
                   {day.getDate()}
                 </div>
                 <div className="space-y-0.5">
-                  {getEventsForDay(day).slice(0, 3).map((event) => (
+                  {getEventsForDay(day).slice(0, 2).map((event) => (
                     <div
                       key={event.id}
                       className={cn(
@@ -400,9 +509,22 @@ function MonthView({
                       {event.title}
                     </div>
                   ))}
-                  {getEventsForDay(day).length > 3 && (
+                  {getScheduledSMSForDay(day).slice(0, 2).map((sms) => (
+                    <div
+                      key={sms.id}
+                      className="text-xs px-1 py-0.5 rounded truncate cursor-pointer bg-violet-500/20 text-violet-700 flex items-center gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onScheduledSMSClick?.(sms)
+                      }}
+                    >
+                      <MessageSquareIcon className="size-3" />
+                      {sms.title}
+                    </div>
+                  ))}
+                  {(getEventsForDay(day).length + getScheduledSMSForDay(day).length) > 3 && (
                     <div className="text-xs text-muted-foreground px-1">
-                      +{getEventsForDay(day).length - 3} more
+                      +{(getEventsForDay(day).length + getScheduledSMSForDay(day).length) - 3} more
                     </div>
                   )}
                 </div>

@@ -175,6 +175,15 @@ const salesNav = [
     icon: GitBranch,
   },
   {
+    title: "Templates",
+    url: "/sales/templates",
+    icon: FileText,
+    items: [
+      { title: "Email", url: "/sales/templates?tab=email" },
+      { title: "SMS", url: "/sales/templates?tab=sms" },
+    ],
+  },
+  {
     title: "Conversations",
     url: "/sales/conversations",
     icon: MessageCircle,

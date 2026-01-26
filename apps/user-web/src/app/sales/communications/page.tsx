@@ -252,6 +252,10 @@ export default function CommunicationsPage() {
             contactId={selectedThread.contact_id}
             phoneNumber={selectedThread.phone_number}
             contactName={getContactName(selectedThread)}
+            contactFirstName={selectedThread.contact?.first_name}
+            contactLastName={selectedThread.contact?.last_name}
+            leadName={selectedThread.lead?.name}
+            leadCompany={selectedThread.lead?.name}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">

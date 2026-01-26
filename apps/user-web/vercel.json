@@ -4,6 +4,14 @@
     {
       "path": "/api/cron/check-schedules",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/process-scheduled-sms",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/process-scheduled-emails",
+      "schedule": "* * * * *"
     }
   ]
 }
