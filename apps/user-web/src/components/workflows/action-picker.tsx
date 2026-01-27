@@ -14,6 +14,13 @@ import {
   PhoneIcon,
   ClockIcon,
   GitBranchIcon,
+  TagIcon,
+  TagsIcon,
+  BriefcaseIcon,
+  PenSquareIcon,
+  ArrowRightCircleIcon,
+  CheckCircle2Icon,
+  MoveRightIcon,
 } from "lucide-react"
 import {
   Dialog,
@@ -33,6 +40,13 @@ const actionIcons: Record<ActionType, React.ReactNode> = {
   update_status: <EditIcon className="size-5" />,
   add_note: <FileTextIcon className="size-5" />,
   assign_user: <UserCheckIcon className="size-5" />,
+  add_tag: <TagIcon className="size-5" />,
+  remove_tag: <TagsIcon className="size-5" />,
+  move_lead_stage: <MoveRightIcon className="size-5" />,
+  create_deal: <BriefcaseIcon className="size-5" />,
+  update_deal: <PenSquareIcon className="size-5" />,
+  move_deal_stage: <ArrowRightCircleIcon className="size-5" />,
+  close_deal: <CheckCircle2Icon className="size-5" />,
   wait: <ClockIcon className="size-5" />,
   condition: <GitBranchIcon className="size-5" />,
 }

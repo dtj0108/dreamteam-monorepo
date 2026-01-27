@@ -73,6 +73,24 @@ interface ActionConfig {
   nylas_grant_id?: string  // Specific grant ID to use for sending
   email_cc?: string  // Comma-separated CC emails
   email_bcc?: string  // Comma-separated BCC emails
+  // For move_lead_stage and create_deal
+  name?: string
+  pipeline_id?: string
+  stage_id?: string
+  stage_name?: string
+  value?: number
+  currency?: string
+  expected_close_date_offset?: number
+  notes?: string
+  link_to_trigger_contact?: boolean
+  // For update_deal, move_deal_stage, close_deal
+  deal_source?: 'trigger' | 'most_recent'
+  probability?: number
+  notes_mode?: 'append' | 'replace'
+  auto_update_probability?: boolean
+  outcome?: 'won' | 'lost'
+  close_reason?: string
+  auto_set_close_date?: boolean
 }
 
 export interface ExecutionResult {
@@ -122,9 +140,45 @@ function replaceTemplateVariables(template: string, context: WorkflowContext): s
   if (context.deal) {
     result = result.replace(/\{\{deal_name\}\}/g, context.deal.name || '')
     result = result.replace(/\{\{deal_status\}\}/g, context.deal.status || '')
+    result = result.replace(/\{\{deal_value\}\}/g, (context.deal as { value?: number }).value?.toString() || '')
   }
 
   return result
+}
+
+/**
+ * Resolve which opportunity ID to use based on deal_source config
+ * Opportunities are linked to leads, so we resolve via lead_id
+ */
+async function resolveOpportunityId(
+  config: ActionConfig,
+  context: WorkflowContext
+): Promise<string | null> {
+  // If deal_source is 'trigger' and we have a dealId from context, use it
+  if (config.deal_source === 'trigger') {
+    return context.dealId || context.deal?.id || null
+  }
+
+  // Otherwise, find the most recent opportunity for this lead
+  if (!context.leadId) {
+    return null
+  }
+
+  const supabase = createAdminClient()
+  const { data: opportunity, error } = await supabase
+    .from('lead_opportunities')
+    .select('id')
+    .eq('lead_id', context.leadId)
+    .eq('user_id', context.userId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error || !opportunity) {
+    return null
+  }
+
+  return opportunity.id
 }
 
 /**
@@ -770,6 +824,406 @@ export async function executeWorkflowAction(
           data: { note: 'Condition evaluated in main loop' },
           executedAt,
         }
+
+      case 'move_lead_stage': {
+        if (!context.leadId) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No lead found in workflow context',
+            executedAt,
+          }
+        }
+
+        if (!config.pipeline_id || !config.stage_id) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'Pipeline and stage are required',
+            executedAt,
+          }
+        }
+
+        // Get stage details to update status
+        const { data: stage } = await supabase
+          .from('lead_pipeline_stages')
+          .select('name, is_won, is_lost')
+          .eq('id', config.stage_id)
+          .single()
+
+        // Update lead with new pipeline, stage, and derived status
+        const { error } = await supabase
+          .from('leads')
+          .update({
+            pipeline_id: config.pipeline_id,
+            stage_id: config.stage_id,
+            status: stage?.name?.toLowerCase().replace(/\s+/g, '_') || 'new',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', context.leadId)
+          .eq('user_id', context.userId)
+
+        if (error) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: error.message,
+            executedAt,
+          }
+        }
+
+        return {
+          success: true,
+          actionType: action.type,
+          actionId: action.id,
+          data: {
+            leadId: context.leadId,
+            pipelineId: config.pipeline_id,
+            stageId: config.stage_id,
+            stageName: stage?.name,
+          },
+          executedAt,
+        }
+      }
+
+      case 'create_deal': {
+        const opportunityName = replaceTemplateVariables(config.name || 'New Opportunity', context)
+
+        if (!context.leadId) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No lead found to create opportunity for',
+            executedAt,
+          }
+        }
+
+        // Calculate expected close date if offset is provided
+        let expectedCloseDate: string | null = null
+        if (config.expected_close_date_offset && config.expected_close_date_offset > 0) {
+          const closeDate = new Date()
+          closeDate.setDate(closeDate.getDate() + config.expected_close_date_offset)
+          expectedCloseDate = closeDate.toISOString().split('T')[0]
+        }
+
+        // If pipeline_id provided, move lead to that pipeline and stage
+        if (config.pipeline_id) {
+          let stageId = config.stage_id
+          if (!stageId) {
+            // Get the first stage of the pipeline
+            const { data: firstStage } = await supabase
+              .from('lead_pipeline_stages')
+              .select('id')
+              .eq('pipeline_id', config.pipeline_id)
+              .order('position', { ascending: true })
+              .limit(1)
+              .single()
+
+            if (firstStage) {
+              stageId = firstStage.id
+            }
+          }
+
+          // Update lead's pipeline and stage
+          await supabase
+            .from('leads')
+            .update({
+              pipeline_id: config.pipeline_id,
+              stage_id: stageId || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', context.leadId)
+            .eq('user_id', context.userId)
+        }
+
+        const contactId = config.link_to_trigger_contact !== false ? context.contactId : null
+
+        // Get workspace_id from lead
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('workspace_id')
+          .eq('id', context.leadId)
+          .single()
+
+        const { data: opportunity, error } = await supabase
+          .from('lead_opportunities')
+          .insert({
+            lead_id: context.leadId,
+            user_id: context.userId,
+            workspace_id: lead?.workspace_id || null,
+            name: opportunityName,
+            value: config.value || null,
+            probability: 0,
+            expected_close_date: expectedCloseDate,
+            notes: config.notes || null,
+            status: 'active',
+            value_type: 'one_time',
+            contact_id: contactId || null,
+          })
+          .select('id, name')
+          .single()
+
+        if (error) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: `Failed to create opportunity: ${error.message}`,
+            executedAt,
+          }
+        }
+
+        return {
+          success: true,
+          actionType: action.type,
+          actionId: action.id,
+          data: { opportunityId: opportunity.id, opportunityName: opportunity.name },
+          executedAt,
+        }
+      }
+
+      case 'update_deal': {
+        const opportunityId = await resolveOpportunityId(config, context)
+
+        if (!opportunityId) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No opportunity found to update',
+            executedAt,
+          }
+        }
+
+        const updates: Record<string, unknown> = {
+          updated_at: new Date().toISOString(),
+        }
+
+        if (config.value !== undefined) {
+          updates.value = config.value
+        }
+
+        if (config.probability !== undefined) {
+          updates.probability = config.probability
+        }
+
+        if (config.expected_close_date_offset !== undefined) {
+          const closeDate = new Date()
+          closeDate.setDate(closeDate.getDate() + config.expected_close_date_offset)
+          updates.expected_close_date = closeDate.toISOString().split('T')[0]
+        }
+
+        if (config.notes) {
+          if (config.notes_mode === 'replace') {
+            updates.notes = config.notes
+          } else {
+            // Append mode - get existing notes first
+            const { data: existingOpportunity } = await supabase
+              .from('lead_opportunities')
+              .select('notes')
+              .eq('id', opportunityId)
+              .single()
+
+            const existingNotes = existingOpportunity?.notes || ''
+            updates.notes = existingNotes
+              ? `${existingNotes}\n\n${config.notes}`
+              : config.notes
+          }
+        }
+
+        const { error } = await supabase
+          .from('lead_opportunities')
+          .update(updates)
+          .eq('id', opportunityId)
+          .eq('user_id', context.userId)
+
+        if (error) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: `Failed to update opportunity: ${error.message}`,
+            executedAt,
+          }
+        }
+
+        return {
+          success: true,
+          actionType: action.type,
+          actionId: action.id,
+          data: { opportunityId, updatedFields: Object.keys(updates) },
+          executedAt,
+        }
+      }
+
+      case 'move_deal_stage': {
+        // In this data model, opportunities are linked to leads, and the lead has the stage
+        // So we move the lead's stage when "moving" an opportunity
+
+        if (!context.leadId) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No lead found to move stage',
+            executedAt,
+          }
+        }
+
+        if (!config.pipeline_id || !config.stage_id) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'Pipeline and stage are required',
+            executedAt,
+          }
+        }
+
+        // Get stage info for auto-probability update on opportunities
+        let shouldUpdateProbability = false
+        let stageIsWon = false
+        let stageIsLost = false
+
+        if (config.auto_update_probability !== false) {
+          const { data: stage } = await supabase
+            .from('lead_pipeline_stages')
+            .select('is_won, is_lost')
+            .eq('id', config.stage_id)
+            .single()
+
+          if (stage) {
+            shouldUpdateProbability = true
+            stageIsWon = stage.is_won
+            stageIsLost = stage.is_lost
+          }
+        }
+
+        // Update the lead's pipeline and stage
+        const { error } = await supabase
+          .from('leads')
+          .update({
+            pipeline_id: config.pipeline_id,
+            stage_id: config.stage_id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', context.leadId)
+          .eq('user_id', context.userId)
+
+        if (error) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: `Failed to move stage: ${error.message}`,
+            executedAt,
+          }
+        }
+
+        // Optionally update opportunity probabilities based on won/lost stage
+        if (shouldUpdateProbability) {
+          const newProbability = stageIsWon ? 100 : (stageIsLost ? 0 : undefined)
+          const newStatus = stageIsWon ? 'won' : (stageIsLost ? 'lost' : undefined)
+
+          if (newProbability !== undefined || newStatus !== undefined) {
+            const oppUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+            if (newProbability !== undefined) oppUpdates.probability = newProbability
+            if (newStatus !== undefined) oppUpdates.status = newStatus
+
+            await supabase
+              .from('lead_opportunities')
+              .update(oppUpdates)
+              .eq('lead_id', context.leadId)
+              .eq('user_id', context.userId)
+              .eq('status', 'active') // Only update active opportunities
+          }
+        }
+
+        return {
+          success: true,
+          actionType: action.type,
+          actionId: action.id,
+          data: { leadId: context.leadId, newStageId: config.stage_id },
+          executedAt,
+        }
+      }
+
+      case 'close_deal': {
+        const opportunityId = await resolveOpportunityId(config, context)
+
+        if (!opportunityId) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No opportunity found to close',
+            executedAt,
+          }
+        }
+
+        if (!config.outcome) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'Outcome (won/lost) is required',
+            executedAt,
+          }
+        }
+
+        const updates: Record<string, unknown> = {
+          status: config.outcome,
+          probability: config.outcome === 'won' ? 100 : 0,
+          updated_at: new Date().toISOString(),
+        }
+
+        if (config.auto_set_close_date !== false) {
+          updates.closed_at = new Date().toISOString()
+        }
+
+        if (config.close_reason) {
+          // Append close reason to notes
+          const { data: existingOpportunity } = await supabase
+            .from('lead_opportunities')
+            .select('notes')
+            .eq('id', opportunityId)
+            .single()
+
+          const existingNotes = existingOpportunity?.notes || ''
+          const closeNote = `[${config.outcome.toUpperCase()}] ${config.close_reason}`
+          updates.notes = existingNotes
+            ? `${existingNotes}\n\n${closeNote}`
+            : closeNote
+        }
+
+        const { error } = await supabase
+          .from('lead_opportunities')
+          .update(updates)
+          .eq('id', opportunityId)
+          .eq('user_id', context.userId)
+
+        if (error) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: `Failed to close opportunity: ${error.message}`,
+            executedAt,
+          }
+        }
+
+        return {
+          success: true,
+          actionType: action.type,
+          actionId: action.id,
+          data: { opportunityId, outcome: config.outcome },
+          executedAt,
+        }
+      }
 
       default:
         return {

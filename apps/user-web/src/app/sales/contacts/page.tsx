@@ -35,9 +35,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { DataTablePagination } from "@/components/ui/data-table-pagination"
-import { SearchIcon, UsersIcon } from "lucide-react"
+import { SearchIcon, UsersIcon, Trash2, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { getContactColumns, type ContactRow } from "./columns"
+import { BulkActionBar, type BulkAction } from "@/components/sales/bulk-action-bar"
 
 export default function ContactsPage() {
   const { currentWorkspace, isLoading: workspaceLoading } = useWorkspace()
@@ -45,6 +46,10 @@ export default function ContactsPage() {
   const [isLoading, setIsLoading] = React.useState(true)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [deletingContact, setDeletingContact] = React.useState<ContactRow | null>(null)
+
+  // Bulk action state
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = React.useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = React.useState(false)
 
   // Table state
   const [sorting, setSorting] = React.useState<SortingState>([])
@@ -137,6 +142,52 @@ export default function ContactsPage() {
       },
     },
   })
+
+  // Selected contacts for bulk actions (must be after table definition)
+  const selectedContacts = React.useMemo(() => {
+    return table.getFilteredSelectedRowModel().rows.map((row) => row.original)
+  }, [rowSelection, contacts])
+
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    const selectedRows = table.getFilteredSelectedRowModel().rows
+    const contactIds = selectedRows.map((row) => row.original.id)
+
+    if (contactIds.length === 0) return
+
+    setIsBulkDeleting(true)
+    try {
+      const response = await fetch("/api/contacts/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contact_ids: contactIds }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to delete contacts")
+      }
+
+      await fetchContacts()
+      setRowSelection({})
+    } catch (error) {
+      console.error("Bulk delete error:", error)
+    } finally {
+      setIsBulkDeleting(false)
+      setBulkDeleteDialogOpen(false)
+    }
+  }
+
+  // Bulk actions configuration
+  const bulkActions: BulkAction[] = [
+    {
+      id: "delete",
+      label: "Delete",
+      icon: <Trash2 className="h-4 w-4" />,
+      onClick: () => setBulkDeleteDialogOpen(true),
+      loading: isBulkDeleting,
+    },
+  ]
 
   return (
     <div className="p-6">
@@ -240,7 +291,7 @@ export default function ContactsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Contact</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deletingContact?.first_name} {deletingContact?.last_name}"? 
+              Are you sure you want to delete "{deletingContact?.first_name} {deletingContact?.last_name}"?
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -255,6 +306,45 @@ export default function ContactsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk Delete Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedContacts.length} contact{selectedContacts.length !== 1 ? "s" : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the selected
+              contact{selectedContacts.length !== 1 ? "s" : ""}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Action Bar */}
+      <BulkActionBar
+        selectedCount={selectedContacts.length}
+        onClearSelection={() => setRowSelection({})}
+        actions={bulkActions}
+      />
     </div>
   )
 }

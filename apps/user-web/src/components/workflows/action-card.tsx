@@ -14,6 +14,13 @@ import {
   ClockIcon,
   GitBranchIcon,
   PencilIcon,
+  TagIcon,
+  TagsIcon,
+  BriefcaseIcon,
+  PenSquareIcon,
+  ArrowRightCircleIcon,
+  CheckCircle2Icon,
+  MoveRightIcon,
 } from "lucide-react"
 import {
   Tooltip,
@@ -32,6 +39,13 @@ const actionIcons: Record<ActionType, React.ReactNode> = {
   update_status: <EditIcon className="size-5" />,
   add_note: <FileTextIcon className="size-5" />,
   assign_user: <UserCheckIcon className="size-5" />,
+  add_tag: <TagIcon className="size-5" />,
+  remove_tag: <TagsIcon className="size-5" />,
+  move_lead_stage: <MoveRightIcon className="size-5" />,
+  create_deal: <BriefcaseIcon className="size-5" />,
+  update_deal: <PenSquareIcon className="size-5" />,
+  move_deal_stage: <ArrowRightCircleIcon className="size-5" />,
+  close_deal: <CheckCircle2Icon className="size-5" />,
   wait: <ClockIcon className="size-5" />,
   condition: <GitBranchIcon className="size-5" />,
 }
@@ -62,6 +76,21 @@ function getActionSummary(action: WorkflowAction): string | null {
       return config.title ? `${config.title}` : null
     case "assign_user":
       return config.user_name ? `To: ${config.user_name}` : null
+    case "add_tag": {
+      const addTags = config.tags as Array<{ id: string; name: string; color: string }> | undefined
+      if (addTags?.length) {
+        return `Add: ${addTags.map(t => t.name).join(", ")}`
+      }
+      return "Add tags (not configured)"
+    }
+    case "remove_tag": {
+      if (config.remove_all) return "Remove all tags"
+      const removeTags = config.tags as Array<{ id: string; name: string; color: string }> | undefined
+      if (removeTags?.length) {
+        return `Remove: ${removeTags.map(t => t.name).join(", ")}`
+      }
+      return "Remove tags (not configured)"
+    }
     case "wait":
       if (config.wait_duration && config.wait_unit) {
         return `Wait ${config.wait_duration} ${config.wait_unit}`
@@ -79,6 +108,50 @@ function getActionSummary(action: WorkflowAction): string | null {
         return `If ${fieldName} ${operatorLabel}`
       }
       return "Conditional branch"
+    }
+    case "create_deal": {
+      const name = config.name as string | undefined
+      const value = config.value as number | undefined
+      if (name && value) {
+        return `${name} ($${value.toLocaleString()})`
+      }
+      if (name) {
+        return name
+      }
+      return "Create new opportunity"
+    }
+    case "update_deal": {
+      const fields: string[] = []
+      if (config.value !== undefined) fields.push("value")
+      if (config.probability !== undefined) fields.push("probability")
+      if (config.expected_close_date_offset !== undefined) fields.push("close date")
+      if (config.notes) fields.push("notes")
+      if (fields.length > 0) {
+        return `Update ${fields.join(", ")}`
+      }
+      const source = config.deal_source as string | undefined
+      return source === "trigger" ? "Update trigger opportunity" : "Update most recent opportunity"
+    }
+    case "move_lead_stage": {
+      if (config.stage_id && config.stage_name) {
+        return `Move to ${config.stage_name}`
+      }
+      if (config.stage_id) {
+        return "Move to stage"
+      }
+      return "Move lead stage (not configured)"
+    }
+    case "move_deal_stage": {
+      if (config.stage_id) {
+        return "Move to stage"
+      }
+      return "Move to stage (not configured)"
+    }
+    case "close_deal": {
+      const outcome = config.outcome as "won" | "lost" | undefined
+      if (outcome === "won") return "Mark as Won"
+      if (outcome === "lost") return "Mark as Lost"
+      return "Close opportunity"
     }
     default:
       return null

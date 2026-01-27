@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ActivityAssigneePicker, WorkspaceMember } from "@/components/sales/activity-assignee-picker"
 
 export interface Activity {
   id?: string
@@ -29,6 +30,7 @@ export interface Activity {
   contact_id?: string
   due_date?: string
   is_completed?: boolean
+  assignees?: string[]
 }
 
 interface Contact {
@@ -41,6 +43,8 @@ interface ActivityFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   contacts: Contact[]
+  members?: WorkspaceMember[]
+  currentUserId?: string
   activity?: Activity
   onSubmit: (activity: Activity) => Promise<void>
   defaultType?: "call" | "email" | "meeting" | "note" | "task"
@@ -54,7 +58,7 @@ const activityTypes = [
   { value: "task", label: "Task" },
 ]
 
-export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit, defaultType }: ActivityFormProps) {
+export function ActivityForm({ open, onOpenChange, contacts, members = [], currentUserId, activity, onSubmit, defaultType }: ActivityFormProps) {
   const [isLoading, setIsLoading] = React.useState(false)
   const [formData, setFormData] = React.useState<Activity>({
     type: "call",
@@ -63,11 +67,15 @@ export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit,
     contact_id: "",
     due_date: "",
     is_completed: false,
+    assignees: [],
   })
 
   React.useEffect(() => {
     if (activity) {
-      setFormData(activity)
+      setFormData({
+        ...activity,
+        assignees: activity.assignees || [],
+      })
     } else {
       const firstContactWithId = contacts.find(c => c.id)
       setFormData({
@@ -77,12 +85,26 @@ export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit,
         contact_id: firstContactWithId?.id || "",
         due_date: "",
         is_completed: false,
+        // Default to current user when creating a new activity
+        assignees: currentUserId ? [currentUserId] : [],
       })
     }
-  }, [activity, open, contacts, defaultType])
+  }, [activity, open, contacts, defaultType, currentUserId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Validate required fields
+    if (!formData.subject?.trim()) {
+      return
+    }
+    if (!formData.description?.trim()) {
+      return
+    }
+    if (!formData.due_date) {
+      return
+    }
+
     setIsLoading(true)
     try {
       await onSubmit(formData)
@@ -152,7 +174,7 @@ export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit,
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="subject">Subject</Label>
+              <Label htmlFor="subject">Subject *</Label>
               <Input
                 id="subject"
                 value={formData.subject || ""}
@@ -160,11 +182,12 @@ export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit,
                   setFormData({ ...formData, subject: e.target.value })
                 }
                 placeholder="Brief summary of the activity"
+                required
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">Description *</Label>
               <Textarea
                 id="description"
                 value={formData.description || ""}
@@ -173,11 +196,12 @@ export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit,
                 }
                 placeholder="Add details about the activity..."
                 rows={3}
+                required
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="due_date">Due Date (optional)</Label>
+              <Label htmlFor="due_date">Due Date *</Label>
               <Input
                 id="due_date"
                 type="datetime-local"
@@ -185,8 +209,20 @@ export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit,
                 onChange={(e) =>
                   setFormData({ ...formData, due_date: e.target.value })
                 }
+                required
               />
             </div>
+
+            {members.length > 0 && (
+              <div className="grid gap-2">
+                <Label>Assignees</Label>
+                <ActivityAssigneePicker
+                  members={members}
+                  selectedIds={formData.assignees || []}
+                  onChange={(ids) => setFormData({ ...formData, assignees: ids })}
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -196,7 +232,10 @@ export function ActivityForm({ open, onOpenChange, contacts, activity, onSubmit,
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button
+              type="submit"
+              disabled={isLoading || !formData.subject?.trim() || !formData.description?.trim() || !formData.due_date}
+            >
               {isLoading ? "Saving..." : activity ? "Update Activity" : "Log Activity"}
             </Button>
           </DialogFooter>

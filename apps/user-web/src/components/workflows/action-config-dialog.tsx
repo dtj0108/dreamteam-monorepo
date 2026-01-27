@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   Dialog,
   DialogContent,
@@ -19,8 +19,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@dreamteam/ui/select"
+import { SearchIcon, PlusIcon, XIcon, CheckIcon, Loader2Icon } from "lucide-react"
 import type { WorkflowAction } from "@/types/workflow"
 import { getActionDefinition } from "@/types/workflow"
+
+// Tag type for the selector
+interface LeadTag {
+  id: string
+  name: string
+  color: string
+}
+
+// Preset colors for new tags
+const TAG_COLORS = [
+  "#3b82f6", // blue
+  "#22c55e", // green
+  "#a855f7", // purple
+  "#f97316", // orange
+  "#ef4444", // red
+  "#eab308", // yellow
+  "#06b6d4", // cyan
+  "#ec4899", // pink
+  "#6b7280", // gray
+]
 
 interface ActionConfigDialogProps {
   action: WorkflowAction | null
@@ -37,11 +58,95 @@ export function ActionConfigDialog({
 }: ActionConfigDialogProps) {
   const [config, setConfig] = useState<Record<string, unknown>>({})
 
+  // Tag-related state
+  const [availableTags, setAvailableTags] = useState<LeadTag[]>([])
+  const [tagsLoading, setTagsLoading] = useState(false)
+  const [tagSearchQuery, setTagSearchQuery] = useState("")
+  const [showCreateTag, setShowCreateTag] = useState(false)
+  const [newTagName, setNewTagName] = useState("")
+  const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0])
+  const [creatingTag, setCreatingTag] = useState(false)
+
   useEffect(() => {
     if (action) {
       setConfig(action.config || {})
     }
   }, [action])
+
+  // Fetch tags when dialog opens for tag-related actions
+  const fetchTags = useCallback(async () => {
+    if (!action || (action.type !== "add_tag" && action.type !== "remove_tag")) return
+
+    setTagsLoading(true)
+    try {
+      const response = await fetch("/api/lead-tags")
+      if (response.ok) {
+        const data = await response.json()
+        setAvailableTags(data)
+      }
+    } catch (error) {
+      console.error("Failed to fetch tags:", error)
+    } finally {
+      setTagsLoading(false)
+    }
+  }, [action])
+
+  useEffect(() => {
+    if (open && action && (action.type === "add_tag" || action.type === "remove_tag")) {
+      fetchTags()
+      setTagSearchQuery("")
+      setShowCreateTag(false)
+      setNewTagName("")
+      setNewTagColor(TAG_COLORS[0])
+    }
+  }, [open, action, fetchTags])
+
+  // Create a new tag
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) return
+
+    setCreatingTag(true)
+    try {
+      const response = await fetch("/api/lead-tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newTagName.trim(), color: newTagColor }),
+      })
+
+      if (response.ok) {
+        const newTag = await response.json()
+        setAvailableTags(prev => [...prev, newTag].sort((a, b) => a.name.localeCompare(b.name)))
+        // Auto-select the new tag
+        const currentTags = (config.tags as LeadTag[]) || []
+        updateConfig("tags", [...currentTags, newTag])
+        // Reset form
+        setShowCreateTag(false)
+        setNewTagName("")
+        setNewTagColor(TAG_COLORS[0])
+      }
+    } catch (error) {
+      console.error("Failed to create tag:", error)
+    } finally {
+      setCreatingTag(false)
+    }
+  }
+
+  // Toggle tag selection
+  const toggleTagSelection = (tag: LeadTag) => {
+    const currentTags = (config.tags as LeadTag[]) || []
+    const isSelected = currentTags.some(t => t.id === tag.id)
+
+    if (isSelected) {
+      updateConfig("tags", currentTags.filter(t => t.id !== tag.id))
+    } else {
+      updateConfig("tags", [...currentTags, tag])
+    }
+  }
+
+  // Filter tags by search query
+  const filteredTags = availableTags.filter(tag =>
+    tag.name.toLowerCase().includes(tagSearchQuery.toLowerCase())
+  )
 
   if (!action) return null
 
@@ -357,6 +462,244 @@ export function ActionConfigDialog({
                   placeholder="User ID (will be a dropdown in production)"
                 />
               </div>
+            )}
+          </div>
+        )
+
+      case "add_tag":
+        return (
+          <div className="space-y-4">
+            <Label>Select tags to add</Label>
+
+            {/* Search input */}
+            <div className="relative">
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search tags..."
+                value={tagSearchQuery}
+                onChange={(e) => setTagSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            {/* Tags list */}
+            <div className="border rounded-lg max-h-48 overflow-auto">
+              {tagsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredTags.length === 0 ? (
+                <div className="py-6 text-center text-muted-foreground text-sm">
+                  {tagSearchQuery ? "No tags match your search" : "No tags available"}
+                </div>
+              ) : (
+                <div className="p-2 space-y-1">
+                  {filteredTags.map(tag => {
+                    const isSelected = ((config.tags as LeadTag[]) || []).some(t => t.id === tag.id)
+                    return (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => toggleTagSelection(tag)}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors ${
+                          isSelected ? "bg-sky-50 border border-sky-200" : "hover:bg-muted/50"
+                        }`}
+                      >
+                        <div
+                          className="size-3 rounded-full shrink-0"
+                          style={{ backgroundColor: tag.color }}
+                        />
+                        <span className="flex-1 text-sm">{tag.name}</span>
+                        {isSelected && <CheckIcon className="size-4 text-sky-600" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Create new tag section */}
+            {showCreateTag ? (
+              <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Create new tag</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateTag(false)}
+                    className="size-6 rounded flex items-center justify-center hover:bg-muted"
+                  >
+                    <XIcon className="size-4" />
+                  </button>
+                </div>
+                <Input
+                  placeholder="Tag name"
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  maxLength={50}
+                />
+                <div className="flex gap-1.5 flex-wrap">
+                  {TAG_COLORS.map(color => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setNewTagColor(color)}
+                      className={`size-6 rounded-full transition-all ${
+                        newTagColor === color ? "ring-2 ring-offset-2 ring-sky-500" : ""
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleCreateTag}
+                  disabled={!newTagName.trim() || creatingTag}
+                  className="w-full"
+                >
+                  {creatingTag ? (
+                    <Loader2Icon className="size-4 animate-spin mr-2" />
+                  ) : (
+                    <PlusIcon className="size-4 mr-2" />
+                  )}
+                  Create Tag
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowCreateTag(true)}
+                className="flex items-center gap-2 text-sm text-sky-600 hover:text-sky-700 font-medium"
+              >
+                <PlusIcon className="size-4" />
+                Create new tag
+              </button>
+            )}
+
+            {/* Selected tags display */}
+            {((config.tags as LeadTag[]) || []).length > 0 && (
+              <div className="pt-2 border-t">
+                <span className="text-xs text-muted-foreground">Selected:</span>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {((config.tags as LeadTag[]) || []).map(tag => (
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                      style={{ backgroundColor: tag.color }}
+                    >
+                      {tag.name}
+                      <button
+                        type="button"
+                        onClick={() => toggleTagSelection(tag)}
+                        className="hover:bg-white/20 rounded-full p-0.5"
+                      >
+                        <XIcon className="size-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+
+      case "remove_tag":
+        return (
+          <div className="space-y-4">
+            {/* Remove all checkbox */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="remove_all"
+                checked={(config.remove_all as boolean) || false}
+                onChange={(e) => {
+                  updateConfig("remove_all", e.target.checked)
+                  if (e.target.checked) {
+                    updateConfig("tags", [])
+                  }
+                }}
+                className="size-4 rounded border-gray-300"
+              />
+              <Label htmlFor="remove_all" className="font-normal">
+                Remove ALL tags from lead
+              </Label>
+            </div>
+
+            {!config.remove_all && (
+              <>
+                <Label>Or select specific tags to remove</Label>
+
+                {/* Search input */}
+                <div className="relative">
+                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search tags..."
+                    value={tagSearchQuery}
+                    onChange={(e) => setTagSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+
+                {/* Tags list */}
+                <div className="border rounded-lg max-h-48 overflow-auto">
+                  {tagsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : filteredTags.length === 0 ? (
+                    <div className="py-6 text-center text-muted-foreground text-sm">
+                      {tagSearchQuery ? "No tags match your search" : "No tags available"}
+                    </div>
+                  ) : (
+                    <div className="p-2 space-y-1">
+                      {filteredTags.map(tag => {
+                        const isSelected = ((config.tags as LeadTag[]) || []).some(t => t.id === tag.id)
+                        return (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() => toggleTagSelection(tag)}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors ${
+                              isSelected ? "bg-red-50 border border-red-200" : "hover:bg-muted/50"
+                            }`}
+                          >
+                            <div
+                              className="size-3 rounded-full shrink-0"
+                              style={{ backgroundColor: tag.color }}
+                            />
+                            <span className="flex-1 text-sm">{tag.name}</span>
+                            {isSelected && <CheckIcon className="size-4 text-red-600" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Selected tags display */}
+                {((config.tags as LeadTag[]) || []).length > 0 && (
+                  <div className="pt-2 border-t">
+                    <span className="text-xs text-muted-foreground">Selected for removal:</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {((config.tags as LeadTag[]) || []).map(tag => (
+                        <span
+                          key={tag.id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                          style={{ backgroundColor: tag.color }}
+                        >
+                          {tag.name}
+                          <button
+                            type="button"
+                            onClick={() => toggleTagSelection(tag)}
+                            className="hover:bg-white/20 rounded-full p-0.5"
+                          >
+                            <XIcon className="size-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )

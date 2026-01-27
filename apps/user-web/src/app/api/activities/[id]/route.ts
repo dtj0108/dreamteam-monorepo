@@ -18,8 +18,14 @@ export async function GET(
     .from("activities")
     .select(`
       *,
-      contact:contacts(id, first_name, last_name, email, phone, company, avatar_url),
-      deal:deals(id, name, value, status)
+      contact:contacts(id, first_name, last_name, email, phone, company),
+      deal:deals(id, name, value, status),
+      assignees:activity_assignees(
+        id,
+        user_id,
+        assigned_at,
+        user:profiles(id, name, avatar_url)
+      )
     `)
     .eq("id", id)
     .eq("profile_id", user.id)
@@ -55,6 +61,7 @@ export async function PATCH(
     due_date,
     is_completed,
     completed_at,
+    assignees,
   } = body
 
   // Build update object with only provided fields
@@ -77,7 +84,7 @@ export async function PATCH(
     .eq("profile_id", user.id)
     .select(`
       *,
-      contact:contacts(id, first_name, last_name, email, avatar_url),
+      contact:contacts(id, first_name, last_name, email),
       deal:deals(id, name, value, status)
     `)
     .single()
@@ -86,7 +93,49 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ activity })
+  // Handle assignees update if provided
+  if (assignees !== undefined) {
+    // Delete all existing assignees first
+    await supabase
+      .from("activity_assignees")
+      .delete()
+      .eq("activity_id", id)
+
+    // Insert new assignees if any
+    if (assignees.length > 0) {
+      const { error: assigneesError } = await supabase
+        .from("activity_assignees")
+        .insert(
+          assignees.map((userId: string) => ({
+            activity_id: id,
+            user_id: userId,
+          }))
+        )
+
+      if (assigneesError) {
+        console.error("Error updating assignees:", assigneesError)
+      }
+    }
+  }
+
+  // Re-fetch with assignees to return complete data
+  const { data: completeActivity } = await supabase
+    .from("activities")
+    .select(`
+      *,
+      contact:contacts(id, first_name, last_name, email),
+      deal:deals(id, name, value, status),
+      assignees:activity_assignees(
+        id,
+        user_id,
+        assigned_at,
+        user:profiles(id, name, avatar_url)
+      )
+    `)
+    .eq("id", id)
+    .single()
+
+  return NextResponse.json({ activity: completeActivity || activity })
 }
 
 // DELETE /api/activities/[id] - Delete an activity

@@ -52,6 +52,25 @@ export interface ScheduledSMSEvent {
   contact_id?: string | null
 }
 
+export interface CRMActivityEvent {
+  id: string
+  type: 'crm_activity'
+  activityType: 'call' | 'email' | 'meeting' | 'note' | 'task'
+  title: string
+  description?: string | null
+  due_date: string
+  is_completed: boolean
+  contact?: {
+    id: string
+    first_name: string
+    last_name?: string | null
+  } | null
+  deal?: {
+    id: string
+    name: string
+  } | null
+}
+
 interface CalendarContextValue {
   // Grant
   grantId: string | null
@@ -72,6 +91,11 @@ interface CalendarContextValue {
   scheduledSMS: ScheduledSMSEvent[]
   loadingScheduledSMS: boolean
   fetchScheduledSMS: (startDate: string, endDate: string) => Promise<void>
+
+  // CRM Activities
+  crmActivities: CRMActivityEvent[]
+  loadingCRMActivities: boolean
+  fetchCRMActivities: (startDate: string, endDate: string) => Promise<void>
 
   // Date range
   startDate: Date
@@ -146,6 +170,8 @@ export function CalendarProvider({
   const [loadingEvents, setLoadingEvents] = useState(false)
   const [scheduledSMS, setScheduledSMS] = useState<ScheduledSMSEvent[]>([])
   const [loadingScheduledSMS, setLoadingScheduledSMS] = useState(false)
+  const [crmActivities, setCRMActivities] = useState<CRMActivityEvent[]>([])
+  const [loadingCRMActivities, setLoadingCRMActivities] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<'month' | 'week' | 'day'>('week')
 
@@ -275,6 +301,68 @@ export function CalendarProvider({
       setScheduledSMS([])
     } finally {
       setLoadingScheduledSMS(false)
+    }
+  }, [])
+
+  // Fetch CRM activities for calendar
+  const fetchCRMActivities = useCallback(async (startDateStr: string, endDateStr: string) => {
+    setLoadingCRMActivities(true)
+
+    try {
+      const params = new URLSearchParams({
+        start_date: startDateStr,
+        end_date: endDateStr,
+      })
+
+      const res = await fetch(`/api/activities?${params}`)
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        console.error('Failed to fetch CRM activities:', res.status, res.statusText, errorData)
+        setCRMActivities([])
+        return
+      }
+
+      const data = await res.json()
+      const activities = data.activities || []
+
+      // Transform to CRMActivityEvent format (only activities with due_date)
+      const activityTypeLabels: Record<string, string> = {
+        call: 'Call',
+        email: 'Email',
+        meeting: 'Meeting',
+        note: 'Note',
+        task: 'Task',
+      }
+
+      const activityEvents: CRMActivityEvent[] = activities
+        .filter((activity: { due_date?: string }) => activity.due_date)
+        .map((activity: {
+          id: string
+          type: 'call' | 'email' | 'meeting' | 'note' | 'task'
+          subject?: string | null
+          description?: string | null
+          due_date: string
+          is_completed: boolean
+          contact?: { id: string; first_name: string; last_name?: string | null } | null
+          deal?: { id: string; name: string } | null
+        }) => ({
+          id: activity.id,
+          type: 'crm_activity' as const,
+          activityType: activity.type,
+          title: activity.subject || activityTypeLabels[activity.type] || 'Activity',
+          description: activity.description,
+          due_date: activity.due_date,
+          is_completed: activity.is_completed,
+          contact: activity.contact,
+          deal: activity.deal,
+        }))
+
+      setCRMActivities(activityEvents)
+    } catch (err) {
+      console.error('Failed to fetch CRM activities:', err)
+      setCRMActivities([])
+    } finally {
+      setLoadingCRMActivities(false)
     }
   }, [])
 
@@ -434,6 +522,11 @@ export function CalendarProvider({
     fetchScheduledSMS(startDate.toISOString(), endDate.toISOString())
   }, [startDate, endDate, fetchScheduledSMS])
 
+  // Load CRM activities when date range changes
+  useEffect(() => {
+    fetchCRMActivities(startDate.toISOString(), endDate.toISOString())
+  }, [startDate, endDate, fetchCRMActivities])
+
   return (
     <CalendarContext.Provider
       value={{
@@ -449,6 +542,9 @@ export function CalendarProvider({
         scheduledSMS,
         loadingScheduledSMS,
         fetchScheduledSMS,
+        crmActivities,
+        loadingCRMActivities,
+        fetchCRMActivities,
         startDate,
         endDate,
         setDateRange,

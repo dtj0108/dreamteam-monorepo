@@ -23,7 +23,7 @@ export async function GET(
     .from("deals")
     .select(`
       *,
-      contact:contacts(id, first_name, last_name, email, phone, company, job_title, avatar_url),
+      contact:contacts(id, first_name, last_name, email, phone, company, job_title),
       stage:pipeline_stages(id, name, color, position, win_probability)
     `)
     .eq("id", id)
@@ -97,7 +97,7 @@ export async function PATCH(
     .eq("profile_id", user.id)
     .select(`
       *,
-      contact:contacts(id, first_name, last_name, email, company, avatar_url),
+      contact:contacts(id, first_name, last_name, email, company),
       stage:pipeline_stages(id, name, color, position, win_probability)
     `)
     .single()

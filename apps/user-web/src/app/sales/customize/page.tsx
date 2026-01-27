@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CustomFieldsTab } from "@/components/sales/customize/custom-fields-tab"
 import { LeadStatusesTab } from "@/components/sales/customize/lead-statuses-tab"
+import { LeadTagsTab } from "@/components/sales/customize/lead-tags-tab"
 import { PipelinesTab } from "@/components/sales/customize/pipelines-tab"
 
 export default function CustomizePage() {
@@ -33,6 +34,12 @@ export default function CustomizePage() {
             Lead Statuses
           </TabsTrigger>
           <TabsTrigger
+            value="tags"
+            className="rounded-md px-3 py-1.5 text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm text-muted-foreground hover:text-foreground"
+          >
+            Tags
+          </TabsTrigger>
+          <TabsTrigger
             value="pipelines"
             className="rounded-md px-3 py-1.5 text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm text-muted-foreground hover:text-foreground"
           >
@@ -46,6 +53,10 @@ export default function CustomizePage() {
 
         <TabsContent value="lead-statuses">
           <LeadStatusesTab />
+        </TabsContent>
+
+        <TabsContent value="tags">
+          <LeadTagsTab />
         </TabsContent>
 
         <TabsContent value="pipelines">

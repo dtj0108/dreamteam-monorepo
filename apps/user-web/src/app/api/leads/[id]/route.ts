@@ -73,11 +73,24 @@ export async function GET(
       .eq("lead_id", id)
       .order("created_at", { ascending: false })
 
+    // Fetch tags assigned to this lead
+    const { data: tagAssignments } = await supabase
+      .from("lead_tag_assignments")
+      .select(`
+        tag:lead_tags(id, name, color)
+      `)
+      .eq("lead_id", id)
+
+    const tags = tagAssignments
+      ?.map((assignment: { tag: { id: string; name: string; color: string } | null }) => assignment.tag)
+      .filter(Boolean) || []
+
     return NextResponse.json({
       ...data,
       activities,
       tasks: tasks || [],
       opportunities: opportunities || [],
+      tags,
     })
   } catch (error) {
     console.error("Error in lead GET:", error)

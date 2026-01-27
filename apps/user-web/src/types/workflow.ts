@@ -27,6 +27,14 @@ export type ActionType =
   | "update_status"
   | "add_note"
   | "assign_user"
+  | "add_tag"
+  | "remove_tag"
+  | "move_lead_stage"
+  // Deal actions
+  | "create_deal"
+  | "update_deal"
+  | "move_deal_stage"
+  | "close_deal"
   // Flow control actions
   | "wait"
   | "condition"
@@ -144,6 +152,13 @@ export const ACTIONS: ActionDefinition[] = [
   { type: "update_status", label: "Update Status", description: "Update lead or deal status", icon: "Edit", category: "crm" },
   { type: "add_note", label: "Add Note", description: "Add a note to the record", icon: "FileText", category: "crm" },
   { type: "assign_user", label: "Assign User", description: "Assign to a team member", icon: "UserCheck", category: "crm" },
+  { type: "add_tag", label: "Add Tag", description: "Add tags to the lead", icon: "Tag", category: "crm" },
+  { type: "remove_tag", label: "Remove Tag", description: "Remove tags from the lead", icon: "TagOff", category: "crm" },
+  { type: "move_lead_stage", label: "Move Lead Stage", description: "Move lead to a pipeline stage", icon: "MoveRight", category: "crm" },
+  { type: "create_deal", label: "Create Opportunity", description: "Create a new opportunity", icon: "Briefcase", category: "crm" },
+  { type: "update_deal", label: "Update Opportunity", description: "Update opportunity fields", icon: "PenSquare", category: "crm" },
+  { type: "move_deal_stage", label: "Move Opportunity Stage", description: "Move opportunity to a different stage", icon: "ArrowRightCircle", category: "crm" },
+  { type: "close_deal", label: "Close Opportunity", description: "Mark opportunity as won or lost", icon: "CheckCircle2", category: "crm" },
   // Flow control actions
   { type: "wait", label: "Wait", description: "Pause execution for a period of time", icon: "Clock", category: "flow" },
   { type: "condition", label: "Condition", description: "Branch based on a condition", icon: "GitBranch", category: "flow" },

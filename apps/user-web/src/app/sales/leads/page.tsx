@@ -36,11 +36,15 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DataTablePagination } from "@/components/ui/data-table-pagination"
-import { PlusIcon, SearchIcon, BuildingIcon, TableIcon, KanbanIcon, Upload } from "lucide-react"
+import { PlusIcon, SearchIcon, BuildingIcon, TableIcon, KanbanIcon, Upload, Trash2, GitBranch, UserPlus, Tags, Loader2 } from "lucide-react"
 import { LeadForm, type Lead } from "@/components/sales/lead-form"
 import { CSVImportModal } from "@/components/import/csv-import-modal"
 import { LeadsKanbanBoard } from "@/components/sales/leads-kanban-board"
 import { LeadsFilterBar, type LeadsFilters, type LeadTag, type WorkspaceMember } from "@/components/sales/leads-filter-bar"
+import { BulkActionBar, type BulkAction } from "@/components/sales/bulk-action-bar"
+import { BulkStagePicker } from "@/components/sales/bulk-stage-picker"
+import { BulkAssigneePicker } from "@/components/sales/bulk-assignee-picker"
+import { BulkTagsManager } from "@/components/sales/bulk-tags-manager"
 import { getLeadColumns, type LeadRow } from "./columns"
 import type { LeadStatus, CustomField, CustomFieldWithValue, LeadPipeline } from "@/types/customization"
 import { format } from "date-fns"
@@ -67,6 +71,14 @@ export default function LeadsPage() {
   const [mounted, setMounted] = React.useState(false)
   const [addingToStageId, setAddingToStageId] = React.useState<string | undefined>()
   const [importModalOpen, setImportModalOpen] = React.useState(false)
+
+  // Bulk action state
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = React.useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = React.useState(false)
+  const [showStagePicker, setShowStagePicker] = React.useState(false)
+  const [showAssigneePicker, setShowAssigneePicker] = React.useState(false)
+  const [showTagsManager, setShowTagsManager] = React.useState(false)
+  const [isBulkUpdating, setIsBulkUpdating] = React.useState(false)
 
   // Customization state
   const [statuses, setStatuses] = React.useState<LeadStatus[]>([])
@@ -409,6 +421,166 @@ export default function LeadsPage() {
     },
   })
 
+  // Selected leads for bulk actions
+  const selectedLeads = React.useMemo(() => {
+    return table.getFilteredSelectedRowModel().rows.map((row) => row.original)
+  }, [rowSelection, filteredLeads])
+
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    const selectedRows = table.getFilteredSelectedRowModel().rows
+    const leadIds = selectedRows.map((row) => row.original.id)
+    if (leadIds.length === 0) return
+
+    setIsBulkDeleting(true)
+    try {
+      const response = await fetch("/api/leads/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_ids: leadIds }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to delete leads")
+      }
+
+      await fetchLeads()
+      setRowSelection({})
+    } catch (error) {
+      console.error("Bulk delete error:", error)
+    } finally {
+      setIsBulkDeleting(false)
+      setBulkDeleteDialogOpen(false)
+    }
+  }
+
+  // Bulk change stage handler
+  const handleBulkChangeStage = async (stageId: string) => {
+    const selectedRows = table.getFilteredSelectedRowModel().rows
+    const leadIds = selectedRows.map((row) => row.original.id)
+    if (leadIds.length === 0) return
+
+    setIsBulkUpdating(true)
+    try {
+      const response = await fetch("/api/leads/bulk-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lead_ids: leadIds,
+          updates: { stage_id: stageId },
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to update leads")
+      }
+
+      await fetchLeads()
+      setRowSelection({})
+    } catch (error) {
+      console.error("Bulk update error:", error)
+    } finally {
+      setIsBulkUpdating(false)
+    }
+  }
+
+  // Bulk assign handler
+  const handleBulkAssign = async (userId: string | null) => {
+    const selectedRows = table.getFilteredSelectedRowModel().rows
+    const leadIds = selectedRows.map((row) => row.original.id)
+    if (leadIds.length === 0) return
+
+    setIsBulkUpdating(true)
+    try {
+      const response = await fetch("/api/leads/bulk-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lead_ids: leadIds,
+          updates: { assigned_to: userId },
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to assign leads")
+      }
+
+      await fetchLeads()
+      setRowSelection({})
+    } catch (error) {
+      console.error("Bulk assign error:", error)
+    } finally {
+      setIsBulkUpdating(false)
+    }
+  }
+
+  // Bulk tags handler
+  const handleBulkUpdateTags = async (action: "add" | "remove" | "replace", tagIds: string[]) => {
+    const selectedRows = table.getFilteredSelectedRowModel().rows
+    const leadIds = selectedRows.map((row) => row.original.id)
+    if (leadIds.length === 0) return
+
+    setIsBulkUpdating(true)
+    try {
+      const response = await fetch("/api/leads/bulk-tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lead_ids: leadIds,
+          action,
+          tag_ids: tagIds,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to update tags")
+      }
+
+      await fetchLeads()
+      setRowSelection({})
+    } catch (error) {
+      console.error("Bulk tags error:", error)
+    } finally {
+      setIsBulkUpdating(false)
+    }
+  }
+
+  // Bulk actions configuration
+  const bulkActions: BulkAction[] = [
+    {
+      id: "delete",
+      label: "Delete",
+      icon: <Trash2 className="h-4 w-4" />,
+      onClick: () => setBulkDeleteDialogOpen(true),
+      loading: isBulkDeleting,
+    },
+    {
+      id: "stage",
+      label: "Change Stage",
+      icon: <GitBranch className="h-4 w-4" />,
+      onClick: () => setShowStagePicker(true),
+      disabled: isBulkUpdating,
+    },
+    {
+      id: "assign",
+      label: "Assign",
+      icon: <UserPlus className="h-4 w-4" />,
+      onClick: () => setShowAssigneePicker(true),
+      disabled: isBulkUpdating,
+    },
+    {
+      id: "tags",
+      label: "Tags",
+      icon: <Tags className="h-4 w-4" />,
+      onClick: () => setShowTagsManager(true),
+      disabled: isBulkUpdating,
+    },
+  ]
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -673,6 +845,72 @@ export default function LeadsPage() {
         open={importModalOpen}
         onOpenChange={setImportModalOpen}
         onImportComplete={fetchLeads}
+      />
+
+      {/* Bulk Delete Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedLeads.length} lead{selectedLeads.length !== 1 ? "s" : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the selected
+              lead{selectedLeads.length !== 1 ? "s" : ""} and all associated contacts.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Stage Picker */}
+      <BulkStagePicker
+        open={showStagePicker}
+        onOpenChange={setShowStagePicker}
+        pipelines={pipelines}
+        selectedCount={selectedLeads.length}
+        onApply={handleBulkChangeStage}
+      />
+
+      {/* Bulk Assignee Picker */}
+      <BulkAssigneePicker
+        open={showAssigneePicker}
+        onOpenChange={setShowAssigneePicker}
+        members={members}
+        selectedCount={selectedLeads.length}
+        onApply={handleBulkAssign}
+      />
+
+      {/* Bulk Tags Manager */}
+      <BulkTagsManager
+        open={showTagsManager}
+        onOpenChange={setShowTagsManager}
+        tags={tags}
+        selectedCount={selectedLeads.length}
+        onApply={handleBulkUpdateTags}
+      />
+
+      {/* Bulk Action Bar */}
+      <BulkActionBar
+        selectedCount={selectedLeads.length}
+        onClearSelection={() => setRowSelection({})}
+        actions={bulkActions}
       />
     </div>
   )

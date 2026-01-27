@@ -58,6 +58,17 @@ export interface Deal {
   stage?: PipelineStage | null
 }
 
+export interface ActivityAssignee {
+  id: string
+  user_id: string
+  assigned_at: string
+  user?: {
+    id: string
+    name: string
+    avatar_url: string | null
+  }
+}
+
 export interface Activity {
   id: string
   profile_id: string
@@ -73,6 +84,7 @@ export interface Activity {
   updated_at: string
   contact?: Contact | null
   deal?: Deal | null
+  assignees?: ActivityAssignee[]
 }
 
 interface SalesContextType {
@@ -298,10 +310,16 @@ export function SalesProvider({ children }: { children: ReactNode }) {
       const url = `/api/activities${params.toString() ? `?${params}` : ""}`
 
       const response = await fetch(url)
-      if (!response.ok) throw new Error("Failed to fetch activities")
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Failed to fetch activities:', response.status, response.statusText, errorData)
+        throw new Error(`Failed to fetch activities: ${response.status}`)
+      }
       const data = await response.json()
+      console.log('Activities API response:', data.activities?.length, 'activities', data.activities)
       setActivities(data.activities || [])
     } catch (err) {
+      console.error('Activities fetch error:', err)
       setError(err instanceof Error ? err.message : "Failed to fetch activities")
     }
   }, [])
