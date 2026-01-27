@@ -120,22 +120,6 @@ export function getSupportedProviders(): string[] {
 }
 
 /**
- * Check if a provider should use the Vercel AI SDK path
- * (vs claude-agent-sdk for Anthropic with MCP integration)
- *
- * Currently, we use claude-agent-sdk for Anthropic since it has
- * better MCP integration. All other providers use Vercel AI SDK.
- */
-export function shouldUseVercelAI(provider: string | undefined): boolean {
-  // If no provider specified, default to Anthropic (claude-agent-sdk)
-  if (!provider) return false
-
-  // Anthropic uses claude-agent-sdk for better MCP integration
-  // All other providers use Vercel AI SDK
-  return provider !== "anthropic"
-}
-
-/**
  * Get environment variable name for a provider's API key
  */
 export function getApiKeyEnvVar(provider: string): string {
@@ -160,4 +144,13 @@ export function getApiKeyEnvVar(provider: string): string {
 export function isProviderConfigured(provider: string): boolean {
   const envVar = getApiKeyEnvVar(provider)
   return !!process.env[envVar]
+}
+
+/**
+ * Check if Vercel AI SDK should be used for this provider
+ * Returns true for all providers - we now use Vercel AI SDK exclusively
+ */
+export function shouldUseVercelAI(provider: string | undefined): boolean {
+  // Always use Vercel AI SDK for all providers (including Anthropic)
+  return true
 }

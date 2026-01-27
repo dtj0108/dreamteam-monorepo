@@ -9,7 +9,7 @@
  */
 
 import type { Request, Response } from "express"
-import { streamText, type CoreMessage } from "ai"
+import { streamText, stepCountIs, type CoreMessage } from "ai"
 import { z } from "zod"
 import { createMCPClient, type MCPClientInstance } from "./lib/mcp-client.js"
 import { getModel } from "./lib/ai-providers.js"
@@ -23,6 +23,7 @@ import {
   createConversation,
 } from "./lib/agent-session.js"
 import { applyRulesToPrompt, type AgentRule } from "./lib/agent-rules.js"
+import { buildBusinessContextInstructions, parseBusinessContext } from "./lib/business-context.js"
 import type {
   ServerMessage,
   TextMessage,
@@ -588,6 +589,34 @@ Remember: A tool error is information, not a stop sign.
 `
       enhancedSystemPrompt = errorHandlingSection + enhancedSystemPrompt
 
+      // Load workspace-level business context (autonomy settings)
+      // This applies to ALL agents in the workspace
+      try {
+        const { data: workspace } = await supabase
+          .from("workspaces")
+          .select("business_context")
+          .eq("id", workspaceId)
+          .single()
+
+        if (workspace?.business_context) {
+          const businessContext = parseBusinessContext(workspace.business_context)
+          if (businessContext) {
+            const businessContextInstructions = buildBusinessContextInstructions(businessContext)
+            if (businessContextInstructions) {
+              enhancedSystemPrompt = `${businessContextInstructions}
+
+---
+
+${enhancedSystemPrompt}`
+              console.log(`[Agent Chat] Added workspace business context (${businessContextInstructions.length} chars)`)
+            }
+          }
+        }
+      } catch (error) {
+        console.error("[Agent Chat] Failed to load workspace business context:", error)
+        // Continue without business context
+      }
+
       // Debug: Token breakdown by component
       console.log('[Token Debug] System Prompt Breakdown:', {
         agentName: debugInfo.agentName,
@@ -686,7 +715,7 @@ Remember: A tool error is information, not a stop sign.
             system: enhancedSystemPrompt,
             messages: aiMessages,
             tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
-            maxSteps: 5, // Allow up to 5 tool call rounds
+            stopWhen: stepCountIs(5), // AI SDK 6: stop after 5 steps (allows tool call rounds)
             onStepFinish: async (step) => {
               // Send tool events for each step
               if (step.toolCalls && step.toolCalls.length > 0) {
@@ -736,15 +765,15 @@ Remember: A tool error is information, not a stop sign.
             console.error(`[Agent Chat] Stream error from ${provider}:`, streamError);
             throw streamError;
           }
-          console.log(`[Agent Chat] Stream completed, got ${assistantContent.length} chars`);
+          const steps = await result.steps;
+          console.log(`[Agent Chat] Stream completed, got ${assistantContent.length} chars, ${steps.length} steps`);
 
           // Get final usage stats
           const usage = await result.usage
           totalInputTokens = usage.promptTokens
           totalOutputTokens = usage.completionTokens
 
-          // Get step count for reporting
-          const steps = await result.steps
+          // Get step count for reporting (steps already fetched above)
           const turnCount = steps.length
 
           // Mark text as complete

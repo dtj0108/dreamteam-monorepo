@@ -229,10 +229,6 @@ class MockDatabase {
 const mockDb = new MockDatabase()
 
 // Mock external dependencies
-vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
-  query: vi.fn(),
-}))
-
 vi.mock("ai", () => ({
   streamText: vi.fn(),
 }))
@@ -254,7 +250,7 @@ vi.mock("../../lib/mcp-client.js", () => ({
 
 vi.mock("../../lib/ai-providers.js", () => ({
   getModel: vi.fn(),
-  shouldUseVercelAI: vi.fn(() => false),
+  shouldUseVercelAI: vi.fn(() => true), // Always use Vercel AI SDK
 }))
 
 vi.mock("../../lib/supabase.js", () => ({
@@ -263,13 +259,11 @@ vi.mock("../../lib/supabase.js", () => ({
 }))
 
 vi.mock("../../lib/agent-session.js", () => ({
-  storeSession: vi.fn(),
   loadSession: vi.fn(),
   updateSessionUsage: vi.fn(),
   createConversation: vi.fn((supabase, opts) => {
     return `conv-${Date.now()}`
   }),
-  calculateCost: vi.fn(() => 0.01),
 }))
 
 vi.mock("../../lib/agent-rules.js", () => ({
@@ -324,8 +318,8 @@ process.env.ANTHROPIC_API_KEY = "test-anthropic-key"
 import { agentChatHandler } from "../../agent-chat.js"
 import { authenticateRequest } from "../../lib/supabase.js"
 import { loadDeployedTeamConfig, getHeadAgent, __setDeployedConfig } from "../../lib/team-config.js"
-import { query } from "@anthropic-ai/claude-agent-sdk"
-import { createConversation, storeSession, updateSessionUsage } from "../../lib/agent-session.js"
+import { streamText } from "ai"
+import { createConversation, updateSessionUsage } from "../../lib/agent-session.js"
 
 // Helper to create mock Express request
 function createMockRequest(body: Record<string, unknown>, headers: Record<string, string> = {}): Request {
@@ -416,24 +410,14 @@ describe("Agent Chat Integration Tests", () => {
         name: "Test User",
       })
 
-      // Mock Claude SDK query
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-integration" }
-        yield {
-          type: "assistant",
-          message: {
-            content: [{ type: "text", text: "Hello! I'm the head agent." }],
-            usage: { input_tokens: 100, output_tokens: 50 },
-          },
-        }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-          total_cost_usd: 0.002,
-        }
-      })()
-      vi.mocked(query).mockReturnValue(mockQueryGenerator)
+      // Mock Vercel AI SDK streamText
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello! I'm the head agent."
+        })(),
+        usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
     })
 
     it("should load team config and use head agent", async () => {
@@ -470,7 +454,8 @@ describe("Agent Chat Integration Tests", () => {
       // Find session event
       const sessionEvent = res.events.find(e => e.type === "session")
       expect(sessionEvent).toBeDefined()
-      expect(sessionEvent?.data).toHaveProperty("sessionId", "sess-integration")
+      // Session ID is now generated dynamically, just check it exists
+      expect(sessionEvent?.data).toHaveProperty("sessionId")
       expect(sessionEvent?.data).toHaveProperty("conversationId")
     })
 
@@ -512,17 +497,16 @@ describe("Agent Chat Integration Tests", () => {
 
     it("should include delegation instructions for head agent", async () => {
       let capturedSystemPrompt = ""
-      vi.mocked(query).mockImplementation(function* (opts) {
-        const options = (opts as { options: { systemPrompt: string } }).options
-        capturedSystemPrompt = options.systemPrompt
-
-        yield { type: "system", subtype: "init", session_id: "sess-test" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      } as unknown as () => ReturnType<typeof query>)
+      vi.mocked(streamText).mockImplementation((opts) => {
+        capturedSystemPrompt = (opts as { system: string }).system
+        return {
+          textStream: (async function* () {
+            yield "Hello!"
+          })(),
+          usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+          steps: Promise.resolve([]),
+        } as unknown as ReturnType<typeof streamText>
+      })
 
       const req = createMockRequest({
         message: "Hello",
@@ -539,17 +523,16 @@ describe("Agent Chat Integration Tests", () => {
 
     it("should include knowledge base from mind files", async () => {
       let capturedSystemPrompt = ""
-      vi.mocked(query).mockImplementation(function* (opts) {
-        const options = (opts as { options: { systemPrompt: string } }).options
-        capturedSystemPrompt = options.systemPrompt
-
-        yield { type: "system", subtype: "init", session_id: "sess-test" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      } as unknown as () => ReturnType<typeof query>)
+      vi.mocked(streamText).mockImplementation((opts) => {
+        capturedSystemPrompt = (opts as { system: string }).system
+        return {
+          textStream: (async function* () {
+            yield "Hello!"
+          })(),
+          usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+          steps: Promise.resolve([]),
+        } as unknown as ReturnType<typeof streamText>
+      })
 
       const req = createMockRequest({
         message: "Hello",
@@ -566,17 +549,16 @@ describe("Agent Chat Integration Tests", () => {
 
     it("should include skills in system prompt", async () => {
       let capturedSystemPrompt = ""
-      vi.mocked(query).mockImplementation(function* (opts) {
-        const options = (opts as { options: { systemPrompt: string } }).options
-        capturedSystemPrompt = options.systemPrompt
-
-        yield { type: "system", subtype: "init", session_id: "sess-test" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      } as unknown as () => ReturnType<typeof query>)
+      vi.mocked(streamText).mockImplementation((opts) => {
+        capturedSystemPrompt = (opts as { system: string }).system
+        return {
+          textStream: (async function* () {
+            yield "Hello!"
+          })(),
+          usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+          steps: Promise.resolve([]),
+        } as unknown as ReturnType<typeof streamText>
+      })
 
       const req = createMockRequest({
         message: "Hello",
@@ -601,15 +583,13 @@ describe("Agent Chat Integration Tests", () => {
         name: "Test User",
       })
 
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-test" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockReturnValue(mockQueryGenerator)
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello!"
+        })(),
+        usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
     })
 
     it("should create new conversation for first message", async () => {
@@ -651,24 +631,18 @@ describe("Agent Chat Integration Tests", () => {
       expect(createConversation).not.toHaveBeenCalled()
     })
 
-    it("should store session after init event", async () => {
+    it("should use existing conversation ID when provided", async () => {
       const req = createMockRequest({
         message: "Hello",
         workspaceId: testWorkspaceId,
+        conversationId: testConversationId,
       })
       const res = createMockResponse()
 
       await agentChatHandler(req, res)
 
-      expect(storeSession).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.any(String),
-        "sess-test",
-        expect.objectContaining({
-          model: expect.any(String),
-          tools: expect.any(Array),
-        })
-      )
+      // Should not create a new conversation
+      expect(createConversation).not.toHaveBeenCalled()
     })
   })
 
@@ -683,15 +657,13 @@ describe("Agent Chat Integration Tests", () => {
         name: "Test User",
       })
 
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-single" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 50, output_tokens: 25 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockReturnValue(mockQueryGenerator)
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello from single agent!"
+        })(),
+        usage: Promise.resolve({ promptTokens: 50, completionTokens: 25 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
     })
 
     it("should fall back to single agent mode when no team deployed", async () => {
@@ -740,10 +712,10 @@ describe("Agent Chat Integration Tests", () => {
       })
     })
 
-    it("should send error event on Claude SDK error", async () => {
-      vi.mocked(query).mockImplementation(function* () {
+    it("should send error event on AI SDK error", async () => {
+      vi.mocked(streamText).mockImplementation(() => {
         throw new Error("API error")
-      } as unknown as () => ReturnType<typeof query>)
+      })
 
       const req = createMockRequest({
         message: "Hello",
@@ -759,9 +731,9 @@ describe("Agent Chat Integration Tests", () => {
     })
 
     it("should call res.end() after error", async () => {
-      vi.mocked(query).mockImplementation(function* () {
+      vi.mocked(streamText).mockImplementation(() => {
         throw new Error("API error")
-      } as unknown as () => ReturnType<typeof query>)
+      })
 
       const req = createMockRequest({
         message: "Hello",

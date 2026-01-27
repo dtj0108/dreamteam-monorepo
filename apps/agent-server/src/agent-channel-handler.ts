@@ -5,6 +5,8 @@
  * into an agent channel. Processes delegation requests by running
  * the specialist agent and posting the response back to the channel.
  *
+ * Uses Vercel AI SDK with MCP tools for all AI providers.
+ *
  * Webhook setup:
  * - Table: messages
  * - Event: INSERT
@@ -13,20 +15,14 @@
  */
 
 import type { Request, Response } from "express"
-import { query } from "@anthropic-ai/claude-agent-sdk"
-import type { McpStdioServerConfig } from "@anthropic-ai/claude-agent-sdk"
-import path from "path"
-import { fileURLToPath } from "url"
+import { generateText, stepCountIs } from "ai"
 import { createAdminClient } from "./lib/supabase.js"
 import { loadDeployedTeamConfig } from "./lib/team-config.js"
-import { postToAgentChannel } from "./lib/agent-channel.js"
 import { getAgentProfile } from "./lib/agent-profile.js"
 import { applyRulesToPrompt, type AgentRule } from "./lib/agent-rules.js"
+import { createMCPClient, type MCPClientInstance } from "./lib/mcp-client.js"
+import { getModel, getApiKeyEnvVar } from "./lib/ai-providers.js"
 import type { DeployedAgent, DeployedMind } from "./types/team.js"
-
-// Get __dirname equivalent in ESM
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 
 /**
  * Webhook payload from Supabase
@@ -117,21 +113,7 @@ You are responding to a delegated task from the team's head agent. Focus on your
 }
 
 /**
- * Map model name to Claude model ID
- * For Anthropic: converts 'sonnet'/'opus'/'haiku' to full model IDs
- * For other providers: returns the model string as-is (e.g., 'grok-3')
- */
-function getModelId(model: string): string {
-  const modelMap: Record<string, string> = {
-    sonnet: "claude-sonnet-4-20250514",
-    opus: "claude-opus-4-20250514",
-    haiku: "claude-haiku-4-20250514",
-  }
-  return modelMap[model] || model
-}
-
-/**
- * Run a specialist agent query
+ * Run a specialist agent query using Vercel AI SDK
  */
 async function runSpecialistQuery(
   agent: DeployedAgent,
@@ -141,79 +123,59 @@ async function runSpecialistQuery(
 ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
   const systemPrompt = buildSpecialistPrompt(agent, teamMind, workspaceId)
   const toolNames = agent.tools?.map((t) => t.name) || []
+  const provider = agent.provider || "anthropic"
 
-  // MCP server config (if agent has tools)
-  const mcpServerPath = path.resolve(
-    __dirname,
-    "../../packages/mcp-server/dist/index.js"
-  )
-
-  const mcpServerConfig: McpStdioServerConfig | null =
-    toolNames.length > 0
-      ? {
-          type: "stdio",
-          command: "node",
-          args: [mcpServerPath],
-          env: {
-            SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-            SUPABASE_SERVICE_ROLE_KEY:
-              process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-            WORKSPACE_ID: workspaceId,
-            USER_ID: "agent", // Agent-initiated queries
-          },
-        }
-      : null
-
-  // Run the query
-  const queryGenerator = query({
-    prompt: message,
-    options: {
-      model: getModelId(agent.model),
-      systemPrompt,
-      maxTurns: 5, // Lower for specialist queries
-      maxThinkingTokens: 2000,
-      disallowedTools: ["Task", "delegate_to_agent"], // No recursion
-      ...(mcpServerConfig
-        ? {
-            mcpServers: {
-              dreamteam: mcpServerConfig,
-            },
-            allowedTools: toolNames.map((name) => `mcp__dreamteam__${name}`),
-          }
-        : {}),
-      env: {
-        ...process.env,
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-      },
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
-      persistSession: false,
-    },
-  })
-
-  let responseText = ""
-  let inputTokens = 0
-  let outputTokens = 0
-
-  for await (const msg of queryGenerator) {
-    if (msg.type === "assistant") {
-      for (const content of msg.message.content) {
-        if (content.type === "text") {
-          responseText += content.text
-        }
-      }
-      if (msg.message.usage) {
-        inputTokens += msg.message.usage.input_tokens || 0
-        outputTokens += msg.message.usage.output_tokens || 0
-      }
-    }
-    if (msg.type === "result") {
-      inputTokens = msg.usage.input_tokens
-      outputTokens = msg.usage.output_tokens
-    }
+  // Check API key
+  const apiKeyEnvVar = getApiKeyEnvVar(provider)
+  if (!process.env[apiKeyEnvVar]) {
+    throw new Error(`API key not configured: ${apiKeyEnvVar}`)
   }
 
-  return { text: responseText, inputTokens, outputTokens }
+  console.log(`[Agent Channel Handler] Running specialist with ${provider}/${agent.model}`)
+
+  let mcpClient: MCPClientInstance | null = null
+
+  try {
+    // Create MCP client for tools (if tools are assigned)
+    let aiTools: Record<string, ReturnType<typeof import("ai").tool>> = {}
+    if (toolNames.length > 0) {
+      try {
+        mcpClient = await createMCPClient({
+          workspaceId,
+          userId: "agent",
+          enabledTools: toolNames,
+        })
+        aiTools = mcpClient.tools
+        console.log(`[Agent Channel Handler] MCP client connected with ${Object.keys(aiTools).length} tools`)
+      } catch (mcpError) {
+        console.error("[Agent Channel Handler] Failed to create MCP client:", mcpError)
+        // Continue without tools
+      }
+    }
+
+    // Run the query
+    const result = await generateText({
+      model: getModel(provider, agent.model),
+      system: systemPrompt,
+      messages: [{ role: "user", content: message }],
+      tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
+      stopWhen: stepCountIs(5), // AI SDK 6: lower for specialist queries
+    })
+
+    return {
+      text: result.text,
+      inputTokens: result.usage?.promptTokens || 0,
+      outputTokens: result.usage?.completionTokens || 0,
+    }
+  } finally {
+    if (mcpClient) {
+      try {
+        await mcpClient.close()
+      } catch (closeError) {
+        console.error("[Agent Channel Handler] Failed to close MCP client:", closeError)
+      }
+    }
+  }
 }
 
 /**
