@@ -1,132 +1,97 @@
 "use client"
 
-import { useState, useEffect, useCallback, Fragment, useRef, type FormEvent } from "react"
+import { useState, useEffect, useCallback, useRef, type FormEvent } from "react"
 import { useParams } from "next/navigation"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useAgentChat, type AgentMessage } from "@/hooks/use-agent-chat"
 import { dbMessagesToAgentMessages } from "@/lib/message-mapper"
 import {
   PromptInput,
   PromptInputTextarea,
+  PromptInputHeader,
+  PromptInputBody,
   PromptInputFooter,
   PromptInputTools,
-  PromptInputAttachments,
-  PromptInputAttachment,
   PromptInputSubmit,
+  PromptInputButton,
   PromptInputActionMenu,
   PromptInputActionMenuTrigger,
   PromptInputActionMenuContent,
   PromptInputActionAddAttachments,
+  usePromptInputAttachments,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input"
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
 import { useAgents } from "@/providers/agents-provider"
 import { useUser } from "@/hooks/use-user"
 import {
-  Message,
-  MessageContent,
-  MessageResponse,
-  MessageActions,
-  MessageAction,
-} from "@/components/ai-elements/message"
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation"
 import {
-  Reasoning,
-  ReasoningTrigger,
-  ReasoningContent,
-} from "@/components/ai-elements/reasoning"
+  Attachments,
+  Attachment,
+  AttachmentPreview,
+  AttachmentRemove,
+} from "@/components/ai-elements/attachments"
 import {
   Sparkles,
-  Copy,
   Bot,
   Square,
   AlertCircle,
   RotateCcw,
   Paperclip,
-  ThumbsUp,
-  ThumbsDown,
   Mic,
-  ArrowUp,
-  FileText,
-  Code,
-  Palette,
-  Search,
+  Loader2,
+  WifiOff,
+  ServerOff,
+  AlertTriangle,
 } from "lucide-react"
-import { ChatContainer } from "@/components/ai-elements/chat-container"
-import { PromptScrollButton } from "@/components/ai-elements/scroll-button"
-import { ToolResultRenderer } from "@/components/ai-elements/tool-result-renderer"
-import { StepIndicator } from "@/components/ai-elements/step-indicator"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
 import { ConversationSidebar, type ConversationItem } from "@/components/agents"
 import dynamic from "next/dynamic"
+import {
+  MessageRenderer,
+  SyntheticThinkingRenderer,
+} from "@/components/agent-chat"
 
 // Dynamic import for Lottie to reduce initial bundle size
 const Lottie = dynamic(() => import("lottie-react"), { ssr: false })
 
 const ANIMATION_PATH = "/animations/ai-sphere.json"
 
-// Suggestion categories for welcome screen
-const SUGGESTION_CATEGORIES = [
-  {
-    id: "summary",
-    icon: FileText,
-    label: "Summary",
-    highlight: "Summarize",
-    suggestions: [
-      "Summarize our recent performance",
-      "Summarize the latest updates",
-      "Give me a quick overview of pending tasks",
-      "What are the key metrics to focus on?",
-    ],
-  },
-  {
-    id: "code",
-    icon: Code,
-    label: "Code",
-    highlight: "Help me",
-    suggestions: [
-      "Help me write a function to calculate revenue",
-      "Help me debug this code",
-      "Explain how this algorithm works",
-      "Generate a utility function for data parsing",
-    ],
-  },
-  {
-    id: "design",
-    icon: Palette,
-    label: "Design",
-    highlight: "Design",
-    suggestions: [
-      "Design a color scheme for the dashboard",
-      "How can I improve the user experience?",
-      "Review the layout of this page",
-      "Recommend UI improvements for the form",
-    ],
-  },
-  {
-    id: "research",
-    icon: Search,
-    label: "Research",
-    highlight: "Research",
-    suggestions: [
-      "Research best practices for data visualization",
-      "What are competitors doing differently?",
-      "Research the latest industry trends",
-      "Help me understand this concept",
-    ],
-  },
+// Suggestions for welcome screen (flat list like the demo)
+const DEFAULT_SUGGESTIONS = [
+  "Summarize our recent performance",
+  "Help me write a function to calculate revenue",
+  "What are the key metrics to focus on?",
+  "Research best practices for data visualization",
+  "Give me a quick overview of pending tasks",
+  "Help me debug this code",
 ]
 
-// Helper to highlight text in suggestions (safe - only uses hardcoded values)
-function highlightText(text: string, highlight: string): React.ReactNode {
-  const parts = text.split(new RegExp(`(${highlight})`, "gi"))
-  return parts.map((part, i) =>
-    part.toLowerCase() === highlight.toLowerCase() ? (
-      <span key={i} className="text-primary font-medium">
-        {part}
-      </span>
-    ) : (
-      part
-    )
+// Attachments display component using AI Elements
+function PromptInputAttachmentsDisplay() {
+  const { files, remove } = usePromptInputAttachments()
+  
+  if (files.length === 0) return null
+  
+  return (
+    <Attachments variant="inline" className="px-4 pb-2">
+      {files.map((file) => (
+        <Attachment
+          key={file.id}
+          data={file}
+          onRemove={() => remove(file.id)}
+        >
+          <AttachmentPreview />
+          <AttachmentRemove />
+        </Attachment>
+      ))}
+    </Attachments>
   )
 }
 
@@ -143,13 +108,23 @@ export default function AgentChatPage() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [loadedMessages, setLoadedMessages] = useState<AgentMessage[]>([])
   const [lastUserMessage, setLastUserMessage] = useState<string | null>(null)
+  const [syntheticStage, setSyntheticStage] = useState(0)
   const lastSavedMessageCount = useRef(0)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const syntheticTimersRef = useRef<NodeJS.Timeout[]>([])
+
+  // Loading states
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false)
+  const [isSwitchingConversation, setIsSwitchingConversation] = useState(false)
+  
+  // Error handling with user-friendly messages
+  const [errorAlert, setErrorAlert] = useState<{
+    type: 'network' | 'server' | 'validation' | 'unknown'
+    message: string
+    retry?: () => void
+  } | null>(null)
 
   // Welcome screen state
   const [animationData, setAnimationData] = useState<object | null>(null)
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
 
   const {
     messages,
@@ -169,12 +144,72 @@ export default function AgentChatPage() {
       fetchConversations()
     },
     onError: (err) => {
-      console.error("Chat error:", err)
+      if (process.env.NODE_ENV === "development") {
+        console.error("Chat error:", err)
+      }
+      const details = getErrorDetails(err)
+      setErrorAlert({
+        type: details.type,
+        message: details.message,
+        retry: () => {
+          setErrorAlert(null)
+          if (lastUserMessage) {
+            sendMessage(lastUserMessage)
+          }
+        }
+      })
     },
   })
 
   const mappedStatus = status === "idle" ? "ready" : status === "connecting" ? "submitted" : status
   const hasStartedConversation = messages.length > 0
+
+  // Helper to get user-friendly error message
+  const getErrorDetails = useCallback((err: Error): { type: 'network' | 'server' | 'validation' | 'unknown'; message: string } => {
+    const message = err.message?.toLowerCase() || ''
+    
+    // Network errors
+    if (message.includes('network') || 
+        message.includes('fetch') || 
+        message.includes('failed to fetch') ||
+        message.includes('abort') ||
+        !navigator.onLine) {
+      return {
+        type: 'network',
+        message: 'Connection failed. Please check your internet.'
+      }
+    }
+    
+    // Server errors (5xx)
+    if (message.includes('500') || 
+        message.includes('502') || 
+        message.includes('503') ||
+        message.includes('504') ||
+        message.includes('http error: 5')) {
+      return {
+        type: 'server',
+        message: 'Server error. Please try again later.'
+      }
+    }
+    
+    // Validation errors (4xx)
+    if (message.includes('400') || 
+        message.includes('401') || 
+        message.includes('403') ||
+        message.includes('404') ||
+        message.includes('422') ||
+        message.includes('http error: 4')) {
+      return {
+        type: 'validation',
+        message: 'Invalid input. Please check your message.'
+      }
+    }
+    
+    return {
+      type: 'unknown',
+      message: err.message || 'Something went wrong. Please try again.'
+    }
+  }, [])
 
   // Load Lottie animation
   useEffect(() => {
@@ -192,8 +227,36 @@ export default function AgentChatPage() {
     loadAnimation()
   }, [])
 
+  // Progress synthetic reasoning stages during streaming
+  useEffect(() => {
+    // Clear any existing timers
+    syntheticTimersRef.current.forEach(clearTimeout)
+    syntheticTimersRef.current = []
+
+    if (status === "streaming" || status === "connecting") {
+      // Start synthetic stages
+      setSyntheticStage(0)
+      const delays = [0, 800, 1800, 3000]
+      delays.forEach((delay, i) => {
+        if (i > 0) {
+          const timer = setTimeout(() => setSyntheticStage(i), delay)
+          syntheticTimersRef.current.push(timer)
+        }
+      })
+    } else {
+      // Reset on idle
+      setSyntheticStage(0)
+    }
+
+    return () => {
+      syntheticTimersRef.current.forEach(clearTimeout)
+      syntheticTimersRef.current = []
+    }
+  }, [status])
+
   const fetchConversations = useCallback(async () => {
     if (!workspaceId) return
+    setIsLoadingActivity(true)
     try {
       const response = await fetch(
         `/api/agent-conversations?agentId=${agentId}&workspaceId=${workspaceId}`
@@ -201,13 +264,30 @@ export default function AgentChatPage() {
       if (response.ok) {
         const data = await response.json()
         setConversations(data)
+      } else {
+        const err = new Error(`HTTP error: ${response.status}`)
+        const details = getErrorDetails(err)
+        setErrorAlert({
+          type: details.type,
+          message: `Failed to load conversations: ${details.message}`,
+          retry: () => fetchConversations()
+        })
       }
     } catch (error) {
-      console.error("Failed to fetch conversations:", error)
+      const err = error instanceof Error ? error : new Error(String(error))
+      const details = getErrorDetails(err)
+      setErrorAlert({
+        type: details.type,
+        message: `Failed to load conversations: ${details.message}`,
+        retry: () => fetchConversations()
+      })
+    } finally {
+      setIsLoadingActivity(false)
     }
-  }, [agentId, workspaceId])
+  }, [agentId, workspaceId, getErrorDetails])
 
   const loadConversation = useCallback(async (conversationId: string) => {
+    setIsSwitchingConversation(true)
     try {
       const response = await fetch(`/api/agent-conversations/${conversationId}`)
       if (response.ok) {
@@ -216,18 +296,34 @@ export default function AgentChatPage() {
         setLoadedMessages(msgs)
         setMessages(msgs)
         lastSavedMessageCount.current = msgs.length
+        setErrorAlert(null) // Clear any previous errors
+      } else {
+        const err = new Error(`HTTP error: ${response.status}`)
+        const details = getErrorDetails(err)
+        setErrorAlert({
+          type: details.type,
+          message: `Failed to load conversation: ${details.message}`,
+          retry: () => loadConversation(conversationId)
+        })
       }
     } catch (error) {
-      console.error("Failed to load conversation:", error)
+      const err = error instanceof Error ? error : new Error(String(error))
+      const details = getErrorDetails(err)
+      setErrorAlert({
+        type: details.type,
+        message: `Failed to load conversation: ${details.message}`,
+        retry: () => loadConversation(conversationId)
+      })
+    } finally {
+      setIsSwitchingConversation(false)
     }
-  }, [setMessages])
+  }, [setMessages, getErrorDetails])
 
   const startNewConversation = useCallback(() => {
     setSelectedConversationId(null)
     setLoadedMessages([])
     setMessages([])
     lastSavedMessageCount.current = 0
-    setActiveCategory(null)
   }, [setMessages])
 
   const selectConversation = useCallback((conversationId: string) => {
@@ -280,7 +376,6 @@ export default function AgentChatPage() {
     async ({ text, files }: PromptInputMessage, _event: FormEvent<HTMLFormElement>) => {
       if (!text.trim() && files.length === 0) return
       setLastUserMessage(text)
-      setActiveCategory(null)
       sendMessage(text)
     },
     [sendMessage]
@@ -292,25 +387,55 @@ export default function AgentChatPage() {
     }
   }, [lastUserMessage, sendMessage])
 
-  const handleSuggestionClick = useCallback((text: string) => {
-    setActiveCategory(null)
-    sendMessage(text)
+  const handleSuggestionClick = useCallback((suggestion: string) => {
+    sendMessage(suggestion)
   }, [sendMessage])
 
   const displayName = currentAgent?.name || cachedAgent?.name || "Agent"
   const displayDescription = currentAgent?.description || cachedAgent?.description
   const displayAvatar = currentAgent?.avatar_url || cachedAgent?.avatar_url
+  
+  // Use agent's suggested prompts if available, otherwise fall back to defaults
+  const agentSuggestions = currentAgent?.suggested_prompts || cachedAgent?.suggested_prompts
+  const suggestionsToShow = agentSuggestions && agentSuggestions.length > 0 ? agentSuggestions : DEFAULT_SUGGESTIONS
 
-  const activeCategoryData = activeCategory
-    ? SUGGESTION_CATEGORIES.find((c) => c.id === activeCategory)
-    : null
-
-  // Loading state
+  // Loading state - shimmer skeleton for better UX
   if (isLoadingAgent && !cachedAgent) {
     return (
-      <div className="flex flex-col flex-1 min-h-0 items-center justify-center">
-        <Bot className="size-16 text-muted-foreground animate-pulse mb-4" />
-        <p className="text-muted-foreground">Loading agent...</p>
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Sidebar skeleton */}
+        <div className="w-64 border-r bg-muted/30 hidden md:flex flex-col p-4 gap-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <div className="space-y-2 mt-4">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        </div>
+        
+        {/* Main content skeleton */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Header skeleton with shimmer */}
+          <div className="flex items-center px-4 py-3 border-b shrink-0">
+            <div className="flex items-center gap-3">
+              <Skeleton className="size-8 rounded-lg" />
+              <Skeleton className="h-5 w-32" />
+            </div>
+          </div>
+          
+          {/* Content area skeleton */}
+          <div className="flex-1 flex flex-col items-center justify-center p-4">
+            <Skeleton className="w-64 h-64 rounded-full mb-6" />
+            <Skeleton className="h-8 w-96 mb-2" />
+            <Skeleton className="h-8 w-64" />
+          </div>
+          
+          {/* Input area skeleton */}
+          <div className="p-4 border-t">
+            <Skeleton className="h-20 w-full max-w-4xl mx-auto rounded-2xl" />
+          </div>
+        </div>
       </div>
     )
   }
@@ -334,6 +459,7 @@ export default function AgentChatPage() {
         selectedId={selectedConversationId}
         onSelect={selectConversation}
         onNewConversation={startNewConversation}
+        isLoading={isLoadingActivity}
       />
 
       {/* Main chat area - centered layout like shadcn-ui-kit */}
@@ -348,215 +474,109 @@ export default function AgentChatPage() {
           </div>
         </div>
 
-        {/* Main content area - scrollable container spans full width so scrollbar is at screen edge */}
-        <ChatContainer
-          containerRef={scrollContainerRef}
-          autoScroll={hasStartedConversation}
-          className={cn(
-            "flex-1 min-h-0 overflow-y-auto",
-            !hasStartedConversation && "overflow-hidden"
-          )}
-        >
-          <div className={cn(
-            "mx-auto flex w-full max-w-4xl flex-col p-4",
-            hasStartedConversation ? "flex-1 min-h-0" : "h-full items-center justify-center space-y-4"
+        {/* Main content area - using AI Elements Conversation for auto-scroll */}
+        <Conversation className="flex-1 min-h-0">
+          <ConversationContent className={cn(
+            "mx-auto w-full max-w-4xl p-4",
+            !hasStartedConversation && "h-full flex flex-col items-center justify-center"
           )}>
             {/* Messages section - only show when conversation started */}
-            {hasStartedConversation && <div className="space-y-6 py-6 flex-1">
-              {messages.map((message, messageIndex) => {
-                const isLastMessage = messageIndex === messages.length - 1
-                const isAssistant = message.role === "assistant"
-
-                if (message.parts && message.parts.length > 0) {
-                  const toolParts = message.parts.filter((p) => p.type === "tool-call")
-                  let toolIndex = 0
-
-                  return (
-                    <Fragment key={message.id}>
-                      {message.parts.map((part, i) => {
-                        switch (part.type) {
-                          case "text": {
-                            const isStreamingText = mappedStatus === "streaming" && isLastMessage && isAssistant
-                            const isNotStreaming = !isStreamingText && isAssistant
-                            return (
-                              <Message
-                                key={`${message.id}-${i}`}
-                                from={message.role as "user" | "assistant"}
-                                className={isAssistant ? "justify-start" : "justify-end"}
-                              >
-                                <div className={cn(isAssistant ? "flex-1" : "max-w-[85%] text-end ml-auto")}>
-                                  {isAssistant ? (
-                                    <div className="space-y-2 group/message">
-                                      <MessageResponse isStreaming={isStreamingText}>
-                                        {part.text}
-                                      </MessageResponse>
-                                      {isNotStreaming && (
-                                        <MessageActions className="flex gap-0 opacity-0 transition-opacity duration-150 group-hover/message:opacity-100">
-                                          <MessageAction
-                                            onClick={() => navigator.clipboard.writeText(part.text)}
-                                            label="Copy"
-                                            tooltip="Copy to clipboard"
-                                          >
-                                            <Copy className="size-4" />
-                                          </MessageAction>
-                                          <MessageAction
-                                            onClick={() => console.log("Good response:", message.id)}
-                                            label="Upvote"
-                                            tooltip="Good response"
-                                          >
-                                            <ThumbsUp className="size-4" />
-                                          </MessageAction>
-                                          <MessageAction
-                                            onClick={() => console.log("Bad response:", message.id)}
-                                            label="Downvote"
-                                            tooltip="Bad response"
-                                          >
-                                            <ThumbsDown className="size-4" />
-                                          </MessageAction>
-                                        </MessageActions>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <MessageContent className="bg-primary text-primary-foreground inline-flex">
-                                      {part.text}
-                                    </MessageContent>
-                                  )}
-                                </div>
-                              </Message>
-                            )
-                          }
-                          case "reasoning": {
-                            return (
-                              <div key={`${message.id}-${i}`} className="flex gap-3">
-                                <Reasoning isStreaming={(status === "connecting" || status === "streaming") && isLastMessage}>
-                                  <ReasoningTrigger />
-                                  <ReasoningContent>{part.reasoning}</ReasoningContent>
-                                </Reasoning>
-                              </div>
-                            )
-                          }
-                          case "tool-call": {
-                            const currentToolIndex = ++toolIndex
-                            const hasResult = part.state === "completed" || part.result !== undefined
-                            return (
-                              <div key={`${message.id}-${i}`} className="flex gap-3">
-                                <div className="flex-1">
-                                  <StepIndicator
-                                    step={currentToolIndex}
-                                    total={toolParts.length}
-                                    action={`Using ${part.toolName}`}
-                                  />
-                                  {hasResult && (
-                                    <ToolResultRenderer
-                                      toolName={part.toolName}
-                                      state="result"
-                                      result={part.result}
-                                      args={part.args as Record<string, unknown>}
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                            )
-                          }
-                          default:
-                            return null
-                        }
-                      })}
-                    </Fragment>
-                  )
-                }
-
-                // Fallback for messages without parts
-                return (
-                  <Message
+            {hasStartedConversation && (
+              <div className="space-y-6 py-6 flex-1">
+                {messages.map((message, messageIndex) => (
+                  <MessageRenderer
                     key={message.id}
-                    from={message.role as "user" | "assistant"}
-                    className={isAssistant ? "justify-start" : "justify-end"}
-                  >
-                    <div className={cn(isAssistant ? "flex-1" : "max-w-[85%] text-end ml-auto")}>
-                      {isAssistant ? (
-                        <MessageResponse isStreaming={mappedStatus === "streaming" && isLastMessage}>
-                          {message.content}
-                        </MessageResponse>
-                      ) : (
-                        <MessageContent className="bg-primary text-primary-foreground inline-flex">
-                          {message.content}
-                        </MessageContent>
-                      )}
-                    </div>
-                  </Message>
-                )
-              })}
-
-              {/* Error state with retry */}
-              {error && status === "error" && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="flex items-center justify-between">
-                    <span>{error.message || "Something went wrong. Please try again."}</span>
-                    {lastUserMessage && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRetry}
-                        className="ml-4 gap-1"
-                      >
-                        <RotateCcw className="size-3" />
-                        Retry
-                      </Button>
-                    )}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>}
-
-            {/* Scroll button - only show when chatting */}
-          {hasStartedConversation && (
-            <div className="fixed right-4 bottom-4 z-10">
-              <PromptScrollButton
-                containerRef={scrollContainerRef}
-                threshold={100}
-                className="shadow-sm"
-              />
-            </div>
-          )}
-
-          {/* Welcome message - shown when no messages */}
-          {!hasStartedConversation && (
-            <div className="mb-6">
-              {/* Lottie Animation */}
-              <div className="mx-auto -mt-16 hidden w-64 mask-b-from-100% md:block">
-                {animationData ? (
-                  <Lottie
-                    animationData={animationData}
-                    loop
-                    autoplay
-                    className="w-full"
+                    message={message}
+                    messageIndex={messageIndex}
+                    messages={messages}
+                    status={status}
+                    handleRetry={handleRetry}
                   />
-                ) : (
-                  <div className="mx-auto size-44 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 animate-pulse" />
+                ))}
+
+                {/* Synthetic thinking - show when streaming with no real content yet */}
+                <SyntheticThinkingRenderer 
+                  status={status}
+                  messages={messages}
+                  stage={syntheticStage}
+                />
+
+                {/* Error state with retry */}
+                {(errorAlert || (error && status === "error")) && (
+                  <Alert variant="destructive" className="animate-in fade-in-0 slide-in-from-bottom-2">
+                    {errorAlert?.type === 'network' ? (
+                      <WifiOff className="h-4 w-4 shrink-0" />
+                    ) : errorAlert?.type === 'server' ? (
+                      <ServerOff className="h-4 w-4 shrink-0" />
+                    ) : errorAlert?.type === 'validation' ? (
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                    )}
+                    <AlertDescription className="flex items-center justify-between gap-4 ml-2">
+                      <span>{errorAlert?.message || error?.message || "Something went wrong. Please try again."}</span>
+                      {(errorAlert?.retry || lastUserMessage) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setErrorAlert(null)
+                            errorAlert?.retry ? errorAlert.retry() : handleRetry()
+                          }}
+                          className="shrink-0 gap-1"
+                        >
+                          <RotateCcw className="size-3" />
+                          Retry
+                        </Button>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Conversation loading indicator */}
+                {isSwitchingConversation && (
+                  <div className="flex items-center justify-center py-8 gap-3 text-muted-foreground animate-in fade-in-0">
+                    <Loader2 className="size-5 animate-spin" />
+                    <span className="text-sm">Loading conversation...</span>
+                  </div>
                 )}
               </div>
+            )}
 
-              {/* Greeting */}
-              <h1 className="text-center text-2xl leading-normal font-medium lg:text-4xl">
-                Good to see you, {user?.name?.split(" ")[0] || "there"}! <br />
-                How can I help you today?
-              </h1>
-            </div>
-          )}
+            {/* Welcome message - shown when no messages */}
+            {!hasStartedConversation && (
+              <div className="mb-6">
+                {/* Lottie Animation */}
+                <div className="mx-auto -mt-16 hidden w-64 mask-b-from-100% md:block">
+                  {animationData ? (
+                    <Lottie
+                      animationData={animationData}
+                      loop
+                      autoplay
+                      className="w-full"
+                    />
+                  ) : (
+                    <div className="mx-auto size-44 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 animate-pulse" />
+                  )}
+                </div>
 
-        </div>
-      </ChatContainer>
+                {/* Greeting */}
+                <h1 className="text-center text-2xl leading-normal font-medium lg:text-4xl">
+                  Good to see you, {user?.name?.split(" ")[0] || "there"}! <br />
+                  How can I help you today?
+                </h1>
+              </div>
+            )}
+          </ConversationContent>
+          {hasStartedConversation && <ConversationScrollButton className="absolute bottom-4 right-4" />}
+        </Conversation>
 
-      {/* Input area - fixed at bottom, outside scroll container */}
-      <div className="mx-auto w-full max-w-4xl px-4 pb-4 shrink-0">
-        <div className={cn(
-          "bg-muted w-full rounded-2xl p-1 pt-0",
-          "[&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:ring-0 [&_[data-slot=input-group]:focus-within]:border-0 [&_[data-slot=input-group]:focus-within]:ring-0"
-        )}>
+        {/* Input area - fixed at bottom, outside scroll container */}
+        <div className="mx-auto w-full max-w-4xl px-4 pb-4 shrink-0">
+          <div className={cn(
+            "bg-muted w-full rounded-2xl p-1 pt-0",
+            "[&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:ring-0 [&_[data-slot=input-group]:focus-within]:border-0 [&_[data-slot=input-group]:focus-within]:ring-0"
+          )}>
             {/* Stop generation button */}
             {status === "streaming" && (
               <div className="flex justify-center py-2">
@@ -576,16 +596,20 @@ export default function AgentChatPage() {
               onSubmit={handleSubmit}
               accept="image/*"
               multiple
+              globalDrop
               className="w-full overflow-hidden border-0 p-0 shadow-none"
             >
-              <PromptInputAttachments className="flex flex-wrap gap-2 px-4 pb-2">
-                {(attachment) => <PromptInputAttachment data={attachment} />}
-              </PromptInputAttachments>
+              <PromptInputHeader>
+                <PromptInputAttachmentsDisplay />
+              </PromptInputHeader>
 
-              <PromptInputTextarea
-                placeholder={`Ask ${displayName} anything...`}
-                className="min-h-[44px] px-4 py-3"
-              />
+              <PromptInputBody>
+                <PromptInputTextarea
+                  placeholder={isSwitchingConversation ? "Loading conversation..." : `Ask ${displayName} anything...`}
+                  className="min-h-[44px] px-4 py-3"
+                  disabled={isSwitchingConversation}
+                />
+              </PromptInputBody>
 
               <PromptInputFooter className="flex items-center justify-between gap-2 p-3">
                 <PromptInputTools className="flex items-center gap-2">
@@ -600,70 +624,29 @@ export default function AgentChatPage() {
                 </PromptInputTools>
 
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" className="size-9 rounded-full">
+                  <PromptInputButton variant="ghost" disabled={isSwitchingConversation}>
                     <Mic className="size-4" />
-                  </Button>
+                    <span className="sr-only">Voice</span>
+                  </PromptInputButton>
                   <PromptInputSubmit
-                    status={mappedStatus === "streaming" ? "streaming" : mappedStatus === "submitted" ? "submitted" : "ready"}
-                    className="size-8 rounded-full bg-foreground text-background hover:bg-foreground/90"
-                  >
-                    {status === "streaming" ? <Square className="size-4" /> : <ArrowUp className="size-4" />}
-                  </PromptInputSubmit>
+                    status={mappedStatus === "streaming" ? "streaming" : mappedStatus === "submitted" ? "submitted" : isSwitchingConversation ? "submitted" : "ready"}
+                  />
                 </div>
               </PromptInputFooter>
             </PromptInput>
           </div>
 
-          {/* Suggestion categories - shown below input when no messages */}
+          {/* Suggestions - shown below input when no messages */}
           {!hasStartedConversation && (
-            <div className="relative w-full mt-4">
-              {activeCategoryData ? (
-                /* Expanded category suggestions */
-                <div className="flex w-full flex-col space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                  {activeCategoryData.suggestions.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => handleSuggestionClick(suggestion)}
-                      className={cn(
-                        "w-full text-left px-4 py-3 rounded-xl",
-                        "border border-border bg-background",
-                        "hover:bg-muted hover:border-muted-foreground/30",
-                        "transition-all duration-200 cursor-pointer",
-                        "text-sm"
-                      )}
-                    >
-                      {highlightText(suggestion, activeCategoryData.highlight)}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setActiveCategory(null)}
-                    className="text-sm text-muted-foreground hover:text-foreground mt-2"
-                  >
-                    ← Back to categories
-                  </button>
-                </div>
-              ) : (
-                /* Category chips */
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  {SUGGESTION_CATEGORIES.map((category) => (
-                    <button
-                      key={category.id}
-                      onClick={() => setActiveCategory(category.id)}
-                      className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-full",
-                        "border border-border bg-background",
-                        "hover:bg-muted hover:border-muted-foreground/30",
-                        "transition-all duration-200 cursor-pointer",
-                        "text-sm font-medium capitalize"
-                      )}
-                    >
-                      <category.icon className="size-4" />
-                      {category.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <Suggestions className="mt-4">
+              {suggestionsToShow.map((suggestion) => (
+                <Suggestion
+                  key={suggestion}
+                  suggestion={suggestion}
+                  onClick={() => handleSuggestionClick(suggestion)}
+                />
+              ))}
+            </Suggestions>
           )}
         </div>
       </div>

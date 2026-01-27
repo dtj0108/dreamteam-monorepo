@@ -78,6 +78,33 @@ export async function getWorkspaceBilling(workspaceId: string): Promise<Workspac
 }
 
 /**
+ * Ensure a billing record exists for a workspace.
+ * Creates one with default values if it doesn't exist.
+ * Call this before any Stripe operations to ensure the record is present.
+ */
+export async function ensureWorkspaceBilling(workspaceId: string): Promise<void> {
+  const supabase = createAdminClient()
+
+  // Use upsert with ON CONFLICT to safely create if not exists
+  const { error } = await supabase
+    .from('workspace_billing')
+    .upsert(
+      {
+        workspace_id: workspaceId,
+        plan: 'free',
+        agent_tier: 'none',
+        included_users: 3,
+        storage_limit_gb: 1,
+      },
+      { onConflict: 'workspace_id', ignoreDuplicates: true }
+    )
+
+  if (error) {
+    console.error('Error ensuring workspace billing:', error)
+  }
+}
+
+/**
  * Get or create Stripe customer for a workspace
  */
 export async function getOrCreateStripeCustomer(
@@ -86,6 +113,10 @@ export async function getOrCreateStripeCustomer(
   ownerEmail: string
 ): Promise<string> {
   const supabase = createAdminClient()
+
+  // Ensure billing record exists before any operations
+  await ensureWorkspaceBilling(workspaceId)
+
   const billing = await getWorkspaceBilling(workspaceId)
 
   // Return existing customer ID if we have one
@@ -236,7 +267,7 @@ export async function recordInvoice(
 }
 
 /**
- * Get invoices for a workspace
+ * Get invoices for a workspace - fetches directly from Stripe for accuracy
  */
 export async function getWorkspaceInvoices(
   workspaceId: string,
@@ -244,19 +275,82 @@ export async function getWorkspaceInvoices(
 ): Promise<BillingInvoice[]> {
   const supabase = createAdminClient()
 
-  const { data, error } = await supabase
-    .from('billing_invoices')
-    .select('*')
+  // First, get the Stripe customer ID for this workspace
+  const { data: billing } = await supabase
+    .from('workspace_billing')
+    .select('stripe_customer_id')
     .eq('workspace_id', workspaceId)
-    .order('created_at', { ascending: false })
-    .limit(limit)
+    .single()
 
-  if (error) {
-    console.error('Error fetching invoices:', error)
-    return []
+  // If no Stripe customer ID, fall back to database records
+  if (!billing?.stripe_customer_id) {
+    const { data, error } = await supabase
+      .from('billing_invoices')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      console.error('Error fetching invoices from database:', error)
+      return []
+    }
+
+    return data as BillingInvoice[]
   }
 
-  return data as BillingInvoice[]
+  // Fetch invoices directly from Stripe
+  try {
+    const stripeInvoices = await stripe.invoices.list({
+      customer: billing.stripe_customer_id,
+      limit,
+    })
+
+    // Map Stripe invoices to our format
+    return stripeInvoices.data.map((invoice) => {
+      // Handle payment_intent which may be string, object, or not present
+      const paymentIntent = (invoice as unknown as { payment_intent?: string | { id: string } | null }).payment_intent
+      const stripe_payment_intent_id = typeof paymentIntent === 'string'
+        ? paymentIntent
+        : paymentIntent?.id || null
+
+      return {
+        id: invoice.id,
+        workspace_id: workspaceId,
+        stripe_invoice_id: invoice.id,
+        stripe_payment_intent_id,
+        amount_due: invoice.amount_due,
+        amount_paid: invoice.amount_paid,
+        currency: invoice.currency,
+        status: invoice.status || 'draft',
+        description: invoice.description,
+        invoice_url: invoice.hosted_invoice_url ?? null,
+        invoice_pdf: invoice.invoice_pdf ?? null,
+        period_start: invoice.period_start
+          ? new Date(invoice.period_start * 1000).toISOString()
+          : null,
+        period_end: invoice.period_end
+          ? new Date(invoice.period_end * 1000).toISOString()
+          : null,
+        paid_at: invoice.status === 'paid' && invoice.status_transitions?.paid_at
+          ? new Date(invoice.status_transitions.paid_at * 1000).toISOString()
+          : null,
+        created_at: new Date(invoice.created * 1000).toISOString(),
+      }
+    })
+  } catch (error) {
+    console.error('Error fetching invoices from Stripe:', error)
+
+    // Fall back to database on Stripe error
+    const { data } = await supabase
+      .from('billing_invoices')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    return (data as BillingInvoice[]) || []
+  }
 }
 
 /**
