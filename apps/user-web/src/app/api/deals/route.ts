@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     .from("deals")
     .select(`
       *,
-      contact:contacts(id, first_name, last_name, email, company, avatar_url),
+      contact:contacts(id, first_name, last_name, email, company),
       stage:pipeline_stages(id, name, color, position, win_probability)
     `)
     .eq("profile_id", user.id)
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     })
     .select(`
       *,
-      contact:contacts(id, first_name, last_name, email, company, avatar_url),
+      contact:contacts(id, first_name, last_name, email, company),
       stage:pipeline_stages(id, name, color, position, win_probability)
     `)
     .single()

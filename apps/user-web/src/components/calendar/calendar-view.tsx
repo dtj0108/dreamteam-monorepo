@@ -2,37 +2,43 @@
 
 import { useMemo } from "react"
 import { cn } from "@/lib/utils"
-import { CalendarEvent, ScheduledSMSEvent } from "@/providers/calendar-provider"
-import { MessageSquareIcon } from "lucide-react"
+import { CalendarEvent, ScheduledSMSEvent, CRMActivityEvent } from "@/providers/calendar-provider"
+import { MessageSquareIcon, PhoneIcon, MailIcon, CalendarIcon, FileTextIcon, ClipboardListIcon } from "lucide-react"
 
 interface CalendarViewProps {
   events: CalendarEvent[]
   scheduledSMS?: ScheduledSMSEvent[]
+  crmActivities?: CRMActivityEvent[]
   view: 'month' | 'week' | 'day'
   startDate: Date
   onDateClick?: (date: Date) => void
   onEventClick?: (event: CalendarEvent) => void
   onScheduledSMSClick?: (sms: ScheduledSMSEvent) => void
+  onCRMActivityClick?: (activity: CRMActivityEvent) => void
 }
 
 export function CalendarView({
   events,
   scheduledSMS = [],
+  crmActivities = [],
   view,
   startDate,
   onDateClick,
   onEventClick,
   onScheduledSMSClick,
+  onCRMActivityClick,
 }: CalendarViewProps) {
   if (view === 'week') {
     return (
       <WeekView
         events={events}
         scheduledSMS={scheduledSMS}
+        crmActivities={crmActivities}
         startDate={startDate}
         onDateClick={onDateClick}
         onEventClick={onEventClick}
         onScheduledSMSClick={onScheduledSMSClick}
+        onCRMActivityClick={onCRMActivityClick}
       />
     )
   }
@@ -42,10 +48,12 @@ export function CalendarView({
       <DayView
         events={events}
         scheduledSMS={scheduledSMS}
+        crmActivities={crmActivities}
         date={startDate}
         onTimeClick={onDateClick}
         onEventClick={onEventClick}
         onScheduledSMSClick={onScheduledSMSClick}
+        onCRMActivityClick={onCRMActivityClick}
       />
     )
   }
@@ -54,29 +62,52 @@ export function CalendarView({
     <MonthView
       events={events}
       scheduledSMS={scheduledSMS}
+      crmActivities={crmActivities}
       startDate={startDate}
       onDateClick={onDateClick}
       onEventClick={onEventClick}
       onScheduledSMSClick={onScheduledSMSClick}
+      onCRMActivityClick={onCRMActivityClick}
     />
   )
+}
+
+// Activity type colors and icons
+const activityColors: Record<string, string> = {
+  call: 'bg-blue-500',
+  email: 'bg-orange-500',
+  meeting: 'bg-green-500',
+  note: 'bg-gray-500',
+  task: 'bg-purple-500',
+}
+
+const activityIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  call: PhoneIcon,
+  email: MailIcon,
+  meeting: CalendarIcon,
+  note: FileTextIcon,
+  task: ClipboardListIcon,
 }
 
 // Week View Component
 function WeekView({
   events,
   scheduledSMS = [],
+  crmActivities = [],
   startDate,
   onDateClick,
   onEventClick,
   onScheduledSMSClick,
+  onCRMActivityClick,
 }: {
   events: CalendarEvent[]
   scheduledSMS?: ScheduledSMSEvent[]
+  crmActivities?: CRMActivityEvent[]
   startDate: Date
   onDateClick?: (date: Date) => void
   onEventClick?: (event: CalendarEvent) => void
   onScheduledSMSClick?: (sms: ScheduledSMSEvent) => void
+  onCRMActivityClick?: (activity: CRMActivityEvent) => void
 }) {
   const days = useMemo(() => {
     const result = []
@@ -112,6 +143,18 @@ function WeekView({
     return scheduledSMS.filter((sms) => {
       const smsDate = new Date(sms.scheduled_for)
       return smsDate >= dayStart && smsDate <= dayEnd
+    })
+  }
+
+  const getCRMActivitiesForDay = (date: Date) => {
+    const dayStart = new Date(date)
+    dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(date)
+    dayEnd.setHours(23, 59, 59, 999)
+
+    return crmActivities.filter((activity) => {
+      const activityDate = new Date(activity.due_date)
+      return activityDate >= dayStart && activityDate <= dayEnd
     })
   }
 
@@ -167,6 +210,7 @@ function WeekView({
           {days.map((day, dayIndex) => {
             const dayEvents = getEventsForDay(day)
             const daySMS = getScheduledSMSForDay(day)
+            const dayActivities = getCRMActivitiesForDay(day)
 
             return (
               <div
@@ -247,6 +291,38 @@ function WeekView({
                     </div>
                   )
                 })}
+
+                {/* CRM Activities */}
+                {dayActivities.map((activity) => {
+                  const activityDate = new Date(activity.due_date)
+                  const startMinutes = activityDate.getHours() * 60 + activityDate.getMinutes()
+                  const ActivityIcon = activityIcons[activity.activityType] || ClipboardListIcon
+                  const bgColor = activityColors[activity.activityType] || 'bg-gray-500'
+
+                  return (
+                    <div
+                      key={activity.id}
+                      className={cn(
+                        "absolute left-1 right-1 rounded px-2 py-1 text-xs overflow-hidden cursor-pointer text-white",
+                        bgColor,
+                        activity.is_completed && "opacity-50 line-through"
+                      )}
+                      style={{
+                        top: `${startMinutes}px`,
+                        height: '30px',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onCRMActivityClick?.(activity)
+                      }}
+                    >
+                      <div className="font-medium truncate flex items-center gap-1">
+                        <ActivityIcon className="size-3" />
+                        {activity.title}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )
           })}
@@ -260,17 +336,21 @@ function WeekView({
 function DayView({
   events,
   scheduledSMS = [],
+  crmActivities = [],
   date,
   onTimeClick,
   onEventClick,
   onScheduledSMSClick,
+  onCRMActivityClick,
 }: {
   events: CalendarEvent[]
   scheduledSMS?: ScheduledSMSEvent[]
+  crmActivities?: CRMActivityEvent[]
   date: Date
   onTimeClick?: (date: Date) => void
   onEventClick?: (event: CalendarEvent) => void
   onScheduledSMSClick?: (sms: ScheduledSMSEvent) => void
+  onCRMActivityClick?: (activity: CRMActivityEvent) => void
 }) {
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
@@ -289,6 +369,15 @@ function DayView({
       smsDate.getDate() === date.getDate() &&
       smsDate.getMonth() === date.getMonth() &&
       smsDate.getFullYear() === date.getFullYear()
+    )
+  })
+
+  const dayActivities = crmActivities.filter((activity) => {
+    const activityDate = new Date(activity.due_date)
+    return (
+      activityDate.getDate() === date.getDate() &&
+      activityDate.getMonth() === date.getMonth() &&
+      activityDate.getFullYear() === date.getFullYear()
     )
   })
 
@@ -378,6 +467,38 @@ function DayView({
             </div>
           )
         })}
+
+        {/* CRM Activities */}
+        {dayActivities.map((activity) => {
+          const activityDate = new Date(activity.due_date)
+          const startMinutes = activityDate.getHours() * 60 + activityDate.getMinutes()
+          const ActivityIcon = activityIcons[activity.activityType] || ClipboardListIcon
+          const bgColor = activityColors[activity.activityType] || 'bg-gray-500'
+
+          return (
+            <div
+              key={activity.id}
+              className={cn(
+                "absolute left-1 right-1 rounded px-2 py-1 text-sm overflow-hidden cursor-pointer text-white",
+                bgColor,
+                activity.is_completed && "opacity-50 line-through"
+              )}
+              style={{
+                top: `${startMinutes}px`,
+                height: '30px',
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onCRMActivityClick?.(activity)
+              }}
+            >
+              <div className="font-medium flex items-center gap-1">
+                <ActivityIcon className="size-4" />
+                {activity.title}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -387,17 +508,21 @@ function DayView({
 function MonthView({
   events,
   scheduledSMS = [],
+  crmActivities = [],
   startDate,
   onDateClick,
   onEventClick,
   onScheduledSMSClick,
+  onCRMActivityClick,
 }: {
   events: CalendarEvent[]
   scheduledSMS?: ScheduledSMSEvent[]
+  crmActivities?: CRMActivityEvent[]
   startDate: Date
   onDateClick?: (date: Date) => void
   onEventClick?: (event: CalendarEvent) => void
   onScheduledSMSClick?: (sms: ScheduledSMSEvent) => void
+  onCRMActivityClick?: (activity: CRMActivityEvent) => void
 }) {
   const today = new Date()
 
@@ -445,6 +570,18 @@ function MonthView({
     return scheduledSMS.filter((sms) => {
       const smsDate = new Date(sms.scheduled_for)
       return smsDate >= dayStart && smsDate <= dayEnd
+    })
+  }
+
+  const getCRMActivitiesForDay = (date: Date) => {
+    const dayStart = new Date(date)
+    dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(date)
+    dayEnd.setHours(23, 59, 59, 999)
+
+    return crmActivities.filter((activity) => {
+      const activityDate = new Date(activity.due_date)
+      return activityDate >= dayStart && activityDate <= dayEnd
     })
   }
 
@@ -522,9 +659,35 @@ function MonthView({
                       {sms.title}
                     </div>
                   ))}
-                  {(getEventsForDay(day).length + getScheduledSMSForDay(day).length) > 3 && (
+                  {getCRMActivitiesForDay(day).slice(0, 2).map((activity) => {
+                    const ActivityIcon = activityIcons[activity.activityType] || ClipboardListIcon
+                    const colorClass = activity.activityType === 'call' ? 'bg-blue-500/20 text-blue-700'
+                      : activity.activityType === 'email' ? 'bg-orange-500/20 text-orange-700'
+                      : activity.activityType === 'meeting' ? 'bg-green-500/20 text-green-700'
+                      : activity.activityType === 'note' ? 'bg-gray-500/20 text-gray-700'
+                      : 'bg-purple-500/20 text-purple-700'
+
+                    return (
+                      <div
+                        key={activity.id}
+                        className={cn(
+                          "text-xs px-1 py-0.5 rounded truncate cursor-pointer flex items-center gap-1",
+                          colorClass,
+                          activity.is_completed && "opacity-50 line-through"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onCRMActivityClick?.(activity)
+                        }}
+                      >
+                        <ActivityIcon className="size-3" />
+                        {activity.title}
+                      </div>
+                    )
+                  })}
+                  {(getEventsForDay(day).length + getScheduledSMSForDay(day).length + getCRMActivitiesForDay(day).length) > 3 && (
                     <div className="text-xs text-muted-foreground px-1">
-                      +{(getEventsForDay(day).length + getScheduledSMSForDay(day).length) - 3} more
+                      +{(getEventsForDay(day).length + getScheduledSMSForDay(day).length + getCRMActivitiesForDay(day).length) - 3} more
                     </div>
                   )}
                 </div>

@@ -3,40 +3,70 @@ import { createServerSupabaseClient } from "@/lib/supabase-server"
 
 // GET /api/activities - List activities, optionally filtered
 export async function GET(request: NextRequest) {
-  const supabase = await createServerSupabaseClient()
-  const { searchParams } = new URL(request.url)
-  const dealId = searchParams.get("deal_id")
-  const contactId = searchParams.get("contact_id")
+  try {
+    const supabase = await createServerSupabaseClient()
+    const { searchParams } = new URL(request.url)
+    const dealId = searchParams.get("deal_id")
+    const contactId = searchParams.get("contact_id")
+    const startDate = searchParams.get("start_date")
+    const endDate = searchParams.get("end_date")
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      console.error('Activities API GET auth error:', authError?.message || 'No user found')
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    let query = supabase
+      .from("activities")
+      .select(`
+        *,
+        contact:contacts(id, first_name, last_name, email),
+        deal:deals(id, name, value, status),
+        assignees:activity_assignees(
+          id,
+          user_id,
+          assigned_at,
+          user:profiles(id, name, avatar_url)
+        )
+      `)
+      .eq("profile_id", user.id)
+      .order("created_at", { ascending: false })
+
+    if (dealId) {
+      query = query.eq("deal_id", dealId)
+    }
+    if (contactId) {
+      query = query.eq("contact_id", contactId)
+    }
+
+    // Filter by date range (for calendar view)
+    if (startDate) {
+      query = query.gte("due_date", startDate)
+    }
+    if (endDate) {
+      query = query.lte("due_date", endDate)
+    }
+
+    const { data: activities, error } = await query
+
+    if (error) {
+      console.error('Activities API query error:', error.message, error.code, error.details)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    console.log('Activities API GET: returning', activities?.length || 0, 'activities for user', user.id)
+    if (activities && activities.length > 0) {
+      console.log('Sample activity:', JSON.stringify(activities[0], null, 2))
+    }
+
+    return NextResponse.json({ activities: activities || [] })
+  } catch (err) {
+    console.error('Activities API uncaught error:', err)
+    return NextResponse.json({
+      error: err instanceof Error ? err.message : 'Internal server error'
+    }, { status: 500 })
   }
-
-  let query = supabase
-    .from("activities")
-    .select(`
-      *,
-      contact:contacts(id, first_name, last_name, email, avatar_url),
-      deal:deals(id, name, value, status)
-    `)
-    .eq("profile_id", user.id)
-    .order("created_at", { ascending: false })
-
-  if (dealId) {
-    query = query.eq("deal_id", dealId)
-  }
-  if (contactId) {
-    query = query.eq("contact_id", contactId)
-  }
-
-  const { data: activities, error } = await query
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ activities: activities || [] })
 }
 
 // POST /api/activities - Create a new activity
@@ -57,6 +87,7 @@ export async function POST(request: NextRequest) {
     deal_id,
     due_date,
     is_completed,
+    assignees,
   } = body
 
   if (!type) {
@@ -83,7 +114,7 @@ export async function POST(request: NextRequest) {
     })
     .select(`
       *,
-      contact:contacts(id, first_name, last_name, email, avatar_url),
+      contact:contacts(id, first_name, last_name, email),
       deal:deals(id, name, value, status)
     `)
     .single()
@@ -92,5 +123,38 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ activity })
+  // Insert assignees if provided
+  if (assignees && assignees.length > 0 && activity) {
+    const { error: assigneesError } = await supabase
+      .from("activity_assignees")
+      .insert(
+        assignees.map((userId: string) => ({
+          activity_id: activity.id,
+          user_id: userId,
+        }))
+      )
+
+    if (assigneesError) {
+      console.error("Error inserting assignees:", assigneesError)
+    }
+  }
+
+  // Re-fetch with assignees to return complete data
+  const { data: completeActivity } = await supabase
+    .from("activities")
+    .select(`
+      *,
+      contact:contacts(id, first_name, last_name, email),
+      deal:deals(id, name, value, status),
+      assignees:activity_assignees(
+        id,
+        user_id,
+        assigned_at,
+        user:profiles(id, name, avatar_url)
+      )
+    `)
+    .eq("id", activity.id)
+    .single()
+
+  return NextResponse.json({ activity: completeActivity || activity })
 }

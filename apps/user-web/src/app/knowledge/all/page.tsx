@@ -23,7 +23,18 @@ import {
   LayoutGrid,
   List,
   GripVertical,
+  Trash2,
 } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useKnowledge } from "@/providers/knowledge-provider"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 import Link from "next/link"
@@ -108,12 +119,31 @@ export default function KnowledgeAllPage() {
     getCategoryById,
     filteredPages,
     setPageCategories,
+    deletePage,
   } = useKnowledge()
+
+  // Delete confirmation state
+  const [pageToDelete, setPageToDelete] = useState<KnowledgePage | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Handler to remove a category from a page
   const handleRemoveCategory = async (pageId: string, categoryId: string, currentCategoryIds: string[]) => {
     const newIds = currentCategoryIds.filter(id => id !== categoryId)
     await setPageCategories(pageId, newIds)
+  }
+
+  // Handler to delete a page
+  const handleDeletePage = async () => {
+    if (!pageToDelete) return
+    setIsDeleting(true)
+    try {
+      await deletePage(pageToDelete.id)
+      setPageToDelete(null)
+    } catch (error) {
+      console.error("Failed to delete page:", error)
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   // UI state with localStorage persistence
@@ -329,14 +359,26 @@ export default function KnowledgeAllPage() {
                         </div>
                       )}
 
-                      {/* Footer: Date & Favorite */}
+                      {/* Footer: Date & Actions */}
                       <div className="mt-auto pt-2 flex items-center justify-between text-xs text-muted-foreground">
                         <span>
                           {formatDistanceToNow(new Date(page.updatedAt), { addSuffix: true })}
                         </span>
-                        {page.isFavorite && (
-                          <Star className="size-3.5 text-yellow-500 fill-yellow-500" />
-                        )}
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setPageToDelete(page)
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                          {page.isFavorite && (
+                            <Star className="size-3.5 text-yellow-500 fill-yellow-500" />
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -351,7 +393,7 @@ export default function KnowledgeAllPage() {
               <DraggablePage key={page.id} page={page}>
                 <Link
                   href={`/knowledge/${page.id}`}
-                  className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors"
+                  className="group flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <GripVertical className="size-4 text-muted-foreground shrink-0" />
@@ -380,11 +422,43 @@ export default function KnowledgeAllPage() {
                   {page.isFavorite && (
                     <Star className="size-4 text-yellow-500 fill-yellow-500 shrink-0" />
                   )}
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setPageToDelete(page)
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all shrink-0"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
                 </Link>
               </DraggablePage>
             ))}
           </div>
         )}
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!pageToDelete} onOpenChange={(open) => !open && setPageToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Page</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete "{pageToDelete?.title}"? This will archive the page and it can be restored later.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={handleDeletePage}
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </ScrollArea>
   )

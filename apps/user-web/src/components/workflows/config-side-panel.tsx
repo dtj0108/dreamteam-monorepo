@@ -23,13 +23,33 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@dreamteam/ui/alert-dialog"
-import { XIcon, InfoIcon, Trash2Icon, Loader2 } from "lucide-react"
+import { XIcon, InfoIcon, Trash2Icon, Loader2, SearchIcon, PlusIcon, CheckIcon, TrophyIcon, XCircleIcon } from "lucide-react"
 
 interface NylasGrant {
   id: string
   email: string
   provider: string
 }
+
+// Tag type for the selector
+interface LeadTag {
+  id: string
+  name: string
+  color: string
+}
+
+// Preset colors for new tags
+const TAG_COLORS = [
+  "#3b82f6", // blue
+  "#22c55e", // green
+  "#a855f7", // purple
+  "#f97316", // orange
+  "#ef4444", // red
+  "#eab308", // yellow
+  "#06b6d4", // cyan
+  "#ec4899", // pink
+  "#6b7280", // gray
+]
 import type {
   WorkflowAction,
   TriggerType,
@@ -39,6 +59,8 @@ import type {
 } from "@/types/workflow"
 import { getActionDefinition, CONDITION_OPERATORS } from "@/types/workflow"
 import { ConditionFieldPicker } from "./condition-field-picker"
+import { PipelineStagePicker } from "./pipeline-stage-picker"
+import { DealSourceSelector, type DealSource } from "./deal-source-selector"
 import { TemplateSelector } from "@/components/email-templates/template-selector"
 import { SMSTemplateSelector } from "@/components/sms-templates"
 import { getSegmentInfo, SMS_TEMPLATE_VARIABLES } from "@/types/sms-template"
@@ -64,6 +86,15 @@ export function ConfigSidePanel({
   const [emailGrants, setEmailGrants] = useState<NylasGrant[]>([])
   const [loadingGrants, setLoadingGrants] = useState(false)
 
+  // Tag-related state
+  const [availableTags, setAvailableTags] = useState<LeadTag[]>([])
+  const [tagsLoading, setTagsLoading] = useState(false)
+  const [tagSearchQuery, setTagSearchQuery] = useState("")
+  const [showCreateTag, setShowCreateTag] = useState(false)
+  const [newTagName, setNewTagName] = useState("")
+  const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0])
+  const [creatingTag, setCreatingTag] = useState(false)
+
   // Get actions that come before this action (for condition checking)
   const previousActions = action
     ? allActions.filter((a) => a.order < action.order && a.id !== action.id)
@@ -85,6 +116,71 @@ export function ConfigSidePanel({
     }
   }, [])
 
+  // Fetch tags for tag-related actions
+  const fetchTags = useCallback(async () => {
+    if (!action || (action.type !== "add_tag" && action.type !== "remove_tag")) return
+
+    setTagsLoading(true)
+    try {
+      const response = await fetch("/api/lead-tags")
+      if (response.ok) {
+        const data = await response.json()
+        setAvailableTags(data)
+      }
+    } catch (error) {
+      console.error("Failed to fetch tags:", error)
+    } finally {
+      setTagsLoading(false)
+    }
+  }, [action])
+
+  // Create a new tag
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) return
+
+    setCreatingTag(true)
+    try {
+      const response = await fetch("/api/lead-tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newTagName.trim(), color: newTagColor }),
+      })
+
+      if (response.ok) {
+        const newTag = await response.json()
+        setAvailableTags(prev => [...prev, newTag].sort((a, b) => a.name.localeCompare(b.name)))
+        // Auto-select the new tag
+        const currentTags = (config.tags as LeadTag[]) || []
+        setConfig(prev => ({ ...prev, tags: [...currentTags, newTag] }))
+        // Reset form
+        setShowCreateTag(false)
+        setNewTagName("")
+        setNewTagColor(TAG_COLORS[0])
+      }
+    } catch (error) {
+      console.error("Failed to create tag:", error)
+    } finally {
+      setCreatingTag(false)
+    }
+  }
+
+  // Toggle tag selection
+  const toggleTagSelection = (tag: LeadTag) => {
+    const currentTags = (config.tags as LeadTag[]) || []
+    const isSelected = currentTags.some(t => t.id === tag.id)
+
+    if (isSelected) {
+      setConfig(prev => ({ ...prev, tags: currentTags.filter(t => t.id !== tag.id) }))
+    } else {
+      setConfig(prev => ({ ...prev, tags: [...currentTags, tag] }))
+    }
+  }
+
+  // Filter tags by search query
+  const filteredTags = availableTags.filter(tag =>
+    tag.name.toLowerCase().includes(tagSearchQuery.toLowerCase())
+  )
+
   useEffect(() => {
     if (action) {
       setConfig(action.config || {})
@@ -92,8 +188,16 @@ export function ConfigSidePanel({
       if (action.type === 'send_email') {
         fetchEmailGrants()
       }
+      // Fetch tags for tag actions
+      if (action.type === 'add_tag' || action.type === 'remove_tag') {
+        fetchTags()
+        setTagSearchQuery("")
+        setShowCreateTag(false)
+        setNewTagName("")
+        setNewTagColor(TAG_COLORS[0])
+      }
     }
-  }, [action, fetchEmailGrants])
+  }, [action, fetchEmailGrants, fetchTags])
 
   if (!action) return null
 
@@ -106,6 +210,69 @@ export function ConfigSidePanel({
 
   const updateConfig = (key: string, value: unknown) => {
     setConfig((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const renderContextInfo = () => {
+    // Communication actions - show recipient info
+    if (["send_sms", "make_call", "send_email", "send_notification"].includes(action.type)) {
+      return (
+        <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-medium">Recipient:</span>
+            <span className="text-muted-foreground">Contact that triggers it</span>
+            <InfoIcon className="size-3 text-muted-foreground" />
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="text-muted-foreground">↳</span>
+            <span>Run Workflow once per Contact</span>
+          </div>
+        </div>
+      )
+    }
+
+    // CRM/Lead actions - show lead context
+    if (["update_status", "add_note", "assign_user", "add_tag", "remove_tag", "move_lead_stage"].includes(action.type)) {
+      return (
+        <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-medium">Applies to:</span>
+            <span className="text-muted-foreground">Lead that triggers the workflow</span>
+            <InfoIcon className="size-3 text-muted-foreground" />
+          </div>
+        </div>
+      )
+    }
+
+    // Task creation - show where task is created
+    if (action.type === "create_task") {
+      return (
+        <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-medium">Creates task for:</span>
+            <span className="text-muted-foreground">Lead that triggers the workflow</span>
+            <InfoIcon className="size-3 text-muted-foreground" />
+          </div>
+        </div>
+      )
+    }
+
+    // Deal/Opportunity actions - show deal context
+    if (["create_deal", "update_deal", "move_deal_stage", "close_deal"].includes(action.type)) {
+      return (
+        <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-medium">Applies to:</span>
+            <span className="text-muted-foreground">
+              {action.type === "create_deal" ? "Lead that triggers the workflow" : "Opportunity"}
+            </span>
+            <InfoIcon className="size-3 text-muted-foreground" />
+          </div>
+        </div>
+      )
+    }
+
+    // Flow control actions (wait, condition) - no context info needed
+    return null
   }
 
   const renderForm = () => {
@@ -648,6 +815,540 @@ export function ConfigSidePanel({
         )
       }
 
+      case "add_tag":
+        return (
+          <div className="space-y-4">
+            <Label>Select tags to add</Label>
+
+            {/* Search input */}
+            <div className="relative">
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search tags..."
+                value={tagSearchQuery}
+                onChange={(e) => setTagSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            {/* Tags list */}
+            <div className="border rounded-lg max-h-48 overflow-auto">
+              {tagsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredTags.length === 0 ? (
+                <div className="py-6 text-center text-muted-foreground text-sm">
+                  {tagSearchQuery ? "No tags match your search" : "No tags available"}
+                </div>
+              ) : (
+                <div className="p-2 space-y-1">
+                  {filteredTags.map(tag => {
+                    const isSelected = ((config.tags as LeadTag[]) || []).some(t => t.id === tag.id)
+                    return (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => toggleTagSelection(tag)}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors ${
+                          isSelected ? "bg-sky-50 border border-sky-200" : "hover:bg-muted/50"
+                        }`}
+                      >
+                        <div
+                          className="size-3 rounded-full shrink-0"
+                          style={{ backgroundColor: tag.color }}
+                        />
+                        <span className="flex-1 text-sm">{tag.name}</span>
+                        {isSelected && <CheckIcon className="size-4 text-sky-600" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Create new tag section */}
+            {showCreateTag ? (
+              <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Create new tag</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateTag(false)}
+                    className="size-6 rounded flex items-center justify-center hover:bg-muted"
+                  >
+                    <XIcon className="size-4" />
+                  </button>
+                </div>
+                <Input
+                  placeholder="Tag name"
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  maxLength={50}
+                />
+                <div className="flex gap-1.5 flex-wrap">
+                  {TAG_COLORS.map(color => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setNewTagColor(color)}
+                      className={`size-6 rounded-full transition-all ${
+                        newTagColor === color ? "ring-2 ring-offset-2 ring-sky-500" : ""
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleCreateTag}
+                  disabled={!newTagName.trim() || creatingTag}
+                  className="w-full"
+                >
+                  {creatingTag ? (
+                    <Loader2 className="size-4 animate-spin mr-2" />
+                  ) : (
+                    <PlusIcon className="size-4 mr-2" />
+                  )}
+                  Create Tag
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowCreateTag(true)}
+                className="flex items-center gap-2 text-sm text-sky-600 hover:text-sky-700 font-medium"
+              >
+                <PlusIcon className="size-4" />
+                Create new tag
+              </button>
+            )}
+
+            {/* Selected tags display */}
+            {((config.tags as LeadTag[]) || []).length > 0 && (
+              <div className="pt-2 border-t">
+                <span className="text-xs text-muted-foreground">Selected:</span>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {((config.tags as LeadTag[]) || []).map(tag => (
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                      style={{ backgroundColor: tag.color }}
+                    >
+                      {tag.name}
+                      <button
+                        type="button"
+                        onClick={() => toggleTagSelection(tag)}
+                        className="hover:bg-white/20 rounded-full p-0.5"
+                      >
+                        <XIcon className="size-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+
+      case "remove_tag":
+        return (
+          <div className="space-y-4">
+            {/* Remove all checkbox */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="remove_all"
+                checked={(config.remove_all as boolean) || false}
+                onChange={(e) => {
+                  setConfig(prev => ({
+                    ...prev,
+                    remove_all: e.target.checked,
+                    tags: e.target.checked ? [] : prev.tags,
+                  }))
+                }}
+                className="size-4 rounded border-gray-300"
+              />
+              <Label htmlFor="remove_all" className="font-normal">
+                Remove ALL tags from lead
+              </Label>
+            </div>
+
+            {!config.remove_all && (
+              <>
+                <Label>Or select specific tags to remove</Label>
+
+                {/* Search input */}
+                <div className="relative">
+                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search tags..."
+                    value={tagSearchQuery}
+                    onChange={(e) => setTagSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+
+                {/* Tags list */}
+                <div className="border rounded-lg max-h-48 overflow-auto">
+                  {tagsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : filteredTags.length === 0 ? (
+                    <div className="py-6 text-center text-muted-foreground text-sm">
+                      {tagSearchQuery ? "No tags match your search" : "No tags available"}
+                    </div>
+                  ) : (
+                    <div className="p-2 space-y-1">
+                      {filteredTags.map(tag => {
+                        const isSelected = ((config.tags as LeadTag[]) || []).some(t => t.id === tag.id)
+                        return (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() => toggleTagSelection(tag)}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors ${
+                              isSelected ? "bg-red-50 border border-red-200" : "hover:bg-muted/50"
+                            }`}
+                          >
+                            <div
+                              className="size-3 rounded-full shrink-0"
+                              style={{ backgroundColor: tag.color }}
+                            />
+                            <span className="flex-1 text-sm">{tag.name}</span>
+                            {isSelected && <CheckIcon className="size-4 text-red-600" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Selected tags display */}
+                {((config.tags as LeadTag[]) || []).length > 0 && (
+                  <div className="pt-2 border-t">
+                    <span className="text-xs text-muted-foreground">Selected for removal:</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {((config.tags as LeadTag[]) || []).map(tag => (
+                        <span
+                          key={tag.id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                          style={{ backgroundColor: tag.color }}
+                        >
+                          {tag.name}
+                          <button
+                            type="button"
+                            onClick={() => toggleTagSelection(tag)}
+                            className="hover:bg-white/20 rounded-full p-0.5"
+                          >
+                            <XIcon className="size-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )
+
+      case "move_lead_stage":
+        return (
+          <div className="space-y-4">
+            <PipelineStagePicker
+              pipelineId={config.pipeline_id as string | undefined}
+              stageId={config.stage_id as string | undefined}
+              onPipelineChange={(id) => updateConfig("pipeline_id", id)}
+              onStageChange={(id, stageName) => {
+                updateConfig("stage_id", id)
+                updateConfig("stage_name", stageName)
+              }}
+              showStageSelector={true}
+              stageRequired={true}
+            />
+          </div>
+        )
+
+      case "create_deal":
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="deal_name">Opportunity Name</Label>
+              <Input
+                id="deal_name"
+                value={(config.name as string) || ""}
+                onChange={(e) => updateConfig("name", e.target.value)}
+                placeholder="New opportunity from {{lead_name}}"
+              />
+              <p className="text-xs text-muted-foreground">
+                Use {"{{lead_name}}"}, {"{{contact_name}}"} for dynamic content
+              </p>
+            </div>
+
+            <PipelineStagePicker
+              pipelineId={config.pipeline_id as string | undefined}
+              stageId={config.stage_id as string | undefined}
+              onPipelineChange={(id) => updateConfig("pipeline_id", id)}
+              onStageChange={(id) => updateConfig("stage_id", id)}
+              showStageSelector={true}
+              stageRequired={false}
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="deal_value">Value</Label>
+                <Input
+                  id="deal_value"
+                  type="number"
+                  min={0}
+                  value={(config.value as number) || ""}
+                  onChange={(e) => updateConfig("value", e.target.value ? parseFloat(e.target.value) : undefined)}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="deal_currency">Currency</Label>
+                <Select
+                  value={(config.currency as string) || "USD"}
+                  onValueChange={(v) => updateConfig("currency", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="USD" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="EUR">EUR</SelectItem>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                    <SelectItem value="CAD">CAD</SelectItem>
+                    <SelectItem value="AUD">AUD</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="expected_close_offset">Expected Close (days from now)</Label>
+              <Input
+                id="expected_close_offset"
+                type="number"
+                min={0}
+                value={(config.expected_close_date_offset as number) || ""}
+                onChange={(e) => updateConfig("expected_close_date_offset", e.target.value ? parseInt(e.target.value) : undefined)}
+                placeholder="30"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="link_to_trigger_contact"
+                checked={(config.link_to_trigger_contact as boolean) ?? true}
+                onChange={(e) => updateConfig("link_to_trigger_contact", e.target.checked)}
+                className="size-4 rounded border-gray-300"
+              />
+              <Label htmlFor="link_to_trigger_contact" className="font-normal">
+                Link to trigger contact
+              </Label>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="deal_notes">Notes</Label>
+              <Textarea
+                id="deal_notes"
+                value={(config.notes as string) || ""}
+                onChange={(e) => updateConfig("notes", e.target.value)}
+                placeholder="Add notes about this opportunity..."
+                rows={3}
+              />
+            </div>
+          </div>
+        )
+
+      case "update_deal":
+        return (
+          <div className="space-y-4">
+            <DealSourceSelector
+              value={(config.deal_source as DealSource) || "trigger"}
+              onChange={(v) => updateConfig("deal_source", v)}
+              triggerType={triggerType}
+            />
+
+            <div className="space-y-2">
+              <Label htmlFor="update_value">Value (optional)</Label>
+              <Input
+                id="update_value"
+                type="number"
+                min={0}
+                value={(config.value as number) ?? ""}
+                onChange={(e) => updateConfig("value", e.target.value ? parseFloat(e.target.value) : undefined)}
+                placeholder="Leave empty to keep current"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="update_probability">Probability % (optional)</Label>
+              <Input
+                id="update_probability"
+                type="number"
+                min={0}
+                max={100}
+                value={(config.probability as number) ?? ""}
+                onChange={(e) => updateConfig("probability", e.target.value ? parseInt(e.target.value) : undefined)}
+                placeholder="0-100"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="update_close_offset">Expected Close (days from now)</Label>
+              <Input
+                id="update_close_offset"
+                type="number"
+                min={0}
+                value={(config.expected_close_date_offset as number) ?? ""}
+                onChange={(e) => updateConfig("expected_close_date_offset", e.target.value ? parseInt(e.target.value) : undefined)}
+                placeholder="Leave empty to keep current"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="update_notes">Notes</Label>
+              <Textarea
+                id="update_notes"
+                value={(config.notes as string) || ""}
+                onChange={(e) => updateConfig("notes", e.target.value)}
+                placeholder="Add notes..."
+                rows={3}
+              />
+              <div className="flex gap-4 mt-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="notes_mode"
+                    value="append"
+                    checked={(config.notes_mode as string) !== "replace"}
+                    onChange={() => updateConfig("notes_mode", "append")}
+                  />
+                  Append to existing
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="notes_mode"
+                    value="replace"
+                    checked={(config.notes_mode as string) === "replace"}
+                    onChange={() => updateConfig("notes_mode", "replace")}
+                  />
+                  Replace existing
+                </label>
+              </div>
+            </div>
+          </div>
+        )
+
+      case "move_deal_stage":
+        return (
+          <div className="space-y-4">
+            <DealSourceSelector
+              value={(config.deal_source as DealSource) || "trigger"}
+              onChange={(v) => updateConfig("deal_source", v)}
+              triggerType={triggerType}
+            />
+
+            <PipelineStagePicker
+              pipelineId={config.pipeline_id as string | undefined}
+              stageId={config.stage_id as string | undefined}
+              onPipelineChange={(id) => updateConfig("pipeline_id", id)}
+              onStageChange={(id) => updateConfig("stage_id", id)}
+              showStageSelector={true}
+              stageRequired={true}
+            />
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="auto_update_probability"
+                checked={(config.auto_update_probability as boolean) ?? true}
+                onChange={(e) => updateConfig("auto_update_probability", e.target.checked)}
+                className="size-4 rounded border-gray-300"
+              />
+              <Label htmlFor="auto_update_probability" className="font-normal">
+                Auto-update probability from stage
+              </Label>
+            </div>
+          </div>
+        )
+
+      case "close_deal":
+        return (
+          <div className="space-y-4">
+            <DealSourceSelector
+              value={(config.deal_source as DealSource) || "trigger"}
+              onChange={(v) => updateConfig("deal_source", v)}
+              triggerType={triggerType}
+            />
+
+            <div className="space-y-2">
+              <Label>Outcome</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => updateConfig("outcome", "won")}
+                  className={`
+                    flex flex-col items-center gap-2 p-4 border rounded-lg transition-all
+                    ${(config.outcome as string) === "won"
+                      ? "border-green-500 bg-green-50 text-green-700"
+                      : "border-border hover:border-green-300 hover:bg-green-50/50"
+                    }
+                  `}
+                >
+                  <TrophyIcon className="size-6" />
+                  <span className="font-medium">Won</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateConfig("outcome", "lost")}
+                  className={`
+                    flex flex-col items-center gap-2 p-4 border rounded-lg transition-all
+                    ${(config.outcome as string) === "lost"
+                      ? "border-red-500 bg-red-50 text-red-700"
+                      : "border-border hover:border-red-300 hover:bg-red-50/50"
+                    }
+                  `}
+                >
+                  <XCircleIcon className="size-6" />
+                  <span className="font-medium">Lost</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="close_reason">Close Reason / Notes</Label>
+              <Textarea
+                id="close_reason"
+                value={(config.close_reason as string) || ""}
+                onChange={(e) => updateConfig("close_reason", e.target.value)}
+                placeholder="Reason for winning/losing this opportunity..."
+                rows={3}
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="auto_set_close_date"
+                checked={(config.auto_set_close_date as boolean) ?? true}
+                onChange={(e) => updateConfig("auto_set_close_date", e.target.checked)}
+                className="size-4 rounded border-gray-300"
+              />
+              <Label htmlFor="auto_set_close_date" className="font-normal">
+                Set close date to today
+              </Label>
+            </div>
+          </div>
+        )
+
       default:
         return (
           <p className="text-muted-foreground">No configuration options for this action.</p>
@@ -667,18 +1368,8 @@ export function ConfigSidePanel({
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4 space-y-6">
-        {/* Recipient info */}
-        <div className="bg-muted/50 rounded-lg p-3 space-y-1">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="font-medium">Recipient:</span>
-            <span className="text-muted-foreground">Contact that triggers it</span>
-            <InfoIcon className="size-3 text-muted-foreground" />
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="text-muted-foreground">↳</span>
-            <span>Run Workflow once per Contact</span>
-          </div>
-        </div>
+        {/* Context info - varies by action type */}
+        {renderContextInfo()}
 
         {/* Form fields */}
         {renderForm()}

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useCalendar, CalendarEvent } from "@/providers/calendar-provider"
+import { useCalendar, CalendarEvent, CRMActivityEvent } from "@/providers/calendar-provider"
 import { CalendarView } from "@/components/calendar/calendar-view"
 import { EventDialog } from "@/components/calendar/event-dialog"
 import { Button } from "@/components/ui/button"
@@ -22,7 +22,9 @@ import {
   AlertCircle,
   X,
   Globe,
+  Settings,
 } from "lucide-react"
+import Link from "next/link"
 import { GoogleSignInButton, MicrosoftSignInButton } from "@/components/nylas"
 
 export default function CalendarPage() {
@@ -34,6 +36,8 @@ export default function CalendarPage() {
     loadingCalendars,
     loadingEvents,
     events,
+    scheduledSMS,
+    crmActivities,
     view,
     setView,
     startDate,
@@ -107,6 +111,11 @@ export default function CalendarPage() {
     setSelectedEvent(null)
     setDialogMode('create')
     setEventDialogOpen(true)
+  }
+
+  const handleCRMActivityClick = (activity: CRMActivityEvent) => {
+    // Navigate to activities page or show activity details
+    window.location.href = `/sales/activities`
   }
 
   // No connected account
@@ -194,6 +203,13 @@ export default function CalendarPage() {
             <Plus className="h-4 w-4 mr-2" />
             New Event
           </Button>
+
+          {/* Settings - manage connected accounts */}
+          <Link href="/sales/settings/email">
+            <Button variant="ghost" size="icon" title="Manage connected accounts">
+              <Settings className="h-4 w-4" />
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -219,10 +235,13 @@ export default function CalendarPage() {
         ) : (
           <CalendarView
             events={events}
+            scheduledSMS={scheduledSMS}
+            crmActivities={crmActivities}
             view={view}
             startDate={startDate}
             onDateClick={handleDateClick}
             onEventClick={handleEventClick}
+            onCRMActivityClick={handleCRMActivityClick}
           />
         )}
       </div>

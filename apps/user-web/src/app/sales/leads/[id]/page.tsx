@@ -52,6 +52,7 @@ import { OpportunityForm, type LeadOpportunity } from "@/components/sales/opport
 import { LeadActivityTimeline } from "@/components/sales/lead-activity-timeline"
 import { CommunicationPanel } from "@/components/sales/communication-panel"
 import { SmsDialog, NoteDialog, EmailDialog } from "@/components/sales/lead-quick-actions"
+import { LeadTagsSection } from "@/components/sales/lead-tags-section"
 import { useCall } from "@/providers"
 
 interface Activity {
@@ -86,12 +87,19 @@ interface Pipeline {
   stages: LeadStage[]
 }
 
+interface LeadTag {
+  id: string
+  name: string
+  color: string
+}
+
 interface LeadWithRelations extends Lead {
   id: string
   contacts: Contact[]
   activities: Activity[]
   tasks: LeadTask[]
   opportunities: LeadOpportunity[]
+  tags?: LeadTag[]
   created_at: string
   updated_at: string
   pipeline_id?: string | null
@@ -525,6 +533,13 @@ export default function LeadDetailPage() {
                       </button>
                     </div>
                   </CollapsibleSection>
+
+                  {/* TAGS Section */}
+                  <LeadTagsSection
+                    leadId={lead.id}
+                    initialTags={lead.tags || []}
+                    onTagsChange={fetchLead}
+                  />
 
                   {/* TASKS Section */}
                   <CollapsibleSection

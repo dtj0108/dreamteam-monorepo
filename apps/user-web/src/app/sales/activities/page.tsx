@@ -5,6 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +30,7 @@ import {
 } from "lucide-react"
 import { useSales, Activity, ActivityType } from "@/providers/sales-provider"
 import { ActivityForm, Activity as ActivityFormData } from "@/components/sales/activity-form"
+import type { WorkspaceMember } from "@/components/sales/activity-assignee-picker"
 
 interface Contact {
   id: string
@@ -39,6 +47,15 @@ function formatDate(dateString: string) {
     hour: "numeric",
     minute: "2-digit",
   })
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2)
 }
 
 function ActivityItem({
@@ -69,6 +86,10 @@ function ActivityItem({
     task: "Task",
   }
 
+  const assignees = activity.assignees || []
+  const displayedAssignees = assignees.slice(0, 3)
+  const overflowCount = assignees.length - 3
+
   return (
     <div className="flex items-center gap-4 p-4 border-b last:border-b-0">
       <Checkbox
@@ -96,6 +117,42 @@ function ActivityItem({
           )}
         </div>
       </div>
+      {/* Assignee avatars */}
+      {assignees.length > 0 && (
+        <TooltipProvider>
+          <div className="flex -space-x-2">
+            {displayedAssignees.map((assignee) => (
+              <Tooltip key={assignee.id}>
+                <TooltipTrigger asChild>
+                  <Avatar className="h-7 w-7 border-2 border-background">
+                    <AvatarImage src={assignee.user?.avatar_url || undefined} />
+                    <AvatarFallback className="text-[10px]">
+                      {getInitials(assignee.user?.name || "?")}
+                    </AvatarFallback>
+                  </Avatar>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{assignee.user?.name || "Unknown"}</p>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+            {overflowCount > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Avatar className="h-7 w-7 border-2 border-background">
+                    <AvatarFallback className="text-[10px] bg-muted">
+                      +{overflowCount}
+                    </AvatarFallback>
+                  </Avatar>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{assignees.slice(3).map(a => a.user?.name).join(", ")}</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </TooltipProvider>
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon">
@@ -130,12 +187,15 @@ export default function ActivitiesPage() {
   const [defaultActivityType, setDefaultActivityType] = useState<ActivityType>("task")
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null)
   const [contacts, setContacts] = useState<Contact[]>([])
+  const [members, setMembers] = useState<WorkspaceMember[]>([])
+  const [currentUserId, setCurrentUserId] = useState<string>()
   const [activeTab, setActiveTab] = useState("upcoming")
 
-  // Fetch activities and contacts on mount
+  // Fetch activities, contacts, and members on mount
   useEffect(() => {
     fetchActivities()
     fetchContacts()
+    fetchMembers()
   }, [fetchActivities])
 
   const fetchContacts = async () => {
@@ -150,12 +210,43 @@ export default function ActivitiesPage() {
     }
   }
 
+  const fetchMembers = async () => {
+    try {
+      const response = await fetch("/api/workspace-members")
+      if (response.ok) {
+        const data = await response.json()
+        setMembers(data.members || [])
+        setCurrentUserId(data.currentUserId)
+      }
+    } catch (error) {
+      console.error("Error fetching members:", error)
+    }
+  }
+
   // Filter activities by tab
-  const upcomingActivities = activities.filter(
-    (a) => a.due_date && !a.is_completed
-  )
+  // Show ALL incomplete activities in "Upcoming", not just those with due dates
+  const upcomingActivities = activities
+    .filter((a) => !a.is_completed)
+    .sort((a, b) => {
+      // Activities with due dates come first, sorted by due date
+      if (a.due_date && b.due_date) {
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+      }
+      if (a.due_date && !b.due_date) return -1
+      if (!a.due_date && b.due_date) return 1
+      // Both without due dates - sort by created_at descending (newest first)
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
   const completedActivities = activities.filter((a) => a.is_completed)
   const allActivities = activities
+
+  // Debug logging to trace data flow
+  console.log('Activities state:', activities.length, 'total')
+  console.log('Upcoming (is_completed=false):', upcomingActivities.length)
+  console.log('Completed (is_completed=true):', completedActivities.length)
+  if (activities.length > 0) {
+    console.log('Sample activity:', activities[0])
+  }
 
   const openFormWithType = (type: ActivityType) => {
     setDefaultActivityType(type)
@@ -170,10 +261,13 @@ export default function ActivitiesPage() {
   }
 
   const handleActivitySubmit = async (data: ActivityFormData) => {
+    // The form provides assignees as string[] (user IDs), which is what the API expects
+    // Cast to unknown first to handle the type difference between form and provider types
+    const apiData = data as unknown as Partial<Activity>
     if (editingActivity) {
-      await updateActivity(editingActivity.id, data)
+      await updateActivity(editingActivity.id, apiData)
     } else {
-      await createActivity(data)
+      await createActivity(apiData)
     }
     await fetchActivities()
   }
@@ -335,6 +429,8 @@ export default function ActivitiesPage() {
         open={activityFormOpen}
         onOpenChange={setActivityFormOpen}
         contacts={contacts}
+        members={members}
+        currentUserId={currentUserId}
         activity={editingActivity ? {
           id: editingActivity.id,
           type: editingActivity.type,
@@ -343,6 +439,7 @@ export default function ActivitiesPage() {
           contact_id: editingActivity.contact_id || undefined,
           due_date: editingActivity.due_date || undefined,
           is_completed: editingActivity.is_completed,
+          assignees: editingActivity.assignees?.map(a => a.user_id) || [],
         } : undefined}
         onSubmit={handleActivitySubmit}
         defaultType={defaultActivityType}
