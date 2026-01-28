@@ -1,0 +1,19 @@
+{
+  "name": "@dreamteam/ai-utils",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@dreamteam/config": "workspace:*",
+    "@types/node": "^20",
+    "typescript": "^5"
+  }
+}
