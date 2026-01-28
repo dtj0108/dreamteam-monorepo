@@ -19,6 +19,7 @@ import { mcpClientPool } from "./lib/mcp-client-pool.js"
 import { getModel, getApiKeyEnvVar } from "./lib/ai-providers.js"
 import { createAdminClient } from "./lib/supabase.js"
 import { applyRulesToPrompt, type AgentRule } from "./lib/agent-rules.js"
+import { detectHallucination, formatHallucinationResult, type HallucinationCheckResult } from "./lib/hallucination-detection.js"
 
 // Output config schema for controlling response style
 const outputConfigSchema = z.object({
@@ -193,18 +194,35 @@ function getToolNames(agent: any): string[] {
 function getDefaultSystemPrompt(): string {
   return `You are an AI assistant executing a scheduled task.
 
-## Critical Instructions
-- You have access to tools that query real data from the workspace
-- ALWAYS use the available tools to get actual data - NEVER fabricate or make up information
-- If you cannot find data using tools, clearly state "I couldn't find any data" rather than inventing examples
-- Tool results contain the actual current state of tasks, projects, and team data
-- If no tools are available, you MUST state that you cannot complete data-dependent tasks
+## CRITICAL: Anti-Hallucination Rules
+
+YOU MUST FOLLOW THESE RULES EXACTLY. VIOLATIONS ARE SERIOUS FAILURES.
+
+1. **NO FABRICATION**: You MUST NEVER invent, fabricate, or make up ANY data including:
+   - Team member names (e.g., Alice, Bob, Charlie - these are OBVIOUS hallucinations)
+   - Task titles, project names, or workload numbers
+   - Hours, percentages, or any metrics
+   - Any specific data that should come from a database
+
+2. **TOOL REQUIREMENT**: Every data point in your response MUST come from an actual tool call.
+   - If you didn't call a tool, you don't have real data
+   - If a tool returned empty results, report "No data found" - don't invent examples
+
+3. **NO TOOLS = NO DATA RESPONSE**: If you have NO tools available:
+   - Your ONLY valid response is: "I cannot complete this task because I don't have access to data tools. The schedule needs to be configured with workspace access."
+   - Do NOT attempt to provide a "sample" or "example" report
+   - Do NOT use placeholder names or made-up numbers
+
+4. **VERIFICATION**: Before finishing your response, verify:
+   - Did I call tools to get this data? (If not, I'm hallucinating)
+   - Can I trace each fact to a tool result? (If not, delete it)
+   - Am I using generic names like Alice/Bob/Charlie? (If so, I'm hallucinating)
 
 ## Response Guidelines
-- Complete the task thoroughly and accurately
-- Base all responses ONLY on actual tool results
+- Complete the task thoroughly using ONLY real tool results
 - Be concise but comprehensive
-- If you need data but have no tools to get it, say so clearly`
+- If a tool returns no data, clearly state "No data found for X"
+- Never apologize for lack of data - just state the facts`
 }
 
 /**
@@ -334,6 +352,10 @@ ${outputInstructions}`
 
     const duration = Date.now() - startTime
 
+    // Determine if this was a hallucinated response
+    const wasHallucination = result.hallucinationCheck?.isLikelyHallucination || false
+    const hallucinationConfidence = result.hallucinationCheck?.confidence || null
+
     // Update execution with success
     await supabase
       .from("agent_schedule_executions")
@@ -342,6 +364,8 @@ ${outputInstructions}`
         completed_at: new Date().toISOString(),
         result: {
           message: result.content,
+          hallucination_warning: wasHallucination ? result.hallucinationCheck?.summary : undefined,
+          hallucination_indicators: wasHallucination ? result.hallucinationCheck?.indicators : undefined,
         },
         tool_calls: result.toolCalls,
         tokens_input: result.inputTokens,
@@ -350,7 +374,12 @@ ${outputInstructions}`
       })
       .eq("id", executionId)
 
-    console.log(`[Scheduled Execution] Completed in ${duration}ms, success=${result.success}`)
+    // Log additional warning for hallucination
+    if (wasHallucination) {
+      console.warn(`[Scheduled Execution] ⚠️ Execution ${executionId} completed but HALLUCINATION DETECTED (${hallucinationConfidence} confidence)`)
+    }
+
+    console.log(`[Scheduled Execution] Completed in ${duration}ms, success=${result.success}, hallucination=${wasHallucination}`)
 
     return res.json({
       success: result.success,
@@ -360,6 +389,7 @@ ${outputInstructions}`
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
       },
+      hallucinationWarning: wasHallucination ? result.hallucinationCheck?.summary : undefined,
     })
   } catch (error) {
     const duration = Date.now() - startTime
@@ -417,7 +447,14 @@ async function executeWithVercelAI(options: {
   taskPrompt: string
   toolNames: string[]
   workspaceId: string
-}): Promise<{ success: boolean; content: string; inputTokens: number; outputTokens: number; toolCalls: any[] }> {
+}): Promise<{
+  success: boolean
+  content: string
+  inputTokens: number
+  outputTokens: number
+  toolCalls: any[]
+  hallucinationCheck: HallucinationCheckResult | null
+}> {
   const { provider, model, systemPrompt, taskPrompt, toolNames, workspaceId } = options
 
   // #region agent log - DEBUG executeWithVercelAI
@@ -501,12 +538,31 @@ async function executeWithVercelAI(options: {
       },
     })
 
+    // Run hallucination detection
+    const hallucinationCheck = detectHallucination(
+      result.text,
+      toolCallRecords,
+      taskPrompt,
+      Object.keys(aiTools).length
+    )
+
+    // Log hallucination check result
+    console.log(`[Scheduled Execution] ${formatHallucinationResult(hallucinationCheck)}`)
+
+    if (hallucinationCheck.isLikelyHallucination) {
+      console.warn(`[Scheduled Execution] ⚠️ HALLUCINATION WARNING: ${hallucinationCheck.summary}`)
+      for (const indicator of hallucinationCheck.indicators) {
+        console.warn(`[Scheduled Execution]   - [${indicator.severity}] ${indicator.type}: ${indicator.evidence.join(", ")}`)
+      }
+    }
+
     return {
       success: true,
       content: result.text,
       inputTokens: result.usage?.inputTokens || 0,
       outputTokens: result.usage?.outputTokens || 0,
       toolCalls: toolCallRecords,
+      hallucinationCheck,
     }
   } finally {
     // Client is returned to pool, no need to close here
