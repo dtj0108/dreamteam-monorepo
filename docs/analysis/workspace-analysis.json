@@ -1,0 +1,313 @@
+{
+  "metadata": {
+    "generatedAt": "2026-01-27T12:16:44-05:00",
+    "totalWorkspaces": 10,
+    "totalFeaturesAnalyzed": 98,
+    "averageScore": 72.6
+  },
+  "summary": {
+    "gradeDistribution": {
+      "A": 0,
+      "B": 4,
+      "C": 5,
+      "D": 0,
+      "F": 1
+    },
+    "statusDistribution": {
+      "production-ready": 15,
+      "beta": 53,
+      "development": 15,
+      "experimental": 0,
+      "deprecated": 15
+    }
+  },
+  "workspaces": [
+    {
+      "workspace": "admin",
+      "type": "app",
+      "overallGrade": "B",
+      "overallScore": 82,
+      "features": [
+        {"name": "Authentication & Authorization", "grade": "A", "score": 95, "status": "production-ready"},
+        {"name": "User Management", "grade": "B+", "score": 85, "status": "near-production-ready"},
+        {"name": "Workspace Management", "grade": "B+", "score": 86, "status": "near-production-ready"},
+        {"name": "Feature Flags", "grade": "B+", "score": 85, "status": "near-production-ready"},
+        {"name": "API Keys Management", "grade": "B", "score": 80, "status": "near-production-ready"},
+        {"name": "Audit Logs", "grade": "A-", "score": 90, "status": "production-ready"},
+        {"name": "Agent Management", "grade": "A-", "score": 88, "status": "production-ready"},
+        {"name": "Test Coverage", "grade": "B", "score": 78, "status": "near-production-ready"},
+        {"name": "Error Handling", "grade": "B", "score": 80, "status": "near-production-ready"},
+        {"name": "Security Measures", "grade": "B+", "score": 84, "status": "near-production-ready"}
+      ],
+      "summary": "The admin app is a well-structured Next.js application with comprehensive features for platform management. Strong security practices with AES-256-GCM encryption, proper authentication via Supabase, and 100% test coverage for critical auth and encryption modules.",
+      "criticalIssues": [],
+      "quickWins": [
+        "Add rate limiting middleware to prevent brute force attacks",
+        "Configure security headers in next.config.ts (CSP, X-Frame-Options, HSTS)",
+        "Sanitize database error messages before returning to clients",
+        "Add more integration tests for API routes",
+        "Implement soft delete for workspaces instead of hard delete"
+      ]
+    },
+    {
+      "workspace": "user-web",
+      "type": "app",
+      "overallGrade": "B",
+      "overallScore": 78,
+      "features": [
+        {"name": "Finance Module", "grade": "B", "score": 82, "status": "near-production-ready"},
+        {"name": "Sales/CRM Module", "grade": "B", "score": 80, "status": "near-production-ready"},
+        {"name": "Team Messaging", "grade": "A", "score": 88, "status": "production-ready"},
+        {"name": "Projects Module", "grade": "B", "score": 78, "status": "near-production-ready"},
+        {"name": "Knowledge Base", "grade": "B", "score": 76, "status": "near-production-ready"},
+        {"name": "Authentication & User Management", "grade": "A", "score": 90, "status": "production-ready"},
+        {"name": "AI Integration", "grade": "B", "score": 85, "status": "near-production-ready"},
+        {"name": "Test Coverage", "grade": "C", "score": 68, "status": "beta-quality"},
+        {"name": "Error Handling Patterns", "grade": "B", "score": 79, "status": "near-production-ready"},
+        {"name": "Performance Optimizations", "grade": "C", "score": 70, "status": "beta-quality"}
+      ],
+      "summary": "Comprehensive business platform with strong feature coverage across Finance, CRM, Team Messaging, Projects, Knowledge Base, and AI Agents. 1,100+ TypeScript files, 498 components, 273 API routes. Authentication is robust with multi-method support. However, test coverage is insufficient for production confidence.",
+      "criticalIssues": [
+        "Missing global error.tsx boundary in Next.js app",
+        "Insufficient E2E test coverage (only 4 basic smoke tests)",
+        "No error tracking service integration",
+        "Some API routes lack rate limiting",
+        "No evidence of database query result caching"
+      ],
+      "quickWins": [
+        "Add global error.tsx and loading.tsx to app root",
+        "Integrate Sentry or similar error tracking",
+        "Add rate limiting to AI endpoints",
+        "Expand E2E tests to cover critical flows",
+        "Add React Testing Library for component tests"
+      ]
+    },
+    {
+      "workspace": "user-mobile",
+      "type": "app",
+      "overallGrade": "C",
+      "overallScore": 68,
+      "features": [
+        {"name": "Authentication", "grade": "B", "score": 78, "status": "beta"},
+        {"name": "Navigation", "grade": "B", "score": 82, "status": "beta"},
+        {"name": "UI Components & Screens", "grade": "C", "score": 65, "status": "beta"},
+        {"name": "State Management", "grade": "B", "score": 80, "status": "beta"},
+        {"name": "API Integration", "grade": "B", "score": 76, "status": "beta"},
+        {"name": "Mobile-Specific Features", "grade": "B", "score": 75, "status": "beta"},
+        {"name": "EAS Update Configuration", "grade": "A", "score": 92, "status": "production-ready"},
+        {"name": "Test Coverage", "grade": "F", "score": 15, "status": "not-production-ready"},
+        {"name": "Performance", "grade": "B", "score": 78, "status": "beta"},
+        {"name": "Platform Support", "grade": "B", "score": 74, "status": "beta"},
+        {"name": "Security", "grade": "B", "score": 72, "status": "beta"},
+        {"name": "Error Handling", "grade": "C", "score": 62, "status": "beta"},
+        {"name": "Documentation", "grade": "A", "score": 88, "status": "production-ready"}
+      ],
+      "summary": "Feature-rich React Native/Expo application with 5 product modules. 135 screens, 104 components, solid architecture with Expo Router, TanStack Query, and NativeWind. Critical gaps in test coverage (only 1 test file), missing biometric authentication, and inconsistent error handling.",
+      "criticalIssues": [
+        "Zero meaningful test coverage - only 1 snapshot test exists for entire app",
+        "No error tracking service integrated (Sentry, etc.)",
+        "Biometric authentication not implemented despite being common for financial apps",
+        "No offline support for critical features"
+      ],
+      "quickWins": [
+        "Add Sentry for error tracking and performance monitoring",
+        "Implement biometric authentication using expo-local-authentication",
+        "Add unit tests for critical hooks (useAuth, useTransactions)",
+        "Add loading skeletons for all screens",
+        "Implement toast notifications for errors"
+      ]
+    },
+    {
+      "workspace": "agent-server",
+      "type": "app",
+      "overallGrade": "B+",
+      "overallScore": 82,
+      "features": [
+        {"name": "Express Server Setup & Middleware", "grade": "B", "score": 78, "status": "near-production-ready"},
+        {"name": "Agent Chat Handler", "grade": "B+", "score": 85, "status": "near-production-ready"},
+        {"name": "Channel Webhook Handler", "grade": "B", "score": 80, "status": "near-production-ready"},
+        {"name": "MCP Client Integration", "grade": "B+", "score": 84, "status": "near-production-ready"},
+        {"name": "AI Provider Configurations", "grade": "A-", "score": 88, "status": "production-ready"},
+        {"name": "Scheduled Task Execution", "grade": "B+", "score": 83, "status": "near-production-ready"},
+        {"name": "Tool Testing Endpoint", "grade": "B", "score": 76, "status": "near-production-ready"},
+        {"name": "Supabase Integration", "grade": "A-", "score": 87, "status": "production-ready"},
+        {"name": "Docker/Railway Deployment", "grade": "B+", "score": 82, "status": "near-production-ready"},
+        {"name": "Error Handling & Logging", "grade": "B", "score": 78, "status": "near-production-ready"},
+        {"name": "Testing", "grade": "B", "score": 75, "status": "near-production-ready"}
+      ],
+      "summary": "Well-architected Express.js application providing AI agent capabilities with multi-provider support (Anthropic, OpenAI, xAI, Google). ~5,600 lines of code with solid test coverage. Sophisticated team-based agent system with MCP tool integration. Needs security hardening and observability improvements.",
+      "criticalIssues": [
+        "CORS allows all origins (*) - security risk for production",
+        "No rate limiting on endpoints - vulnerable to abuse",
+        "No webhook signature verification for Supabase webhooks",
+        "No request timeouts on AI provider calls",
+        "No circuit breaker for MCP/AI provider failures"
+      ],
+      "quickWins": [
+        "Add Helmet middleware for security headers",
+        "Implement express-rate-limit for API protection",
+        "Add structured request logging middleware",
+        "Add HEALTHCHECK to Dockerfile",
+        "Configure CORS with specific allowed origins",
+        "Add Sentry integration for error tracking"
+      ]
+    },
+    {
+      "workspace": "ai-utils",
+      "type": "package",
+      "overallGrade": "B",
+      "overallScore": 78,
+      "features": [
+        {"name": "OutputConfig Interface", "grade": "A", "score": 90, "status": "production-ready"},
+        {"name": "buildOutputInstructions Function", "grade": "B", "score": 80, "status": "near-production-ready"},
+        {"name": "validateOutputConfig Function", "grade": "C", "score": 65, "status": "beta-quality"},
+        {"name": "Package Structure & Exports", "grade": "C", "score": 70, "status": "beta-quality"}
+      ],
+      "summary": "Provides AI prompt-building utilities focused on response formatting configuration. Exports 2 functions and 1 interface. Clean, type-safe, and well-documented with JSDoc. Lacks test coverage and has minimal documentation.",
+      "criticalIssues": [],
+      "quickWins": [
+        "Add unit tests for buildOutputInstructions and validateOutputConfig functions",
+        "Create a README.md with basic usage examples",
+        "Set package version to 0.1.0 instead of 0.0.0",
+        "Add test:coverage script to package.json"
+      ]
+    },
+    {
+      "workspace": "auth",
+      "type": "package",
+      "overallGrade": "C",
+      "overallScore": 68,
+      "features": [
+        {"name": "Session Management", "grade": "B", "score": 78, "status": "near-production-ready"},
+        {"name": "Rate Limiting", "grade": "C", "score": 65, "status": "beta-quality"},
+        {"name": "Type Definitions", "grade": "A", "score": 92, "status": "production-ready"},
+        {"name": "Test Coverage", "grade": "F", "score": 15, "status": "not-production-ready"},
+        {"name": "Documentation", "grade": "D", "score": 45, "status": "development-quality"},
+        {"name": "Security", "grade": "B", "score": 82, "status": "near-production-ready"}
+      ],
+      "summary": "Essential authentication and rate limiting utilities used across 100+ API routes. Leverages Supabase Auth for secure session management. Significant gaps: zero unit tests, incomplete rate limiting (in-memory only, won't scale), dead code (2FA functions), and missing documentation.",
+      "criticalIssues": [
+        "Zero test coverage in the package itself",
+        "Rate limiting MemoryStore won't work correctly in multi-instance deployments (serverless)",
+        "2FA functions are exported but completely unused - dead code risk",
+        "Silent error handling in getSession() makes debugging difficult"
+      ],
+      "quickWins": [
+        "Add basic unit tests for session.ts (2-3 hours)",
+        "Create README.md with usage examples (30 minutes)",
+        "Add console.error logging in catch blocks for debugging (15 minutes)",
+        "Fix rate limit increment() to use options.windowMs instead of hardcoded 60000 (15 minutes)"
+      ]
+    },
+    {
+      "workspace": "config",
+      "type": "package",
+      "overallGrade": "C",
+      "overallScore": 68,
+      "features": [
+        {"name": "TypeScript Base Configuration", "grade": "B+", "score": 85, "status": "near-production-ready"},
+        {"name": "TypeScript Next.js Configuration", "grade": "A-", "score": 88, "status": "production-ready"},
+        {"name": "ESLint Next.js Configuration", "grade": "C", "score": 65, "status": "beta-quality"},
+        {"name": "Tailwind CSS Configuration", "grade": "C+", "score": 70, "status": "beta-quality"},
+        {"name": "Package Exports & Structure", "grade": "C", "score": 70, "status": "beta-quality"},
+        {"name": "Documentation", "grade": "F", "score": 20, "status": "not-production-ready"},
+        {"name": "Testing", "grade": "F", "score": 0, "status": "not-production-ready"}
+      ],
+      "summary": "Shared configurations for TypeScript, ESLint, and Tailwind. TypeScript configs are strongest and actively used. Tailwind config is v3 format while apps use v4. ESLint config is duplicated in consuming apps rather than imported from this package.",
+      "criticalIssues": [
+        "Tailwind config incompatible with Tailwind CSS v4",
+        "ESLint config not being consumed by any app",
+        "No test coverage for any configuration"
+      ],
+      "quickWins": [
+        "Add comprehensive README.md",
+        "Add inline comments to all config files",
+        "Update package.json with metadata (description, version)",
+        "Migrate user-web and admin to use @dreamteam/config/eslint/next"
+      ]
+    },
+    {
+      "workspace": "database",
+      "type": "package",
+      "overallGrade": "C",
+      "overallScore": 65,
+      "features": [
+        {"name": "Supabase Client Configurations", "grade": "B", "score": 78, "status": "near-production-ready"},
+        {"name": "Database Types", "grade": "A", "score": 88, "status": "production-ready"},
+        {"name": "Query Functions", "grade": "C", "score": 62, "status": "beta-quality"},
+        {"name": "Auto-Deployment Utilities", "grade": "B", "score": 75, "status": "near-production-ready"},
+        {"name": "Test Coverage", "grade": "F", "score": 0, "status": "not-production-ready"},
+        {"name": "Documentation", "grade": "D", "score": 45, "status": "development-quality"}
+      ],
+      "summary": "Database abstraction layer providing Supabase client configurations, TypeScript types, and query functions. 2,603 lines of code. Strong type definitions and good architectural patterns but critically lacks test coverage and has basic error handling.",
+      "criticalIssues": [
+        "Zero test coverage across 2,603 lines of code",
+        "Direct console.log statements in production code",
+        "No input validation on query functions",
+        "Hardcoded UUID in queries.ts for transfer category"
+      ],
+      "quickWins": [
+        "Add README.md with basic usage examples",
+        "Replace console.log with a simple logger utility",
+        "Add environment variable validation using zod",
+        "Move hardcoded category ID to constants"
+      ]
+    },
+    {
+      "workspace": "mcp-server",
+      "type": "package",
+      "overallGrade": "C",
+      "overallScore": 68,
+      "features": [
+        {"name": "MCP Server Core", "grade": "B", "score": 82, "status": "near-production-ready"},
+        {"name": "Tool Definitions", "grade": "B", "score": 85, "status": "near-production-ready"},
+        {"name": "Authentication & Authorization", "grade": "B", "score": 78, "status": "near-production-ready"},
+        {"name": "Test Coverage", "grade": "D", "score": 55, "status": "development-quality"},
+        {"name": "Documentation", "grade": "A", "score": 92, "status": "production-ready"},
+        {"name": "Build & Distribution", "grade": "B", "score": 80, "status": "near-production-ready"}
+      ],
+      "summary": "Comprehensive MCP server implementation providing 291 AI-accessible tools across 8 business domains. Solid architecture with TypeScript, Zod validation, Supabase integration. 137 failing tests (14% failure rate) indicate inconsistencies between expected and actual behavior.",
+      "criticalIssues": [
+        "137 failing tests (14% failure rate)",
+        "Inconsistent error handling across tools",
+        "No CI/CD pipeline"
+      ],
+      "quickWins": [
+        "Align workspace_update behavior with tests",
+        "Fix version number consistency (0.0.1 vs 0.0.3)",
+        "Add package README",
+        "Enable coverage reporting"
+      ]
+    },
+    {
+      "workspace": "ui",
+      "type": "package",
+      "overallGrade": "C",
+      "overallScore": 68,
+      "features": [
+        {"name": "Core UI Components", "grade": "B", "score": 82, "status": "near-production-ready"},
+        {"name": "Complex Components", "grade": "B", "score": 78, "status": "near-production-ready"},
+        {"name": "Accessibility (a11y)", "grade": "A", "score": 90, "status": "production-ready"},
+        {"name": "Tree-Shaking & Bundle Optimization", "grade": "A", "score": 92, "status": "production-ready"},
+        {"name": "TypeScript & Build Configuration", "grade": "B", "score": 75, "status": "near-production-ready"},
+        {"name": "Test Coverage", "grade": "F", "score": 0, "status": "not-production-ready"},
+        {"name": "Documentation", "grade": "D", "score": 35, "status": "development-quality"},
+        {"name": "Package Dependencies & Security", "grade": "B", "score": 80, "status": "near-production-ready"}
+      ],
+      "summary": "Comprehensive shadcn/ui-based component library with 40+ components. Built on Radix UI primitives with excellent TypeScript support and good tree-shaking. Lacks critical production requirements: zero test coverage, no documentation, version 0.0.0.",
+      "criticalIssues": [
+        "Zero test coverage",
+        "Package version is 0.0.0",
+        "No package documentation",
+        "Missing resizable export in index.ts",
+        "AI Loading Animation uses dangerouslySetInnerHTML"
+      ],
+      "quickWins": [
+        "Add basic README.md with component list and installation instructions",
+        "Add unit tests for utils.ts (cn function)",
+        "Bump version to 0.1.0",
+        "Sync index.ts exports with package.json"
+      ]
+    }
+  ]
+}

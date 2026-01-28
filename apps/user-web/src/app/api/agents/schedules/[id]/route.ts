@@ -117,6 +117,114 @@ export async function POST(
       )
     }
 
+    // Fetch tools from ai_agent_tools junction table (not agents.tools column which may be empty)
+    const { data: agentTools, error: toolsError } = await supabase
+      .from("ai_agent_tools")
+      .select("tool:agent_tools(name)")
+      .eq("agent_id", schedule.agent_id)
+
+    console.log("[ScheduleRun] Tool loading debug:", {
+      scheduleAgentId: schedule.agent_id,
+      agentToolsRaw: agentTools,
+      toolsError: toolsError?.message,
+      toolsCount: agentTools?.length ?? 0,
+    })
+
+    const rawToolNames = (agentTools
+      ?.map((t: { tool: { name: string } | null }) => t.tool?.name)
+      .filter(Boolean) as string[]) || []
+
+    // Map granular tool names (project_list, task_create) to category names (projects, projectTasks)
+    // that buildAgentTools expects. Only categories with factories will work:
+    // projects, projectTasks, teamMembers, transactions, budgets, accounts, goals,
+    // webSearch, dataExport, leads, opportunities, tasks, knowledge, memory
+    const toolCategoryMap: Record<string, string> = {
+      // Project tools → projects
+      project_list: "projects",
+      project_get: "projects",
+      project_create: "projects",
+      project_update: "projects",
+      project_delete: "projects",
+      project_archive: "projects",
+      project_add_member: "projects",
+      project_remove_member: "projects",
+      project_get_members: "projects",
+      project_get_progress: "projects",
+      project_get_activity: "projects",
+      // Task tools → projectTasks
+      task_list: "projectTasks",
+      task_get: "projectTasks",
+      task_create: "projectTasks",
+      task_update: "projectTasks",
+      task_delete: "projectTasks",
+      task_assign: "projectTasks",
+      task_unassign: "projectTasks",
+      task_change_status: "projectTasks",
+      task_add_dependency: "projectTasks",
+      task_remove_dependency: "projectTasks",
+      task_add_label: "projectTasks",
+      task_remove_label: "projectTasks",
+      task_get_by_assignee: "projectTasks",
+      task_get_overdue: "projectTasks",
+      task_get_my_tasks: "projectTasks",
+      task_add_comment: "projectTasks",
+      task_get_comments: "projectTasks",
+      // Team member tools → teamMembers
+      team_member_list: "teamMembers",
+      team_member_get: "teamMembers",
+      team_member_get_workload: "teamMembers",
+      team_member_get_availability: "teamMembers",
+      // CRM tools
+      lead_list: "leads",
+      lead_get: "leads",
+      lead_create: "leads",
+      lead_update: "leads",
+      opportunity_list: "opportunities",
+      opportunity_get: "opportunities",
+      opportunity_create: "opportunities",
+      opportunity_update: "opportunities",
+      // Finance tools
+      transaction_list: "transactions",
+      transaction_get: "transactions",
+      budget_list: "budgets",
+      budget_get: "budgets",
+      account_list: "accounts",
+      account_get: "accounts",
+      goal_list: "goals",
+      goal_get: "goals",
+      // Other tools
+      web_search: "webSearch",
+      data_export: "dataExport",
+      knowledge_search: "knowledge",
+      knowledge_create: "knowledge",
+      memory_store: "memory",
+      memory_recall: "memory",
+    }
+
+    // Convert granular names to categories and dedupe
+    const mappedCategories = [...new Set(
+      rawToolNames.map(name => toolCategoryMap[name] || name)
+    )]
+
+    // If agent has project/task tools, also enable teamMembers for capacity checks
+    // This ensures operations agents can query workloads even without explicit team_member_* tools
+    const hasProjectTools = mappedCategories.includes("projects") || mappedCategories.includes("projectTasks")
+    if (hasProjectTools && !mappedCategories.includes("teamMembers")) {
+      mappedCategories.push("teamMembers")
+    }
+
+    // Filter to only categories that have factories in buildAgentTools
+    const validCategories = [
+      "transactions", "budgets", "accounts", "goals", "webSearch", "dataExport",
+      "leads", "opportunities", "tasks", "knowledge",
+      "projects", "projectTasks", "teamMembers", "memory"
+    ]
+    const toolCategories = mappedCategories.filter(cat => validCategories.includes(cat))
+
+    console.log("[ScheduleRun] Raw tool names:", rawToolNames.slice(0, 10))
+    console.log("[ScheduleRun] Mapped categories (before filter):", mappedCategories)
+    console.log("[ScheduleRun] Final tool categories:", toolCategories)
+
     // Import and run the execution
     const { executeAgentTask } = await import("@/lib/agent-executor")
     const { sendAgentMessage, formatTaskCompletionMessage, getWorkspaceAdminIds, getWorkspaceOwnerId } = await import("@/lib/agent-messaging")
@@ -153,10 +261,16 @@ export async function POST(
       fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'schedules/[id]/route:manual-run',message:'Manual schedule run with provider',data:{scheduleId:id,scheduleName:schedule.name,rawProvider:schedule.ai_agent?.provider,resolvedProvider:provider,model,hasXaiKey:!!process.env.XAI_API_KEY,hasAnthropicKey:!!process.env.ANTHROPIC_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'manual-run',hypothesisId:'D-manual-run'})}).catch(()=>{});
       // #endregion
 
+      console.log("[ScheduleRun] TOOLS BEING PASSED:", {
+        toolCategoriesCount: toolCategories.length,
+        toolCategories,
+        scheduleAgentId: schedule.agent_id,
+      })
+
       const result = await executeAgentTask({
         taskPrompt: schedule.task_prompt,
         systemPrompt,
-        tools: hiredAgent.tools || [],
+        tools: toolCategories,  // Use mapped category names that buildAgentTools expects
         workspaceId: hiredAgent.workspace_id,
         supabase,
         provider,

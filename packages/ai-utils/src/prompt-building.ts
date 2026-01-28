@@ -22,7 +22,9 @@ export function buildOutputInstructions(outputConfig: OutputConfig | null | unde
 - Don't start by restating the task you were asked to do
 - Be conversational, not robotic or templated
 - Focus on what matters most, then details if needed
-- Skip unnecessary preamble like "Here is the report" or "I have completed the task"`
+- Skip unnecessary preamble like "Here is the report" or "I have completed the task"
+- NEVER include database IDs, UUIDs, or technical identifiers (e.g., say "Andrew" not "Andrew (ID: d2d8...)")
+- Refer to people, agents, and projects by name only - no ID references`
   }
 
   const parts: string[] = ['## Response Style']
@@ -66,6 +68,8 @@ export function buildOutputInstructions(outputConfig: OutputConfig | null | unde
   // Always add these defaults
   parts.push("- Don't start by restating the task you were asked to do")
   parts.push('- Skip unnecessary preamble like "Here is the report"')
+  parts.push('- NEVER include database IDs, UUIDs, or technical identifiers')
+  parts.push('- Refer to people, agents, and projects by name only - no ID references')
 
   // Custom instructions override/add to the above
   if (outputConfig.custom_instructions) {

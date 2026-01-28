@@ -140,6 +140,26 @@ function parseInlineFormatting(text: string): ReactNode[] {
 
 // Parse a line for block-level formatting
 function parseLine(line: string, index: number): ReactNode {
+  // Headers (h1-h6)
+  const headerMatch = line.match(/^(#{1,6})\s+(.+)$/)
+  if (headerMatch) {
+    const level = headerMatch[1].length
+    const text = headerMatch[2]
+    const styles: Record<number, string> = {
+      1: "text-2xl font-bold mt-4 mb-2",
+      2: "text-xl font-bold mt-3 mb-2",
+      3: "text-lg font-semibold mt-3 mb-1",
+      4: "text-base font-semibold mt-2 mb-1",
+      5: "text-sm font-semibold mt-2 mb-1",
+      6: "text-sm font-medium mt-1 mb-1",
+    }
+    return (
+      <div key={index} className={styles[level] || styles[3]}>
+        {parseInlineFormatting(text)}
+      </div>
+    )
+  }
+
   // Blockquote
   if (line.startsWith("> ")) {
     return (
