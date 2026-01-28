@@ -398,6 +398,119 @@ export async function resolveNotificationRecipients(params: {
   return []
 }
 
+interface SendPreTaskNotificationParams {
+  scheduleId: string
+  scheduleName: string
+  nextRunAt: Date
+  aiAgentId: string
+  workspaceId: string | null
+  scheduleCreatedBy: string | null
+  timezone: string
+  supabase: SupabaseClient
+}
+
+interface SendPreTaskNotificationResult {
+  success: boolean
+  recipientCount: number
+  errors: string[]
+}
+
+/**
+ * Format a pre-task notification message for upcoming scheduled tasks.
+ */
+function formatPreTaskNotificationMessage(params: {
+  scheduleName: string
+  nextRunAt: Date
+  timezone: string
+}): string {
+  const { scheduleName, nextRunAt, timezone } = params
+  const timeStr = nextRunAt.toLocaleString('en-US', { 
+    timeZone: timezone,
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  })
+  return `**Upcoming Scheduled Task**\n\nHeads up! Your scheduled task **${scheduleName}** will run at ${timeStr} (${timezone}).`
+}
+
+/**
+ * Send a pre-task notification before a scheduled task runs.
+ * Notifies relevant recipients that a task is about to execute.
+ */
+export async function sendPreTaskNotification(
+  params: SendPreTaskNotificationParams
+): Promise<SendPreTaskNotificationResult> {
+  const {
+    aiAgentId,
+    scheduleName,
+    nextRunAt,
+    workspaceId,
+    scheduleCreatedBy,
+    timezone,
+    supabase,
+  } = params
+
+  const errors: string[] = []
+
+  // If no workspace ID, we can't send notifications
+  if (!workspaceId) {
+    console.log('[AgentMessaging] No workspace ID provided, skipping pre-notification')
+    return { success: false, recipientCount: 0, errors: ['No workspace ID provided'] }
+  }
+
+  // Find the local agent for this workspace
+  const localAgent = await findLocalAgent(aiAgentId, workspaceId, supabase)
+
+  if (!localAgent) {
+    console.log(`[AgentMessaging] No local agent found for ai_agent ${aiAgentId} in workspace ${workspaceId}, skipping pre-notification`)
+    return { success: false, recipientCount: 0, errors: ['No local agent found in workspace'] }
+  }
+
+  // Resolve recipients
+  const recipients = await resolveNotificationRecipients({
+    localAgent,
+    scheduleCreatedBy,
+    workspaceId,
+    supabase,
+  })
+
+  if (recipients.length === 0) {
+    return { success: false, recipientCount: 0, errors: ['No recipients found'] }
+  }
+
+  // Format the message
+  const content = formatPreTaskNotificationMessage({
+    scheduleName,
+    nextRunAt,
+    timezone,
+  })
+
+  // Send to each recipient via DM
+  let successCount = 0
+  for (const recipientId of recipients) {
+    const result = await sendAgentDM({
+      agentId: localAgent.id,
+      recipientProfileId: recipientId,
+      workspaceId,
+      content,
+      supabase,
+    })
+
+    if (result.success) {
+      successCount++
+    } else if (result.error) {
+      errors.push(`Failed to notify ${recipientId}: ${result.error}`)
+    }
+  }
+
+  console.log(`[AgentMessaging] Sent pre-task notification to ${successCount}/${recipients.length} recipients`)
+
+  return {
+    success: successCount > 0,
+    recipientCount: successCount,
+    errors,
+  }
+}
+
 interface SendScheduledTaskNotificationParams {
   executionId: string
   aiAgentId: string

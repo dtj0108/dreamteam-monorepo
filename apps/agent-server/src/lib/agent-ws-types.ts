@@ -103,6 +103,15 @@ export interface DoneMessage {
   turnCount: number
 }
 
+/**
+ * Quick acknowledgment from agent (Haiku-generated)
+ */
+export interface AcknowledgmentMessage {
+  type: "acknowledgment"
+  content: string
+  agentName: string
+}
+
 export type ServerMessage =
   | SessionMessage
   | TextMessage
@@ -111,5 +120,6 @@ export type ServerMessage =
   | ToolResultMessage
   | DelegationStartMessage
   | DelegationCompleteMessage
+  | AcknowledgmentMessage
   | ErrorMessage
   | DoneMessage

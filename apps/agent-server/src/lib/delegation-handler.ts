@@ -4,15 +4,14 @@
  * Executes delegated agent queries. When the head agent calls delegate_to_agent,
  * this handler runs the specialist agent and returns their response.
  *
+ * Uses Vercel AI SDK with MCP tools for all AI providers.
+ *
  * CRITICAL: Delegated agents cannot delegate further (allowDelegation: false)
  * to prevent infinite delegation chains.
  */
 
-import { query } from "@anthropic-ai/claude-agent-sdk"
-import type { McpStdioServerConfig } from "@anthropic-ai/claude-agent-sdk"
+import { generateText, stepCountIs } from "ai"
 import crypto from "crypto"
-import path from "path"
-import { fileURLToPath } from "url"
 import type {
   DeployedTeamConfig,
   DeployedAgent,
@@ -28,10 +27,8 @@ import {
 } from "./agent-channel.js"
 import { getAgentProfile } from "./agent-profile.js"
 import { waitForAgentResponse } from "./channel-subscription.js"
-
-// Get __dirname equivalent in ESM
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+import { createMCPClient, type MCPClientInstance } from "./mcp-client.js"
+import { getModel, getApiKeyEnvVar } from "./ai-providers.js"
 
 /**
  * Result of a delegation execution
@@ -169,23 +166,9 @@ ${input.task}`
 }
 
 /**
- * Map model name to Claude model ID
- * For Anthropic: converts 'sonnet'/'opus'/'haiku' to full model IDs
- * For other providers: returns the model string as-is (e.g., 'grok-3')
- */
-function getModelId(model: string): string {
-  const modelMap: Record<string, string> = {
-    sonnet: "claude-sonnet-4-20250514",
-    opus: "claude-opus-4-20250514",
-    haiku: "claude-haiku-4-20250514",
-  }
-  return modelMap[model] || model
-}
-
-/**
  * Execute a delegation to a specialist agent
  *
- * This runs a separate Claude query for the delegated agent.
+ * Uses Vercel AI SDK with MCP tools.
  * The agent CANNOT delegate further (prevents infinite chains).
  *
  * @param input - The delegation input from the head agent
@@ -229,88 +212,56 @@ export async function handleDelegation(
 
   // Get tool names for this agent
   const toolNames = targetAgent.tools?.map((t) => t.name) || []
+  const provider = targetAgent.provider || "anthropic"
 
-  // MCP server config (if agent has tools)
-  const mcpServerPath = path.resolve(
-    __dirname,
-    "../../../../packages/mcp-server/dist/index.js"
-  )
+  // Check API key
+  const apiKeyEnvVar = getApiKeyEnvVar(provider)
+  if (!process.env[apiKeyEnvVar]) {
+    return {
+      success: false,
+      agentName: targetAgent.name,
+      agentSlug: targetAgent.slug,
+      response: "",
+      error: `API key not configured: ${apiKeyEnvVar}`,
+    }
+  }
 
-  const mcpServerConfig: McpStdioServerConfig | null =
-    toolNames.length > 0
-      ? {
-          type: "stdio",
-          command: "node",
-          args: [mcpServerPath],
-          env: {
-            SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-            SUPABASE_SERVICE_ROLE_KEY:
-              process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-            WORKSPACE_ID: workspaceId,
-            USER_ID: userId,
-          },
-        }
-      : null
+  console.log(`[Delegation] Using ${provider}/${targetAgent.model}`)
+
+  let mcpClient: MCPClientInstance | null = null
 
   try {
-    // Run the delegated agent query
-    // CRITICAL: No delegation tool for delegated agents
-    const queryGenerator = query({
-      prompt: message,
-      options: {
-        model: getModelId(targetAgent.model),
-        systemPrompt,
-        maxTurns: 5, // Lower max turns for delegated queries
-        maxThinkingTokens: 2000, // Lower thinking tokens
-        disallowedTools: ["Task", "delegate_to_agent"], // No Task tool, no delegation
-        ...(mcpServerConfig
-          ? {
-              mcpServers: {
-                dreamteam: mcpServerConfig,
-              },
-              allowedTools: toolNames.map((name) => `mcp__dreamteam__${name}`),
-            }
-          : {}),
-        env: {
-          ...process.env,
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-        },
-        permissionMode: "bypassPermissions",
-        allowDangerouslySkipPermissions: true,
-        persistSession: false, // Don't persist delegated agent sessions
-      },
-    })
-
-    let responseText = ""
-    let inputTokens = 0
-    let outputTokens = 0
-
-    // Process the query
-    for await (const msg of queryGenerator) {
-      // Handle assistant messages
-      if (msg.type === "assistant") {
-        for (const content of msg.message.content) {
-          if (content.type === "text") {
-            responseText += content.text
-          }
-        }
-
-        // Track usage
-        if (msg.message.usage) {
-          inputTokens += msg.message.usage.input_tokens || 0
-          outputTokens += msg.message.usage.output_tokens || 0
-        }
-      }
-
-      // Handle result
-      if (msg.type === "result") {
-        inputTokens = msg.usage.input_tokens
-        outputTokens = msg.usage.output_tokens
+    // Create MCP client for tools (if tools are assigned)
+    let aiTools: Record<string, ReturnType<typeof import("ai").tool>> = {}
+    if (toolNames.length > 0) {
+      try {
+        mcpClient = await createMCPClient({
+          workspaceId,
+          userId,
+          enabledTools: toolNames,
+        })
+        aiTools = mcpClient.tools
+        console.log(`[Delegation] MCP client connected with ${Object.keys(aiTools).length} tools`)
+      } catch (mcpError) {
+        console.error("[Delegation] Failed to create MCP client:", mcpError)
+        // Continue without tools
       }
     }
 
+    // Run the delegated agent query
+    const result = await generateText({
+      model: getModel(provider, targetAgent.model),
+      system: systemPrompt,
+      messages: [{ role: "user", content: message }],
+      tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
+      stopWhen: stepCountIs(5), // AI SDK 6: lower for delegated queries
+    })
+
+    const inputTokens = result.usage?.promptTokens || 0
+    const outputTokens = result.usage?.completionTokens || 0
+
     console.log(
-      `[Delegation] Completed. Response length: ${responseText.length} chars`
+      `[Delegation] Completed. Response length: ${result.text.length} chars`
     )
     console.log(
       `[Delegation] Usage: ${inputTokens} input, ${outputTokens} output tokens`
@@ -320,7 +271,7 @@ export async function handleDelegation(
       success: true,
       agentName: targetAgent.name,
       agentSlug: targetAgent.slug,
-      response: responseText,
+      response: result.text,
       usage: { inputTokens, outputTokens },
     }
   } catch (error) {
@@ -332,6 +283,14 @@ export async function handleDelegation(
       agentSlug: targetAgent.slug,
       response: "",
       error: error instanceof Error ? error.message : "Unknown error occurred",
+    }
+  } finally {
+    if (mcpClient) {
+      try {
+        await mcpClient.close()
+      } catch (closeError) {
+        console.error("[Delegation] Failed to close MCP client:", closeError)
+      }
     }
   }
 }

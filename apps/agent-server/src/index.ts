@@ -13,6 +13,7 @@ import express from "express"
 import cors from "cors"
 import { agentChatHandler } from "./agent-chat.js"
 import { agentChannelMessageHandler } from "./agent-channel-handler.js"
+import { scheduledExecutionHandler } from "./scheduled-execution.js"
 import { testTool, type ToolTestRequest } from "./tools-test.js"
 
 const app = express()
@@ -43,6 +44,9 @@ app.post("/agent-chat", agentChatHandler)
 
 // Agent channel webhook endpoint (triggered by Supabase)
 app.post("/agent-channel-message", agentChannelMessageHandler)
+
+// Scheduled execution endpoint (called by admin cron)
+app.post("/scheduled-execution", scheduledExecutionHandler)
 
 // Tool testing endpoint - executes tools via MCP server for admin testing
 app.post("/tools/test", async (req, res) => {
@@ -83,6 +87,10 @@ app.options("/tools/test", (_req, res) => {
   res.status(204).end()
 })
 
+app.options("/scheduled-execution", (_req, res) => {
+  res.status(204).end()
+})
+
 // Error handling middleware
 app.use(
   (
@@ -106,7 +114,5 @@ app.listen(PORT, () => {
   console.log(`Health check: http://localhost:${PORT}/health`)
   console.log(`Agent chat: POST http://localhost:${PORT}/agent-chat`)
   console.log(`Agent channel webhook: POST http://localhost:${PORT}/agent-channel-message`)
-  // #region agent log
-  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.ts:startup',message:'Agent server started',data:{port:PORT},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
+  console.log(`Scheduled execution: POST http://localhost:${PORT}/scheduled-execution`)
 })

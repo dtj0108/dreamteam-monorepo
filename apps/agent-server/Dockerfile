@@ -34,7 +34,7 @@ COPY apps/agent-server/ ./apps/agent-server/
 RUN pnpm --filter=@dreamteam/mcp-server build
 
 # Build agent server
-RUN pnpm --filter=@dreamteam/agent-server build
+RUN pnpm --filter=agent-server build
 
 # Create directories that Claude Code CLI needs and set ownership
 RUN mkdir -p /home/appuser/.claude && \

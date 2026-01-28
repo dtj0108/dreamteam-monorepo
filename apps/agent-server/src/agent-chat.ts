@@ -1,38 +1,32 @@
 /**
  * Agent Chat Handler for Express
  *
- * Uses Claude Agent SDK with the full MCP server (291 tools) via stdio transport.
+ * Uses Vercel AI SDK for all AI providers (Anthropic, OpenAI, xAI, Google, etc.)
+ * with MCP tools via stdio transport.
  * Streams responses via Server-Sent Events (SSE).
  *
  * Migrated from Next.js API route to work in Express for Railway deployment.
  */
 
 import type { Request, Response } from "express"
-import { query } from "@anthropic-ai/claude-agent-sdk"
-import type { McpStdioServerConfig } from "@anthropic-ai/claude-agent-sdk"
-import { streamText, type CoreMessage } from "ai"
+import { streamText, stepCountIs, type CoreMessage } from "ai"
 import { z } from "zod"
 import { createMCPClient, type MCPClientInstance } from "./lib/mcp-client.js"
-import { getModel, shouldUseVercelAI } from "./lib/ai-providers.js"
-import path from "path"
-import { fileURLToPath } from "url"
+import { getModel } from "./lib/ai-providers.js"
 import {
   createAdminClient,
   authenticateRequest,
-  type SessionUser,
 } from "./lib/supabase.js"
 import {
-  storeSession,
   loadSession,
   updateSessionUsage,
   createConversation,
-  calculateCost,
 } from "./lib/agent-session.js"
 import { applyRulesToPrompt, type AgentRule } from "./lib/agent-rules.js"
+import { buildBusinessContextInstructions, parseBusinessContext } from "./lib/business-context.js"
 import type {
   ServerMessage,
   TextMessage,
-  ReasoningMessage,
   ToolStartMessage,
   ToolResultMessage,
   DoneMessage,
@@ -45,10 +39,6 @@ import { loadDeployedTeamConfig, getHeadAgent } from "./lib/team-config.js"
 import { buildDelegationTool, type DelegationTool } from "./lib/delegation-tool.js"
 // Note: handleDelegation is available for future MCP integration
 // import { handleDelegation } from "./lib/delegation-handler.js"
-
-// Get __dirname equivalent in ESM
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 
 // Request body schema
 // agentId is optional - if not provided, we use the deployed team's head agent
@@ -99,9 +89,6 @@ async function loadConversationHistory(
  * Main agent chat handler for Express
  */
 export async function agentChatHandler(req: Request, res: Response) {
-  // #region agent log
-  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:entry',message:'agentChatHandler called',data:{method:req.method,path:req.path},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C'})}).catch(()=>{});
-  // #endregion
   try {
     // DEBUG: Log request origin
     const origin = req.headers.origin || req.headers.referer || "unknown"
@@ -165,7 +152,6 @@ export async function agentChatHandler(req: Request, res: Response) {
     let delegationTool: DelegationTool | null = null
     let deployedConfig: DeployedTeamConfig | null = null
     let headAgentSlug: string | null = null
-    let modelId = "claude-sonnet-4-20250514"
     let effectiveAgentId: string | undefined = agentId
     // Debug tracking for token analysis
     let debugInfo = {
@@ -190,7 +176,25 @@ export async function agentChatHandler(req: Request, res: Response) {
 
       // If user specified an agentId, try to find that agent in the deployed config
       if (agentId) {
+        // First try direct ID match (if agentId is from ai_agents table)
         targetAgent = deployedConfig.agents.find(a => a.id === agentId && a.is_enabled) || null
+        
+        // If not found, the agentId might be from the workspace 'agents' table
+        // In that case, we need to look up the ai_agent_id mapping
+        if (!targetAgent) {
+          const { data: workspaceAgent } = await supabase
+            .from("agents")
+            .select("ai_agent_id")
+            .eq("id", agentId)
+            .single()
+          
+          if (workspaceAgent?.ai_agent_id) {
+            targetAgent = deployedConfig.agents.find(
+              a => a.id === workspaceAgent.ai_agent_id && a.is_enabled
+            ) || null
+          }
+        }
+        
         if (targetAgent) {
           console.log(`[Agent Chat] Using requested agent: ${targetAgent.name} (${targetAgent.slug})`)
         } else {
@@ -278,14 +282,6 @@ ${skillsContent}`
       if (delegationTool) {
         console.log(`[Agent Chat] Delegation tool enabled with ${deployedConfig.delegations.filter(d => d.from_agent_slug === targetAgent.slug && d.is_enabled).length} target(s)`)
       }
-
-      // Set model from target agent
-      const modelMap: Record<string, string> = {
-        sonnet: "claude-sonnet-4-20250514",
-        opus: "claude-opus-4-20250514",
-        haiku: "claude-haiku-4-20250514",
-      }
-      modelId = modelMap[targetAgent.model] || modelMap.sonnet
 
     } else if (agentId) {
       // ========================================
@@ -450,48 +446,34 @@ ${skillsContent}`
       return res.status(400).json({ error: "No agent or team configured for this workspace" })
     }
 
-    // Path to MCP server - adjusted for monorepo structure
-    // From apps/agent-server/src/ go up to repo root, then to packages/mcp-server/dist/
-    const mcpServerPath = path.resolve(__dirname, "../../../packages/mcp-server/dist/index.js")
-
-    // Create stdio MCP server configuration
-    // ENABLED_TOOLS env var filters which tools the MCP server advertises
-    // This is critical for token optimization - we only send schemas for assigned tools
-    const mcpServerConfig: McpStdioServerConfig | null =
-      toolNames.length > 0
-        ? {
-            type: "stdio",
-            command: "node",
-            args: [mcpServerPath],
-            env: {
-              SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-              SUPABASE_SERVICE_ROLE_KEY:
-                process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-              WORKSPACE_ID: workspaceId,
-              USER_ID: session.id,
-              // Pass only the assigned tools - reduces token consumption by ~80%
-              ENABLED_TOOLS: toolNames.join(","),
-            },
-          }
-        : null
-
     // Create or get conversation
     let conversationId = existingConversationId
-    let sdkSessionId: string | null = null
 
     if (conversationId) {
       // Load existing conversation
       await loadSession(supabase, conversationId)
     } else {
       // Create new conversation
-      // Use the original agentId from the request (exists in agents table for FK constraint)
-      // effectiveAgentId is only used for determining which agent config to use (tools, prompt)
-      // #region agent log
-      fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:createConversation',message:'Creating conversation',data:{agentIdUsed:agentId,effectiveAgentId,workspaceId,hasDeployedConfig:!!deployedConfig},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D',runId:'post-fix'})}).catch(()=>{});
-      // #endregion
+      // In team mode, we need to find a valid agent_id from the agents table
+      // (team agent IDs don't exist in the agents table, but agent_id has NOT NULL + FK constraint)
+      let conversationAgentId: string | null = agentId || null
+      
+      if (deployedConfig) {
+        // Team mode: Find any active agent for this workspace to satisfy FK constraint
+        const { data: workspaceAgent } = await supabase
+          .from("agents")
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .eq("is_active", true)
+          .limit(1)
+          .single()
+        
+        conversationAgentId = workspaceAgent?.id || null
+      }
+      
       conversationId = await createConversation(supabase, {
         workspaceId,
-        agentId: agentId,
+        agentId: conversationAgentId,
         userId: session.id,
         title: message.slice(0, 50) + (message.length > 50 ? "..." : ""),
       })
@@ -526,18 +508,9 @@ ${skillsContent}`
     }
 
     try {
-      // Debug: Log API key presence (not the actual key)
-      console.log("[Agent Chat DEBUG] ANTHROPIC_API_KEY present:", !!process.env.ANTHROPIC_API_KEY)
-      console.log("[Agent Chat DEBUG] ANTHROPIC_API_KEY length:", process.env.ANTHROPIC_API_KEY?.length || 0)
-      console.log("[Agent Chat DEBUG] Model:", modelId)
+      // Debug: Log session context
       console.log("[Agent Chat DEBUG] Team mode:", !!deployedConfig)
       console.log("[Agent Chat DEBUG] Delegation enabled:", !!delegationTool)
-
-      // Build allowed tools list
-      // Include MCP tools (delegation is handled via system prompt + message parsing)
-      const allowedToolsList: string[] = mcpServerConfig
-        ? toolNames.map((name) => `mcp__dreamteam__${name}`)
-        : []
 
       // Build enhanced system prompt with delegation instructions if in team mode
       let enhancedSystemPrompt = systemPrompt
@@ -616,6 +589,34 @@ Remember: A tool error is information, not a stop sign.
 `
       enhancedSystemPrompt = errorHandlingSection + enhancedSystemPrompt
 
+      // Load workspace-level business context (autonomy settings)
+      // This applies to ALL agents in the workspace
+      try {
+        const { data: workspace } = await supabase
+          .from("workspaces")
+          .select("business_context")
+          .eq("id", workspaceId)
+          .single()
+
+        if (workspace?.business_context) {
+          const businessContext = parseBusinessContext(workspace.business_context)
+          if (businessContext) {
+            const businessContextInstructions = buildBusinessContextInstructions(businessContext)
+            if (businessContextInstructions) {
+              enhancedSystemPrompt = `${businessContextInstructions}
+
+---
+
+${enhancedSystemPrompt}`
+              console.log(`[Agent Chat] Added workspace business context (${businessContextInstructions.length} chars)`)
+            }
+          }
+        }
+      } catch (error) {
+        console.error("[Agent Chat] Failed to load workspace business context:", error)
+        // Continue without business context
+      }
+
       // Debug: Token breakdown by component
       console.log('[Token Debug] System Prompt Breakdown:', {
         agentName: debugInfo.agentName,
@@ -635,27 +636,13 @@ Remember: A tool error is information, not a stop sign.
       // Get target agent for provider check (in team mode)
       const targetAgentForProvider = deployedConfig?.agents.find(a => a.id === effectiveAgentId)
 
-      // #region agent log
-      const providerInfo = {
-        targetAgentProvider: targetAgentForProvider?.provider,
-        targetAgentModel: targetAgentForProvider?.model,
-        effectiveAgentId,
-        willUseVercelAI: shouldUseVercelAI(targetAgentForProvider?.provider),
-        anthropicModelId: modelId,
-      };
-      console.log('[Provider Debug] Provider decision:', providerInfo);
-      fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:providerCheck',message:'Provider decision',data:providerInfo,timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
-
       // ========================================
-      // VERCEL AI SDK PATH - For non-Anthropic providers
+      // VERCEL AI SDK PATH - All providers
       // ========================================
-      // When provider is not 'anthropic', use Vercel AI SDK instead of Claude Agent SDK.
-      // Supports: OpenAI, xAI (Grok), Google (Gemini), Groq, Mistral, etc.
+      // All AI providers use Vercel AI SDK: Anthropic, OpenAI, xAI (Grok), Google (Gemini), Groq, Mistral, etc.
       // This path supports MCP tools via our MCP client adapter.
-      if (shouldUseVercelAI(targetAgentForProvider?.provider)) {
-        const provider = targetAgentForProvider?.provider || "openai"
-        const model = targetAgentForProvider?.model || "gpt-4o"
+      const provider = targetAgentForProvider?.provider || "anthropic"
+      const model = targetAgentForProvider?.model || "sonnet"
         console.log(`[Agent Chat] Using Vercel AI SDK with provider: ${provider}, model: ${model}`)
         console.log(`[Agent Chat] xAI tools enabled: ${toolNames.length > 0 ? toolNames.join(', ') : 'none'}`)
 
@@ -670,15 +657,8 @@ Remember: A tool error is information, not a stop sign.
         const hasApiKey = !!process.env[apiKeyEnvVar];
         console.log(`[Agent Chat] ${apiKeyEnvVar} present: ${hasApiKey}, length: ${process.env[apiKeyEnvVar]?.length || 0}`);
 
-        // #region agent log
-        fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:vercelAIPath',message:'Entering Vercel AI SDK path',data:{provider,model,apiKeyEnvVar,hasApiKey,apiKeyLength:process.env[apiKeyEnvVar]?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-
         if (!hasApiKey) {
           console.error(`[Agent Chat] ERROR: ${apiKeyEnvVar} is not set! Cannot use ${provider} provider.`);
-          // #region agent log
-          fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:missingApiKey',message:'Missing API key for provider',data:{provider,model,apiKeyEnvVar},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'G'})}).catch(()=>{});
-          // #endregion
           sendEvent("error", {
             type: "error",
             message: `API key for ${provider} is not configured. Please set ${apiKeyEnvVar} environment variable.`,
@@ -729,16 +709,13 @@ Remember: A tool error is information, not a stop sign.
           ]
 
           // Use Vercel AI SDK streamText with the configured provider
-          // #region agent log
           console.log(`[Agent Chat] Starting streamText with ${Object.keys(aiTools).length} tools`);
-          fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:streamText',message:'Starting streamText',data:{provider,model,toolCount:Object.keys(aiTools).length,messageCount:aiMessages.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
-          // #endregion
           const result = streamText({
             model: getModel(provider, model),
             system: enhancedSystemPrompt,
             messages: aiMessages,
             tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
-            maxSteps: 5, // Allow up to 5 tool call rounds
+            stopWhen: stepCountIs(5), // AI SDK 6: stop after 5 steps (allows tool call rounds)
             onStepFinish: async (step) => {
               // Send tool events for each step
               if (step.toolCalls && step.toolCalls.length > 0) {
@@ -774,10 +751,7 @@ Remember: A tool error is information, not a stop sign.
           let totalOutputTokens = 0
 
           // Stream the response
-          // #region agent log
           console.log(`[Agent Chat] Starting to stream response from ${provider}/${model}`);
-          fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:streamStart',message:'Starting stream iteration',data:{provider,model},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
-          // #endregion
           try {
             for await (const textPart of result.textStream) {
               assistantContent += textPart
@@ -788,24 +762,18 @@ Remember: A tool error is information, not a stop sign.
               } as TextMessage)
             }
           } catch (streamError) {
-            // #region agent log
             console.error(`[Agent Chat] Stream error from ${provider}:`, streamError);
-            fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:streamError',message:'Stream error',data:{provider,model,error:String(streamError),errorMessage:(streamError as Error).message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
-            // #endregion
             throw streamError;
           }
-          // #region agent log
-          console.log(`[Agent Chat] Stream completed, got ${assistantContent.length} chars`);
-          fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:streamComplete',message:'Stream completed',data:{provider,model,contentLength:assistantContent.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
-          // #endregion
+          const steps = await result.steps;
+          console.log(`[Agent Chat] Stream completed, got ${assistantContent.length} chars, ${steps.length} steps`);
 
           // Get final usage stats
           const usage = await result.usage
           totalInputTokens = usage.promptTokens
           totalOutputTokens = usage.completionTokens
 
-          // Get step count for reporting
-          const steps = await result.steps
+          // Get step count for reporting (steps already fetched above)
           const turnCount = steps.length
 
           // Mark text as complete
@@ -861,245 +829,7 @@ Remember: A tool error is information, not a stop sign.
           }
           res.end()
         }
-        return // Exit early - xAI path complete
-      }
-
-      // ========================================
-      // ANTHROPIC PATH - Use Claude Agent SDK
-      // ========================================
-      // #region agent log
-      console.log(`[Agent Chat] Using Anthropic Claude Agent SDK with model: ${modelId}`);
-      fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-chat.ts:anthropicPath',message:'Entering Anthropic Claude Agent SDK path',data:{modelId,toolCount:toolNames.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
-      // Create the query with full MCP server via stdio transport
-      const queryGenerator = query({
-        prompt: message,
-        options: {
-          model: modelId,
-          // NOTE: Removed fallbackModel - SDK now rejects when same as main model
-          // The SDK may use a different model internally for some operations
-          systemPrompt: enhancedSystemPrompt,
-          // Pass conversation history for multi-turn context (last 5 messages)
-          // This allows the AI to remember recent conversation while limiting token usage
-          ...(conversationHistory.length > 0 && {
-            messages: conversationHistory,
-          }),
-          // Disable all built-in Claude Code tools (Task, Bash, Read, Write, Edit, Glob, Grep, etc.)
-          // This saves ~40k tokens per request - agents only need the MCP tools
-          tools: [],
-          // Reduced from 10 to 5 to cap token growth from multi-turn tool loops
-          maxTurns: 5,
-          // Reduced from 4000 to 2000 to save ~2k tokens per turn
-          maxThinkingTokens: 2000,
-          // Disable Task tool to prevent subagent spawning (causes 429 rate limit errors)
-          // The Task tool spawns Explore, Plan, Bash, etc. subagents in parallel,
-          // which can generate 40-75+ API requests in ~75ms
-          disallowedTools: ['Task'],
-          ...(mcpServerConfig
-            ? {
-                mcpServers: {
-                  dreamteam: mcpServerConfig,
-                },
-                allowedTools: allowedToolsList,
-              }
-            : {}),
-          env: {
-            ...process.env,
-            ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-            DEBUG_CLAUDE_AGENT_SDK: "1",  // Enable SDK debugging
-            // Disable tool search to prevent all MCP tools from being deferred
-            // When all tools are deferred, the API returns error: "At least one tool must have defer_loading=false"
-            // This also prevents the 3 API calls issue (streaming fail -> non-streaming fail -> retry)
-            ENABLE_TOOL_SEARCH: "false",
-          },
-          permissionMode: "bypassPermissions",
-          allowDangerouslySkipPermissions: true,
-          persistSession: true,
-          includePartialMessages: true,
-          // Capture stderr from Claude Code subprocess
-          stderr: (stderrMessage: string) => {
-            console.log("[Claude Code STDERR]", stderrMessage)
-          },
-        },
-      })
-
-      let currentText = ""
-      let currentReasoning = ""
-      let assistantMessageContent = ""
-      let totalInputTokens = 0
-      let totalOutputTokens = 0
-
-      // Process messages from the query
-      for await (const msg of queryGenerator) {
-        // Handle system init message to get session ID
-        if (msg.type === "system" && msg.subtype === "init") {
-          sdkSessionId = msg.session_id
-
-          // Store session ID
-          // Extract model name from modelId (e.g., "claude-sonnet-4-20250514" -> "sonnet")
-          const modelName = modelId.includes("opus") ? "opus" : modelId.includes("haiku") ? "haiku" : "sonnet"
-          await storeSession(supabase, conversationId!, msg.session_id, {
-            model: modelName,
-            tools: [...toolNames, ...(delegationTool ? ["delegate_to_agent"] : [])],
-          })
-
-          // Send session info to client
-          sendEvent("session", {
-            type: "session",
-            sessionId: msg.session_id,
-            conversationId: conversationId!,
-            isResumed: !!existingConversationId,
-          })
-        }
-
-        // Handle streaming content
-        if (msg.type === "stream_event") {
-          const event = msg.event
-
-          // Text delta
-          if (event.type === "content_block_delta") {
-            const delta = event.delta as any
-            if (delta.type === "text_delta") {
-              currentText += delta.text
-              sendEvent("text", {
-                type: "text",
-                content: delta.text,
-                isComplete: false,
-              } as TextMessage)
-            } else if (delta.type === "thinking_delta") {
-              currentReasoning += delta.thinking
-              sendEvent("reasoning", {
-                type: "reasoning",
-                content: delta.thinking,
-                isComplete: false,
-              } as ReasoningMessage)
-            }
-          }
-
-          // Content block stop
-          if (event.type === "content_block_stop") {
-            if (currentText) {
-              sendEvent("text", {
-                type: "text",
-                content: "",
-                isComplete: true,
-              } as TextMessage)
-            }
-            if (currentReasoning) {
-              sendEvent("reasoning", {
-                type: "reasoning",
-                content: "",
-                isComplete: true,
-              } as ReasoningMessage)
-            }
-          }
-        }
-
-        // Handle complete assistant message
-        if (msg.type === "assistant") {
-          const apiMessage = msg.message
-
-          // Extract text content
-          for (const content of apiMessage.content) {
-            if (content.type === "text") {
-              assistantMessageContent += content.text
-            }
-            // Handle tool use
-            if (content.type === "tool_use") {
-              const toolUse = content as any
-              sendEvent("tool_start", {
-                type: "tool_start",
-                toolName: toolUse.name,
-                toolCallId: toolUse.id,
-                args: toolUse.input,
-                displayName: toolUse.name
-                  .replace(/^manage/, "")
-                  .replace(/([A-Z])/g, " $1")
-                  .trim(),
-              } as ToolStartMessage)
-            }
-          }
-
-          // Track usage
-          if (apiMessage.usage) {
-            totalInputTokens += apiMessage.usage.input_tokens || 0
-            totalOutputTokens += apiMessage.usage.output_tokens || 0
-          }
-        }
-
-        // Handle user message (usually tool results)
-        if (msg.type === "user" && msg.tool_use_result !== undefined) {
-          const result = msg.tool_use_result as any
-
-          const content = msg.message.content
-          const toolResultContent = Array.isArray(content)
-            ? content.find((c: any) => c.type === "tool_result")
-            : null
-          if (toolResultContent) {
-            sendEvent("tool_result", {
-              type: "tool_result",
-              toolCallId: (toolResultContent as any).tool_use_id,
-              toolName: "",
-              result: result,
-              success: !(toolResultContent as any).is_error,
-              durationMs: 0,
-            } as ToolResultMessage)
-          }
-        }
-
-        // Handle result
-        if (msg.type === "result") {
-          totalInputTokens = msg.usage.input_tokens
-          totalOutputTokens = msg.usage.output_tokens
-
-          // DEBUG: Log per-model usage to detect if SDK is using multiple models
-          // The modelUsage field tracks tokens by model - we expect only our specified model
-          if ('modelUsage' in msg && msg.modelUsage) {
-            const modelNames = Object.keys(msg.modelUsage)
-            console.log(`[Model Debug] Models used: ${modelNames.join(', ')}`)
-            for (const [model, usage] of Object.entries(msg.modelUsage)) {
-              const u = usage as { inputTokens: number; outputTokens: number; costUSD: number }
-              console.log(`[Model Debug] ${model}: input=${u.inputTokens}, output=${u.outputTokens}, cost=$${u.costUSD.toFixed(4)}`)
-            }
-            if (modelNames.length > 1) {
-              console.warn(`[Model Debug] WARNING: Multiple models were used! Expected only: ${modelId}`)
-            }
-          }
-
-          // Use the actual model name for cost calculation
-          const modelNameForCost = modelId.includes("opus") ? "opus" : modelId.includes("haiku") ? "haiku" : "sonnet"
-          const costUsd =
-            msg.total_cost_usd ||
-            calculateCost(modelNameForCost, totalInputTokens, totalOutputTokens)
-
-          // Update session usage
-          await updateSessionUsage(supabase, conversationId!, {
-            inputTokens: totalInputTokens,
-            outputTokens: totalOutputTokens,
-            costUsd,
-          })
-
-          // Save assistant message
-          if (assistantMessageContent) {
-            await supabase.from("agent_messages").insert({
-              conversation_id: conversationId,
-              role: "assistant",
-              content: assistantMessageContent,
-            })
-          }
-
-          // Send done event
-          sendEvent("done", {
-            type: "done",
-            usage: {
-              inputTokens: totalInputTokens,
-              outputTokens: totalOutputTokens,
-              costUsd,
-            },
-            turnCount: msg.num_turns,
-          } as DoneMessage)
-        }
-      }
+        return // Vercel AI SDK path complete
     } catch (error) {
       console.error("[Agent Chat] Error:", error)
       sendEvent("error", {

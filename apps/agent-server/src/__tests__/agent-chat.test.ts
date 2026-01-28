@@ -14,10 +14,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { Request, Response } from "express"
 
 // Mock external dependencies before importing the handler
-vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
-  query: vi.fn(),
-}))
-
 vi.mock("ai", () => ({
   streamText: vi.fn(),
 }))
@@ -36,7 +32,7 @@ vi.mock("../lib/mcp-client.js", () => ({
 
 vi.mock("../lib/ai-providers.js", () => ({
   getModel: vi.fn(),
-  shouldUseVercelAI: vi.fn((provider) => provider && provider !== "anthropic"),
+  shouldUseVercelAI: vi.fn(() => true), // Always use Vercel AI SDK
 }))
 
 vi.mock("../lib/supabase.js", () => ({
@@ -45,11 +41,9 @@ vi.mock("../lib/supabase.js", () => ({
 }))
 
 vi.mock("../lib/agent-session.js", () => ({
-  storeSession: vi.fn(),
   loadSession: vi.fn(),
   updateSessionUsage: vi.fn(),
   createConversation: vi.fn(() => "conv-123"),
-  calculateCost: vi.fn(() => 0.01),
 }))
 
 vi.mock("../lib/agent-rules.js", () => ({
@@ -79,8 +73,7 @@ process.env.ANTHROPIC_API_KEY = "test-anthropic-key"
 import { agentChatHandler } from "../agent-chat.js"
 import { authenticateRequest, createAdminClient } from "../lib/supabase.js"
 import { loadDeployedTeamConfig, getHeadAgent } from "../lib/team-config.js"
-import { shouldUseVercelAI } from "../lib/ai-providers.js"
-import { query } from "@anthropic-ai/claude-agent-sdk"
+import { getModel } from "../lib/ai-providers.js"
 import { streamText } from "ai"
 import { createConversation } from "../lib/agent-session.js"
 
@@ -301,16 +294,14 @@ describe("agentChatHandler", () => {
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
 
-      // Mock the Claude Agent SDK query generator
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockReturnValue(mockQueryGenerator)
+      // Mock Vercel AI SDK streamText
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello"
+        })(),
+        usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
 
       const req = createMockRequest({
         message: "Hello",
@@ -368,15 +359,13 @@ describe("agentChatHandler", () => {
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
 
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockReturnValue(mockQueryGenerator)
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello"
+        })(),
+        usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
 
       const req = createMockRequest({
         message: "Hello",
@@ -450,15 +439,13 @@ describe("agentChatHandler", () => {
       }
       vi.mocked(createAdminClient).mockReturnValue(chainableMock as unknown as ReturnType<typeof createAdminClient>)
 
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockReturnValue(mockQueryGenerator)
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello"
+        })(),
+        usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
 
       const req = createMockRequest({
         message: "Hello",
@@ -504,7 +491,7 @@ describe("agentChatHandler", () => {
       })
     })
 
-    it("should use Anthropic SDK for anthropic provider", async () => {
+    it("should use Vercel AI SDK for anthropic provider", async () => {
       const mockTeamConfig = {
         team: {
           id: "team-123",
@@ -532,17 +519,14 @@ describe("agentChatHandler", () => {
 
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
-      vi.mocked(shouldUseVercelAI).mockReturnValue(false)
 
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockReturnValue(mockQueryGenerator)
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello"
+        })(),
+        usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
 
       const req = createMockRequest({
         message: "Hello",
@@ -551,9 +535,8 @@ describe("agentChatHandler", () => {
 
       await agentChatHandler(req, mockRes)
 
-      expect(shouldUseVercelAI).toHaveBeenCalled()
-      expect(query).toHaveBeenCalled()
-      expect(streamText).not.toHaveBeenCalled()
+      // All providers now use Vercel AI SDK
+      expect(streamText).toHaveBeenCalled()
     })
 
     it("should use Vercel AI SDK for xAI provider", async () => {
@@ -586,9 +569,7 @@ describe("agentChatHandler", () => {
 
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
-      vi.mocked(shouldUseVercelAI).mockReturnValue(true)
 
-      // Mock streamText for Vercel AI SDK
       vi.mocked(streamText).mockReturnValue({
         textStream: (async function* () {
           yield "Hello"
@@ -604,14 +585,12 @@ describe("agentChatHandler", () => {
 
       await agentChatHandler(req, mockRes)
 
-      expect(shouldUseVercelAI).toHaveBeenCalled()
       expect(streamText).toHaveBeenCalled()
-      expect(query).not.toHaveBeenCalled()
 
       delete process.env.XAI_API_KEY
     })
 
-    it("should return error when xAI API key is missing", async () => {
+    it("should return error when API key is missing for provider", async () => {
       delete process.env.XAI_API_KEY
 
       const mockTeamConfig = {
@@ -641,7 +620,6 @@ describe("agentChatHandler", () => {
 
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
-      vi.mocked(shouldUseVercelAI).mockReturnValue(true)
 
       const req = createMockRequest({
         message: "Hello",
@@ -697,21 +675,15 @@ describe("agentChatHandler", () => {
 
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
-      vi.mocked(shouldUseVercelAI).mockReturnValue(false)
 
-      let capturedOptions: Record<string, unknown> | undefined
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockImplementation((opts) => {
-        capturedOptions = opts as Record<string, unknown>
-        return mockQueryGenerator
-      })
+      // Mock Vercel AI SDK streamText
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello"
+        })(),
+        usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
 
       const req = createMockRequest({
         message: "Hello",
@@ -757,21 +729,17 @@ describe("agentChatHandler", () => {
 
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
-      vi.mocked(shouldUseVercelAI).mockReturnValue(false)
 
       let capturedSystemPrompt = ""
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockImplementation((opts) => {
-        const options = (opts as { options: { systemPrompt: string } }).options
-        capturedSystemPrompt = options.systemPrompt
-        return mockQueryGenerator
+      vi.mocked(streamText).mockImplementation((opts) => {
+        capturedSystemPrompt = (opts as { system: string }).system
+        return {
+          textStream: (async function* () {
+            yield "Hello"
+          })(),
+          usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+          steps: Promise.resolve([]),
+        } as unknown as ReturnType<typeof streamText>
       })
 
       const req = createMockRequest({
@@ -817,21 +785,16 @@ describe("agentChatHandler", () => {
 
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
-      vi.mocked(shouldUseVercelAI).mockReturnValue(false)
-
       let capturedSystemPrompt = ""
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockImplementation((opts) => {
-        const options = (opts as { options: { systemPrompt: string } }).options
-        capturedSystemPrompt = options.systemPrompt
-        return mockQueryGenerator
+      vi.mocked(streamText).mockImplementation((opts) => {
+        capturedSystemPrompt = (opts as { system: string }).system
+        return {
+          textStream: (async function* () {
+            yield "Hello"
+          })(),
+          usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+          steps: Promise.resolve([]),
+        } as unknown as ReturnType<typeof streamText>
       })
 
       const req = createMockRequest({
@@ -873,21 +836,16 @@ describe("agentChatHandler", () => {
 
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
-      vi.mocked(shouldUseVercelAI).mockReturnValue(false)
-
       let capturedSystemPrompt = ""
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockImplementation((opts) => {
-        const options = (opts as { options: { systemPrompt: string } }).options
-        capturedSystemPrompt = options.systemPrompt
-        return mockQueryGenerator
+      vi.mocked(streamText).mockImplementation((opts) => {
+        capturedSystemPrompt = (opts as { system: string }).system
+        return {
+          textStream: (async function* () {
+            yield "Hello"
+          })(),
+          usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+          steps: Promise.resolve([]),
+        } as unknown as ReturnType<typeof streamText>
       })
 
       const req = createMockRequest({
@@ -940,17 +898,14 @@ describe("agentChatHandler", () => {
 
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
-      vi.mocked(shouldUseVercelAI).mockReturnValue(false)
 
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockReturnValue(mockQueryGenerator)
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello"
+        })(),
+        usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
 
       const req = createMockRequest({
         message: "Hello",
@@ -997,17 +952,14 @@ describe("agentChatHandler", () => {
 
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
-      vi.mocked(shouldUseVercelAI).mockReturnValue(false)
 
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockReturnValue(mockQueryGenerator)
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello"
+        })(),
+        usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
 
       const { loadSession } = await import("../lib/agent-session.js")
 
@@ -1064,22 +1016,13 @@ describe("agentChatHandler", () => {
 
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
-      vi.mocked(shouldUseVercelAI).mockReturnValue(false)
-
-      let capturedModel = ""
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockImplementation((opts) => {
-        const options = (opts as { options: { model: string } }).options
-        capturedModel = options.model
-        return mockQueryGenerator
-      })
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello"
+        })(),
+        usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
 
       const req = createMockRequest({
         message: "Hello",
@@ -1088,7 +1031,8 @@ describe("agentChatHandler", () => {
 
       await agentChatHandler(req, mockRes)
 
-      expect(capturedModel).toContain("sonnet")
+      // getModel is called with provider and model
+      expect(getModel).toHaveBeenCalledWith("anthropic", "sonnet")
     })
 
     it("should use opus model when configured", async () => {
@@ -1119,22 +1063,13 @@ describe("agentChatHandler", () => {
 
       vi.mocked(loadDeployedTeamConfig).mockResolvedValue(mockTeamConfig)
       vi.mocked(getHeadAgent).mockReturnValue(mockTeamConfig.agents[0])
-      vi.mocked(shouldUseVercelAI).mockReturnValue(false)
-
-      let capturedModel = ""
-      const mockQueryGenerator = (async function* () {
-        yield { type: "system", subtype: "init", session_id: "sess-123" }
-        yield {
-          type: "result",
-          usage: { input_tokens: 100, output_tokens: 50 },
-          num_turns: 1,
-        }
-      })()
-      vi.mocked(query).mockImplementation((opts) => {
-        const options = (opts as { options: { model: string } }).options
-        capturedModel = options.model
-        return mockQueryGenerator
-      })
+      vi.mocked(streamText).mockReturnValue({
+        textStream: (async function* () {
+          yield "Hello"
+        })(),
+        usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+        steps: Promise.resolve([]),
+      } as unknown as ReturnType<typeof streamText>)
 
       const req = createMockRequest({
         message: "Hello",
@@ -1143,7 +1078,8 @@ describe("agentChatHandler", () => {
 
       await agentChatHandler(req, mockRes)
 
-      expect(capturedModel).toContain("opus")
+      // getModel is called with provider and model
+      expect(getModel).toHaveBeenCalledWith("anthropic", "opus")
     })
   })
 })
