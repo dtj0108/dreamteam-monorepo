@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "corepack enable && pnpm install --no-frozen-lockfile",
+  "installCommand": "npx pnpm@9.15.4 install --no-frozen-lockfile",
   "crons": [
     {
       "path": "/api/cron/check-schedules",
