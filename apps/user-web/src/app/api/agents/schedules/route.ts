@@ -176,6 +176,7 @@ export async function POST(request: NextRequest) {
     const nextRunAt = getNextRunTime(cron_expression, timezone)
 
     // Create the schedule
+    // Include workspace_id to enable MCP tools access during scheduled executions
     const { data: schedule, error: insertError } = await supabase
       .from("agent_schedules")
       .insert({
@@ -190,6 +191,7 @@ export async function POST(request: NextRequest) {
         next_run_at: nextRunAt.toISOString(),
         created_by: session.id,
         output_config: {},
+        workspace_id: workspaceId, // Required for MCP tools to have workspace context
       })
       .select(`
         *,

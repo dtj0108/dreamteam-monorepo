@@ -210,10 +210,7 @@ async function channelGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No channel found with this ID',
-          channel: null,
-        })
+        return error('Channel not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
@@ -228,10 +225,7 @@ async function channelGet(params: {
         .single()
 
       if (!membership) {
-        return success({
-          message: 'No channel found with this ID',
-          channel: null,
-        })
+        return error('Channel not found', 'not_found')
       }
     }
 
@@ -335,10 +329,7 @@ async function channelUpdate(params: {
       .single()
 
     if (channelError || !channel) {
-      return success({
-          message: 'No channel found with this ID',
-          channel: null,
-        })
+      return error('Channel not found', 'not_found')
     }
 
     // Only creator or admins can update channel
@@ -351,11 +342,7 @@ async function channelUpdate(params: {
     if (params.description !== undefined) updateData.description = params.description
 
     if (Object.keys(updateData).length === 0) {
-      return success({
-        message: 'No fields provided to update',
-        channel: null,
-        updated: false,
-      })
+      return error('No fields to update', 'validation')
     }
 
     const { data, error: dbError } = await supabase
@@ -400,10 +387,7 @@ async function channelDelete(params: {
       .single()
 
     if (channelError || !channel) {
-      return success({
-          message: 'No channel found with this ID',
-          channel: null,
-        })
+      return error('Channel not found', 'not_found')
     }
 
     // Only creator or admins can delete channel
@@ -454,10 +438,7 @@ async function channelJoin(params: {
       .single()
 
     if (channelError || !channel) {
-      return success({
-          message: 'No channel found with this ID',
-          channel: null,
-        })
+      return error('Channel not found', 'not_found')
     }
 
     // Cannot join private channels directly
@@ -522,18 +503,12 @@ async function channelLeave(params: {
       .single()
 
     if (channelError || !channel) {
-      return success({
-          message: 'No channel found with this ID',
-          channel: null,
-        })
+      return error('Channel not found', 'not_found')
     }
 
     // Cannot leave if you're the channel creator (they must delete it)
     if (channel.created_by === member.profile_id) {
-      return success({
-        message: 'Channel creator cannot leave. Archive the channel instead.',
-        left: false,
-      })
+      return error('Channel creator cannot leave', 'validation')
     }
 
     // Check if member of channel
@@ -589,10 +564,7 @@ async function channelAddMember(params: {
       .single()
 
     if (channelError || !channel) {
-      return success({
-          message: 'No channel found with this ID',
-          channel: null,
-        })
+      return error('Channel not found', 'not_found')
     }
 
     // For private channels, only members can add others
@@ -682,10 +654,7 @@ async function channelRemoveMember(params: {
       .single()
 
     if (channelError || !channel) {
-      return success({
-          message: 'No channel found with this ID',
-          channel: null,
-        })
+      return error('Channel not found', 'not_found')
     }
 
     // Only channel creator or admins can remove members
@@ -752,10 +721,7 @@ async function channelGetMembers(params: {
       .single()
 
     if (channelError || !channel) {
-      return success({
-          message: 'No channel found with this ID',
-          channel: null,
-        })
+      return error('Channel not found', 'not_found')
     }
 
     // For private channels, verify user is a member

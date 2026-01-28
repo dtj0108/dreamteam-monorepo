@@ -133,11 +133,7 @@ async function conversationGet(params: {
 
     if (convError) {
       if (convError.code === 'PGRST116') {
-        return success({
-          message: 'No conversation found with this ID',
-          conversation: null,
-          messages: [],
-        })
+        return error('Conversation not found', 'not_found')
       }
       return error(`Database error: ${convError.message}`)
     }
@@ -186,11 +182,7 @@ async function conversationCreate(params: {
       .single()
 
     if (!agent) {
-      return success({
-        message: 'No agent found with this ID in this workspace',
-        agent: null,
-        conversation: null,
-      })
+      return error('Agent not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase
@@ -240,11 +232,7 @@ async function conversationSendMessage(params: {
       .single()
 
     if (!conversation) {
-      return success({
-        message: 'No conversation found with this ID in this workspace',
-        conversation: null,
-        sent: false,
-      })
+      return error('Conversation not found', 'not_found')
     }
 
     // Add user message
@@ -304,10 +292,7 @@ async function conversationDelete(params: {
       .single()
 
     if (!conversation) {
-      return success({
-        message: 'No conversation found with this ID in this workspace',
-        deleted: false,
-      })
+      return error('Conversation not found', 'not_found')
     }
 
     // Delete messages first (cascade should handle this, but being explicit)

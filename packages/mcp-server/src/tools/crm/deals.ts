@@ -226,10 +226,7 @@ async function dealGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No deal found with this ID',
-          deal: null,
-        })
+        return error('Deal not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
@@ -269,10 +266,7 @@ async function dealCreate(params: {
       .single()
 
     if (leadError || !lead) {
-      return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+      return error('Lead not found', 'not_found')
     }
 
     // If contact_id provided, verify it belongs to this workspace
@@ -285,10 +279,7 @@ async function dealCreate(params: {
         .single()
 
       if (contactError || !contact) {
-        return success({
-          message: 'No contact found with this ID in this workspace',
-          contact: null,
-        })
+        return error('Contact not found', 'not_found')
       }
     }
 
@@ -356,10 +347,7 @@ async function dealUpdate(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No deal found with this ID in this workspace',
-        deal: null,
-      })
+      return error('Deal not found', 'not_found')
     }
 
     const updateData: Record<string, unknown> = {}
@@ -421,10 +409,7 @@ async function dealDelete(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No deal found with this ID in this workspace',
-        deal: null,
-      })
+      return error('Deal not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -468,10 +453,7 @@ async function dealMoveStage(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No deal found with this ID in this workspace',
-        deal: null,
-      })
+      return error('Deal not found', 'not_found')
     }
 
     const oldStage = existing.stage
@@ -525,10 +507,7 @@ async function dealMarkWon(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No deal found with this ID in this workspace',
-        deal: null,
-      })
+      return error('Deal not found', 'not_found')
     }
 
     const closedDate = params.closed_date || new Date().toISOString().split('T')[0]
@@ -587,10 +566,7 @@ async function dealMarkLost(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No deal found with this ID in this workspace',
-        deal: null,
-      })
+      return error('Deal not found', 'not_found')
     }
 
     const closedDate = new Date().toISOString().split('T')[0]
@@ -653,10 +629,7 @@ async function dealGetActivities(params: {
       .single()
 
     if (dealError || !deal) {
-      return success({
-        message: 'No deal found with this ID in this workspace',
-        deal: null,
-      })
+      return error('Deal not found', 'not_found')
     }
 
     // Get activities for this deal

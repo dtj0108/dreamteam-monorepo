@@ -55,7 +55,8 @@ export async function POST(
       timezone = 'UTC',
       task_prompt,
       requires_approval = false,
-      output_config = {}
+      output_config = {},
+      workspace_id = null, // Optional: workspace context for MCP tools
     } = body
 
     // Validation
@@ -88,6 +89,7 @@ export async function POST(
     const nextRunAt = getNextRunTime(cron_expression, timezone)
 
     // Create schedule
+    // workspace_id enables MCP tools to access workspace data during execution
     const { data: schedule, error: dbError } = await supabase
       .from('agent_schedules')
       .insert({
@@ -101,7 +103,8 @@ export async function POST(
         output_config,
         is_enabled: true,
         next_run_at: nextRunAt.toISOString(),
-        created_by: user!.id
+        created_by: user!.id,
+        workspace_id, // Optional: enables MCP tools if provided
       })
       .select()
       .single()

@@ -189,10 +189,7 @@ async function contactGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No contact found with this ID',
-          contact: null,
-        })
+        return error('Contact not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
@@ -222,28 +219,18 @@ async function contactCreate(params: {
 
     const supabase = getSupabase()
 
-    // lead_id is required for contacts
-    if (!params.lead_id) {
-      return success({
-        message: 'A lead_id is required to create a contact. Please provide the lead this contact belongs to.',
-        contact: null,
-        created: false,
-      })
-    }
+    // If lead_id is provided, verify lead belongs to this workspace
+    if (params.lead_id) {
+      const { data: lead, error: leadError } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('id', params.lead_id)
+        .eq('workspace_id', workspace_id)
+        .single()
 
-    // Verify lead belongs to this workspace
-    const { data: lead, error: leadError } = await supabase
-      .from('leads')
-      .select('id')
-      .eq('id', params.lead_id)
-      .eq('workspace_id', workspace_id)
-      .single()
-
-    if (leadError || !lead) {
-      return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+      if (leadError || !lead) {
+        return error('Lead not found', 'not_found')
+      }
     }
 
     const { data, error: dbError } = await supabase
@@ -255,7 +242,7 @@ async function contactCreate(params: {
         email: params.email || null,
         phone: params.phone || null,
         title: params.title || null,
-        lead_id: params.lead_id,
+        lead_id: params.lead_id || null,
         notes: params.notes || null,
       })
       .select(`
@@ -306,10 +293,7 @@ async function contactUpdate(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No contact found with this ID in this workspace',
-        contact: null,
-      })
+      return error('Contact not found', 'not_found')
     }
 
     // If updating lead_id, verify the lead belongs to this workspace
@@ -322,10 +306,7 @@ async function contactUpdate(params: {
         .single()
 
       if (leadError || !lead) {
-        return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+        return error('Lead not found', 'not_found')
       }
     }
 
@@ -387,10 +368,7 @@ async function contactDelete(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No contact found with this ID in this workspace',
-        contact: null,
-      })
+      return error('Contact not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -474,10 +452,7 @@ async function contactGetActivities(params: {
       .single()
 
     if (contactError || !contact) {
-      return success({
-        message: 'No contact found with this ID in this workspace',
-        contact: null,
-      })
+      return error('Contact not found', 'not_found')
     }
 
     // Get activities for this contact
@@ -524,10 +499,7 @@ async function contactGetDeals(params: {
       .single()
 
     if (contactError || !contact) {
-      return success({
-        message: 'No contact found with this ID in this workspace',
-        contact: null,
-      })
+      return error('Contact not found', 'not_found')
     }
 
     // Get opportunities/deals for this contact
@@ -573,10 +545,7 @@ async function contactGetByLead(params: {
       .single()
 
     if (leadError || !lead) {
-      return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+      return error('Lead not found', 'not_found')
     }
 
     // Get all contacts for this lead
@@ -624,10 +593,7 @@ async function contactGetByEmail(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No contact found with this email',
-          contact: null,
-        })
+        return error('Contact not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }

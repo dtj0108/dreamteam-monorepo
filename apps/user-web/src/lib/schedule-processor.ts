@@ -1,8 +1,10 @@
 import { Cron } from "croner"
 import { createAdminClient } from "@dreamteam/database/server"
+import { buildOutputInstructions, type OutputConfig } from "@dreamteam/ai-utils"
 import { executeAgentTask } from "./agent-executor"
 import { sendAgentMessage, formatTaskCompletionMessage, getWorkspaceAdminIds, getWorkspaceOwnerId } from "./agent-messaging"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { logAuditEvent } from "./audit-logger"
 
 interface ScheduleRow {
   id: string
@@ -15,6 +17,7 @@ interface ScheduleRow {
   is_enabled: boolean
   next_run_at: string | null
   created_by: string | null
+  output_config: OutputConfig | null
   ai_agent: {
     id: string
     name: string
@@ -26,6 +29,7 @@ interface ScheduleRow {
 
 interface LocalAgentRow {
   id: string
+  ai_agent_id: string
   workspace_id: string
   tools: string[]
   system_prompt: string | null
@@ -50,50 +54,123 @@ interface ExecutionRow {
 /**
  * Process all due agent schedules.
  * Called by the cron job to check for schedules whose next_run_at has passed.
+ * 
+ * Uses PostgreSQL advisory locks to prevent race conditions when multiple
+ * cron instances attempt to process the same schedule simultaneously.
  */
 export async function processAgentSchedules(): Promise<{
   processed: number
   errors: number
+  skipped: number
 }> {
   const supabase = createAdminClient()
-  const now = new Date().toISOString()
   let processed = 0
   let errors = 0
+  let skipped = 0
 
-  // 1. Find due schedules with AI agent data (including provider and model)
-  const { data: dueSchedules, error: scheduleError } = await supabase
-    .from("agent_schedules")
-    .select(`
-      *,
-      ai_agent:ai_agents(id, name, system_prompt, provider, model)
-    `)
-    .eq("is_enabled", true)
-    .lte("next_run_at", now)
-    .limit(50)
+  // 1. Fetch due schedules using SKIP LOCKED to prevent race conditions
+  // This locks the rows at the database level
+  const { data: dueSchedules, error: scheduleError } = await supabase.rpc(
+    "fetch_due_schedules",
+    { batch_size: 50 }
+  )
 
   if (scheduleError) {
     console.error("[ScheduleProcessor] Error fetching schedules:", scheduleError)
-    return { processed: 0, errors: 1 }
+    return { processed: 0, errors: 1, skipped: 0 }
   }
 
-  for (const schedule of (dueSchedules as ScheduleRow[]) || []) {
+  if (!dueSchedules || dueSchedules.length === 0) {
+    return { processed: 0, errors: 0, skipped: 0 }
+  }
+
+  console.log(`[ScheduleProcessor] Found ${dueSchedules.length} due schedules`)
+
+  // 2. BATCHED AGENT LOOKUP - Fix N+1 problem
+  // Collect all agent_ids from schedules and fetch in a single query
+  const agentIds = [...new Set((dueSchedules as ScheduleRow[]).map(s => s.agent_id))]
+  const { data: localAgents, error: agentsError } = await supabase
+    .from("agents")
+    .select("id, ai_agent_id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions")
+    .in("ai_agent_id", agentIds)
+    .eq("is_active", true)
+
+  if (agentsError) {
+    console.error("[ScheduleProcessor] Error fetching local agents:", agentsError)
+    return { processed: 0, errors: 1, skipped: 0 }
+  }
+
+  // Build lookup map for O(1) access
+  const agentMap = new Map<string, LocalAgentRow>()
+  for (const agent of (localAgents || [])) {
+    agentMap.set(agent.ai_agent_id, agent as LocalAgentRow)
+  }
+
+  console.log(`[ScheduleProcessor] Resolved ${agentMap.size} local agents for ${dueSchedules.length} schedules`)
+
+  for (const schedule of dueSchedules as ScheduleRow[]) {
+    let lockAcquired = false
+
     try {
-      // 2. Find local agent (for workspace_id, tools, reports_to, and personality settings)
-      const { data: localAgent } = await supabase
-        .from("agents")
-        .select("id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions")
-        .eq("ai_agent_id", schedule.agent_id)
-        .eq("is_active", true)
+      // 3. Acquire advisory lock for this schedule
+      // This prevents other cron instances from processing the same schedule
+      const { data: lockResult, error: lockError } = await supabase.rpc(
+        "acquire_schedule_lock",
+        { schedule_id: schedule.id, lock_timeout: "5 minutes" }
+      )
+
+      if (lockError) {
+        console.error(
+          `[ScheduleProcessor] Lock error for schedule ${schedule.id}:`,
+          lockError
+        )
+        errors++
+        continue
+      }
+
+      if (!lockResult) {
+        console.log(
+          `[ScheduleProcessor] Schedule ${schedule.id} is already being processed by another instance, skipping`
+        )
+        skipped++
+        continue
+      }
+
+      lockAcquired = true
+      console.log(`[ScheduleProcessor] Acquired lock for schedule ${schedule.id}`)
+
+      // 4. Re-fetch the schedule with agent data (the RPC returns basic data only)
+      // We do this AFTER acquiring the lock to ensure we have the latest data
+      const { data: scheduleWithAgent, error: agentError } = await supabase
+        .from("agent_schedules")
+        .select(`
+          *,
+          ai_agent:ai_agents(id, name, system_prompt, provider, model)
+        `)
+        .eq("id", schedule.id)
         .single()
+
+      if (agentError || !scheduleWithAgent) {
+        console.error(
+          `[ScheduleProcessor] Error fetching schedule ${schedule.id} with agent data:`,
+          agentError
+        )
+        errors++
+        continue
+      }
+
+      // 5. Look up local agent from map instead of querying (O(1) lookup)
+      const localAgent = agentMap.get(schedule.agent_id)
 
       if (!localAgent) {
         console.warn(
           `[ScheduleProcessor] No active local agent found for ai_agent_id=${schedule.agent_id}, skipping schedule ${schedule.id}`
         )
+        skipped++
         continue
       }
 
-      // 3. Create execution record
+      // 6. Create execution record
       const status = schedule.requires_approval ? "pending_approval" : "running"
       const { data: execution, error: insertError } = await supabase
         .from("agent_schedule_executions")
@@ -116,7 +193,7 @@ export async function processAgentSchedules(): Promise<{
         continue
       }
 
-      // 4. Update schedule's next_run_at
+      // 7. Update schedule's next_run_at
       const nextRun = new Cron(schedule.cron_expression, {
         timezone: schedule.timezone || "UTC",
       }).nextRun()
@@ -129,11 +206,11 @@ export async function processAgentSchedules(): Promise<{
         })
         .eq("id", schedule.id)
 
-      // 5. Execute if immediate (no approval required)
+      // 8. Execute if immediate (no approval required)
       if (!schedule.requires_approval && execution) {
         await runExecution(
           execution.id,
-          schedule,
+          scheduleWithAgent as ScheduleRow,
           localAgent as LocalAgentRow,
           supabase,
           schedule.created_by // Notify the user who created the schedule
@@ -141,16 +218,35 @@ export async function processAgentSchedules(): Promise<{
       }
 
       processed++
+      console.log(`[ScheduleProcessor] Successfully processed schedule ${schedule.id}`)
     } catch (error) {
       console.error(
-        `[ScheduleProcessor] Error processing schedule ${schedule.id}:`,
-        error
+        `[ScheduleProcessor] Error processing schedule ${schedule.id}:`
       )
+      if (error instanceof Error) {
+        console.error(`  Message: ${error.message}`)
+        console.error(`  Stack: ${error.stack}`)
+      } else {
+        console.error(`  Error:`, error)
+      }
       errors++
+    } finally {
+      // 9. Always release the lock, even if processing failed
+      if (lockAcquired) {
+        try {
+          await supabase.rpc("release_schedule_lock", { schedule_id: schedule.id })
+          console.log(`[ScheduleProcessor] Released lock for schedule ${schedule.id}`)
+        } catch (releaseError) {
+          console.error(
+            `[ScheduleProcessor] Error releasing lock for schedule ${schedule.id}:`,
+            releaseError
+          )
+        }
+      }
     }
   }
 
-  return { processed, errors }
+  return { processed, errors, skipped }
 }
 
 /**
@@ -181,14 +277,35 @@ export async function processApprovedExecutions(): Promise<{
     return { processed: 0, errors: 1 }
   }
 
-  for (const exec of (approved as ExecutionRow[]) || []) {
+  if (!approved || approved.length === 0) {
+    return { processed: 0, errors: 0 }
+  }
+
+  // BATCHED AGENT LOOKUP - Fix N+1 problem
+  // Collect all agent_ids from executions and fetch in a single query
+  const agentIds = [...new Set((approved as ExecutionRow[]).map(e => e.agent_id))]
+  const { data: localAgents, error: agentsError } = await supabase
+    .from("agents")
+    .select("id, ai_agent_id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions")
+    .in("ai_agent_id", agentIds)
+
+  if (agentsError) {
+    console.error("[ScheduleProcessor] Error fetching local agents for executions:", agentsError)
+    return { processed: 0, errors: 1 }
+  }
+
+  // Build lookup map for O(1) access
+  const agentMap = new Map<string, LocalAgentRow>()
+  for (const agent of (localAgents || [])) {
+    agentMap.set(agent.ai_agent_id, agent as LocalAgentRow)
+  }
+
+  console.log(`[ScheduleProcessor] Resolved ${agentMap.size} local agents for ${approved.length} approved executions`)
+
+  for (const exec of approved as ExecutionRow[]) {
     try {
-      // Get local agent for workspace context, tools, reports_to, and personality settings
-      const { data: localAgent } = await supabase
-        .from("agents")
-        .select("id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions")
-        .eq("ai_agent_id", exec.agent_id)
-        .single()
+      // Look up local agent from map instead of querying (O(1) lookup)
+      const localAgent = agentMap.get(exec.agent_id)
 
       if (!localAgent) {
         console.warn(
@@ -214,6 +331,21 @@ export async function processApprovedExecutions(): Promise<{
           started_at: new Date().toISOString(),
         })
         .eq("id", exec.id)
+      
+      // Log execution started (approved execution)
+      await logAuditEvent({
+        action: 'schedule_execution_started',
+        resourceType: 'agent_schedule_execution',
+        resourceId: exec.id,
+        workspaceId: localAgent.workspace_id,
+        agentId: exec.agent_id,
+        actorType: 'system',
+        metadata: {
+          schedule_id: exec.schedule.id,
+          approved_by: exec.approved_by,
+          started_at: new Date().toISOString(),
+        },
+      })
 
       await runExecution(
         exec.id,
@@ -246,17 +378,10 @@ async function runExecution(
   supabase: SupabaseClient,
   notifyUserId?: string | null
 ): Promise<void> {
-  // #region agent log
-  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'schedule-processor.ts:runExecution:raw-ai-agent',message:'Raw ai_agent data from DB',data:{executionId,aiAgentExists:!!schedule.ai_agent,aiAgentFull:schedule.ai_agent,rawProvider:schedule.ai_agent?.provider,rawProviderType:typeof schedule.ai_agent?.provider,rawModel:schedule.ai_agent?.model,providerIsNull:schedule.ai_agent?.provider===null,providerIsUndefined:schedule.ai_agent?.provider===undefined,providerIsEmptyString:schedule.ai_agent?.provider===''},timestamp:Date.now(),sessionId:'debug-session',runId:'provider-debug',hypothesisId:'A-raw-data'})}).catch(()=>{});
-  // #endregion
-
   // Get provider and model from AI agent config
   const provider = (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) || "anthropic"
   const model = schedule.ai_agent?.model || undefined
 
-  // #region agent log
-  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'schedule-processor.ts:runExecution:after-fallback',message:'Provider after fallback logic',data:{executionId,scheduleName:schedule.name,agentId:schedule.agent_id,rawProvider:schedule.ai_agent?.provider,resolvedProvider:provider,resolvedModel:model,hasXaiKey:!!process.env.XAI_API_KEY,hasAnthropicKey:!!process.env.ANTHROPIC_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'provider-debug',hypothesisId:'B-fallback'})}).catch(()=>{});
-  // #endregion
   try {
     // Prefer local agent's system prompt, fall back to AI agent's
     const systemPrompt =
@@ -264,12 +389,16 @@ async function runExecution(
       schedule.ai_agent?.system_prompt ||
       "You are a helpful AI assistant."
 
-    // #region agent log
-    fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'schedule-processor.ts:runExecution:beforeExecute',message:'About to call executeAgentTask with provider',data:{executionId,provider,model,systemPromptLength:systemPrompt.length,toolCount:localAgent.tools?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'F-provider-fix'})}).catch(()=>{});
-    // #endregion
+    // Build task prompt with output formatting instructions
+    const outputInstructions = buildOutputInstructions(schedule.output_config)
+    const finalTaskPrompt = `${schedule.task_prompt}
+
+---
+
+${outputInstructions}`
 
     const result = await executeAgentTask({
-      taskPrompt: schedule.task_prompt,
+      taskPrompt: finalTaskPrompt,
       systemPrompt,
       tools: localAgent.tools || [],
       workspaceId: localAgent.workspace_id,
@@ -296,6 +425,25 @@ async function runExecution(
     console.log(
       `[ScheduleProcessor] Execution ${executionId} completed successfully`
     )
+    
+    // Log execution completed
+    await logAuditEvent({
+      action: 'schedule_execution_completed',
+      resourceType: 'agent_schedule_execution',
+      resourceId: executionId,
+      workspaceId: localAgent.workspace_id,
+      agentId: localAgent.id,
+      actorType: 'system',
+      metadata: {
+        schedule_id: schedule.id,
+        schedule_name: schedule.name,
+        duration_ms: result.durationMs,
+        tool_calls: result.toolCalls?.length ?? 0,
+        tokens_input: result.usage?.promptTokens ?? null,
+        tokens_output: result.usage?.completionTokens ?? null,
+        completed_at: new Date().toISOString(),
+      },
+    })
 
     // Post completion message to agent chat
     // Priority: agent.reports_to > schedule.created_by > workspace admins > workspace owner
@@ -390,6 +538,22 @@ async function runExecution(
       `[ScheduleProcessor] Execution ${executionId} failed:`,
       errorMessage
     )
+    
+    // Log execution failed
+    await logAuditEvent({
+      action: 'schedule_execution_failed',
+      resourceType: 'agent_schedule_execution',
+      resourceId: executionId,
+      workspaceId: localAgent.workspace_id,
+      agentId: localAgent.id,
+      actorType: 'system',
+      metadata: {
+        schedule_id: schedule.id,
+        schedule_name: schedule.name,
+        error: errorMessage,
+        failed_at: new Date().toISOString(),
+      },
+    })
 
     // Post failure message to agent chat
     // Priority: agent.reports_to > schedule.created_by > workspace admins > workspace owner
@@ -450,4 +614,3 @@ async function runExecution(
     }
   }
 }
-

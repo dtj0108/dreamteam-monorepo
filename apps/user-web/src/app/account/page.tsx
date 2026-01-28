@@ -27,13 +27,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Loader2, Trash2, Upload, Building2, Shield, Crown, UserIcon, Bell } from "lucide-react"
+import { Loader2, Trash2, Upload, Building2, Shield, Crown, UserIcon, Bell, CreditCard } from "lucide-react"
 import type { IndustryType } from "@/lib/types"
 import { INDUSTRY_TYPE_LABELS, INDUSTRY_TYPE_DESCRIPTIONS } from "@/lib/types"
 import {
   TeamMembersCard,
   PendingInvitesCard,
   TeamSettingsTabs,
+  BillingTab,
   type TeamMember,
   type PendingInvite,
   type ProductId,
@@ -367,6 +368,7 @@ function AccountPageContent() {
     { id: "details", label: "My details" },
     { id: "team", label: "Team" },
     { id: "notifications", label: "Notifications" },
+    { id: "billing", label: "Billing" },
   ]
 
   return (
@@ -686,6 +688,21 @@ function AccountPageContent() {
           {/* Notifications Tab */}
           <TabsContent value="notifications" className="mt-6">
             <NotificationsContent />
+          </TabsContent>
+
+          {/* Billing Tab */}
+          <TabsContent value="billing" className="mt-6">
+            {workspaceId ? (
+              <BillingTab
+                workspaceId={workspaceId}
+                isOwner={currentUserRole === "owner"}
+                teamMemberCount={teamMembers.length}
+              />
+            ) : (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-muted-foreground">No workspace selected</p>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </div>

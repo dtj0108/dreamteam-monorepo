@@ -143,10 +143,7 @@ async function goalGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No goal found with this ID',
-          goal: null,
-        })
+        return error('Goal not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`)
     }
@@ -311,11 +308,7 @@ async function goalGetProgress(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No goal found with this ID',
-          goal: null,
-          progress: null,
-        })
+        return error('Goal not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`)
     }
@@ -375,11 +368,7 @@ async function goalUpdateProgress(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No goal found with this ID',
-        goal: null,
-        updated: false,
-      })
+      return error('Goal not found', 'not_found')
     }
 
     // Check if goal is achieved

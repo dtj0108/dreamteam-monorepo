@@ -5,6 +5,7 @@ import { buildAgentTools } from "./agent/tool-registry"
 import type { ToolContext } from "./agent/types"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { buildFullSystemPrompt, type StylePresets } from "./style-instructions"
+import type { BusinessContext } from "./autonomy-context"
 
 export type AIProvider = "anthropic" | "xai" | "openai" | "google"
 
@@ -22,6 +23,8 @@ export interface ExecuteParams {
   stylePresets?: Partial<StylePresets> | null
   /** Custom instructions from agent configuration */
   customInstructions?: string | null
+  /** Business context for agent autonomy */
+  businessContext?: BusinessContext | null
 }
 
 /**
@@ -80,10 +83,6 @@ export async function executeAgentTask(params: ExecuteParams): Promise<ExecuteRe
   const provider = params.provider || "anthropic"
   const model = params.model || (provider === "xai" ? "grok-4-fast" : "claude-sonnet-4-20250514")
 
-  // #region agent log
-  const apiKeyEnvVar = provider === "xai" ? "XAI_API_KEY" : "ANTHROPIC_API_KEY"
-  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-executor.ts:executeAgentTask:entry',message:'Checking API key presence',data:{provider,model,apiKeyEnvVar,hasApiKey:!!process.env[apiKeyEnvVar],keyLength:process.env[apiKeyEnvVar]?.length||0,nodeEnv:process.env.NODE_ENV},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A-provider-check'})}).catch(()=>{});
-  // #endregion
   const startTime = Date.now()
 
   const context: ToolContext = {
@@ -94,16 +93,13 @@ export async function executeAgentTask(params: ExecuteParams): Promise<ExecuteRe
 
   const tools = buildAgentTools(params.tools, context)
 
-  // Build full system prompt with style and custom instructions
+  // Build full system prompt with business context, style, and custom instructions
   const fullSystemPrompt = buildFullSystemPrompt(
     params.systemPrompt,
     params.stylePresets,
-    params.customInstructions
+    params.customInstructions,
+    params.businessContext
   )
-
-  // #region agent log
-  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-executor.ts:beforeGenerateText',message:'About to call generateText',data:{provider,model,workspaceId:params.workspaceId,toolCount:params.tools.length,systemPromptLength:fullSystemPrompt.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B-before-api-call'})}).catch(()=>{});
-  // #endregion
 
   let result
   try {
@@ -114,13 +110,7 @@ export async function executeAgentTask(params: ExecuteParams): Promise<ExecuteRe
       tools,
       stopWhen: stepCountIs(10),
     })
-    // #region agent log
-    fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-executor.ts:afterGenerateText',message:'generateText succeeded',data:{textLength:result.text?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C-api-success'})}).catch(()=>{});
-    // #endregion
   } catch (err) {
-    // #region agent log
-    fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'agent-executor.ts:generateTextError',message:'generateText failed',data:{error:err instanceof Error ? err.message : String(err),errorName:err instanceof Error ? err.name : 'unknown',hasApiKey:!!process.env.ANTHROPIC_API_KEY},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D-api-error'})}).catch(()=>{});
-    // #endregion
     throw err
   }
 

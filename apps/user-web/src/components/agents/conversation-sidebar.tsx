@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Plus, MessageCircle, Search, ChevronDown, ChevronRight } from "lucide-react"
+import { Plus, MessageCircle, Search, ChevronDown, ChevronRight, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -24,6 +24,7 @@ interface ConversationSidebarProps {
   selectedId: string | null
   onSelect: (id: string) => void
   onNewConversation: () => void
+  isLoading?: boolean
 }
 
 interface GroupedConversations {
@@ -164,6 +165,7 @@ export function ConversationSidebar({
   selectedId,
   onSelect,
   onNewConversation,
+  isLoading = false,
 }: ConversationSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -213,7 +215,12 @@ export function ConversationSidebar({
       {/* Content */}
       <ScrollArea className="flex-1">
         <div className="p-2">
-          {!hasConversations ? (
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+              <Loader2 className="size-8 text-muted-foreground animate-spin mb-4" />
+              <p className="text-sm text-muted-foreground">Loading conversations...</p>
+            </div>
+          ) : !hasConversations ? (
             <EmptyState />
           ) : !hasFilteredResults ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">

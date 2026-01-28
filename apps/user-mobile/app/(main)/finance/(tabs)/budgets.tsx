@@ -10,6 +10,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { BudgetAlertBadge } from "@/components/finance/BudgetAlertBadge";
+import { BudgetAlertsCompact } from "@/components/finance/BudgetAlertsList";
 import { Loading } from "@/components/Loading";
 import { ProductSwitcher } from "@/components/ProductSwitcher";
 import { Colors } from "@/constants/Colors";
@@ -110,15 +112,10 @@ export default function BudgetsScreen() {
           </View>
         </View>
 
-        {/* Over Budget Warning */}
-        {totals.overBudgetCount > 0 && (
-          <View className="mb-4 flex-row items-center rounded-xl bg-red-500/10 p-3">
-            <FontAwesome name="exclamation-triangle" size={16} color="#ef4444" />
-            <Text className="ml-2 text-red-500">
-              {totals.overBudgetCount} budget{totals.overBudgetCount > 1 ? "s" : ""} over limit
-            </Text>
-          </View>
-        )}
+        {/* Budget Alerts Banner */}
+        <View className="mb-4">
+          <BudgetAlertsCompact />
+        </View>
 
         {/* Period Filter */}
         <View className="mb-4 flex-row gap-2">
@@ -216,7 +213,7 @@ function BudgetCard({ budget, onPress }: { budget: Budget; onPress: () => void }
     >
       {/* Header */}
       <View className="mb-3 flex-row items-center justify-between">
-        <View className="flex-row items-center">
+        <View className="flex-row items-center flex-1">
           <View
             className="h-8 w-8 items-center justify-center rounded-lg"
             style={{
@@ -229,13 +226,13 @@ function BudgetCard({ budget, onPress }: { budget: Budget; onPress: () => void }
               color={budget.category?.color || Colors.mutedForeground}
             />
           </View>
-          <Text className="ml-3 font-semibold text-foreground">
+          <Text className="ml-3 font-semibold text-foreground" numberOfLines={1}>
             {budget.category?.name || "Uncategorized"}
           </Text>
         </View>
-        <Text className="text-sm text-muted-foreground">
-          {PERIOD_LABELS[budget.period]}
-        </Text>
+        <View className="flex-row items-center gap-2">
+          <BudgetAlertBadge percentUsed={percentUsed} compact />
+        </View>
       </View>
 
       {/* Progress Bar */}

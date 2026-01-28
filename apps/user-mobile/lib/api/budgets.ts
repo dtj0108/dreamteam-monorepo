@@ -1,5 +1,5 @@
 import { del, get, patch, post } from "../api";
-import { Budget, BudgetPeriod, Transaction } from "../types/finance";
+import { Budget, BudgetAlert, BudgetPeriod, Transaction } from "../types/finance";
 
 export interface BudgetFilters {
   period?: BudgetPeriod;
@@ -69,4 +69,18 @@ export async function updateBudget(
 
 export async function deleteBudget(id: string): Promise<void> {
   return del(`/api/budgets/${id}`);
+}
+
+// Budget Alerts
+export interface BudgetAlertsResponse {
+  alerts: BudgetAlert[];
+  totalAlerts: number;
+  warningCount: number;
+  exceededCount: number;
+}
+
+export async function getBudgetAlerts(
+  threshold: number = 80
+): Promise<BudgetAlertsResponse> {
+  return get<BudgetAlertsResponse>(`/api/budgets/alerts?threshold=${threshold}`);
 }

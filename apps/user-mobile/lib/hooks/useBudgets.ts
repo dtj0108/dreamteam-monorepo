@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  BudgetAlertsResponse,
   BudgetDetailResponse,
   BudgetFilters,
   BudgetsResponse,
@@ -9,6 +10,7 @@ import {
   createBudget,
   deleteBudget,
   getBudget,
+  getBudgetAlerts,
   getBudgets,
   updateBudget,
 } from "../api/budgets";
@@ -20,6 +22,7 @@ export const budgetKeys = {
   list: (filters?: BudgetFilters) => [...budgetKeys.lists(), filters] as const,
   details: () => [...budgetKeys.all, "detail"] as const,
   detail: (id: string) => [...budgetKeys.details(), id] as const,
+  alerts: (threshold?: number) => [...budgetKeys.all, "alerts", threshold] as const,
 };
 
 export function useBudgets(filters?: BudgetFilters) {
@@ -69,5 +72,12 @@ export function useDeleteBudget() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: budgetKeys.lists() });
     },
+  });
+}
+
+export function useBudgetAlerts(threshold: number = 80) {
+  return useQuery<BudgetAlertsResponse>({
+    queryKey: budgetKeys.alerts(threshold),
+    queryFn: () => getBudgetAlerts(threshold),
   });
 }

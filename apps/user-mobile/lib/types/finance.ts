@@ -157,6 +157,38 @@ export type SubscriptionFrequency =
   | "quarterly"
   | "yearly";
 
+// Recurring Rules - same frequency options as subscriptions
+export type RecurringFrequency = SubscriptionFrequency;
+
+export interface RecurringRule {
+  id: string;
+  user_id: string;
+  workspace_id?: string;
+  account_id: string;
+  category_id?: string;
+  amount: number;
+  description: string;
+  frequency: RecurringFrequency;
+  next_date: string;
+  end_date?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined relations
+  account?: Account;
+  category?: Category;
+}
+
+// Recurring rule frequency labels
+export const RECURRING_FREQUENCY_LABELS: Record<RecurringFrequency, string> = {
+  daily: "Daily",
+  weekly: "Weekly",
+  biweekly: "Every 2 Weeks",
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  yearly: "Yearly",
+};
+
 export interface Subscription {
   id: string;
   user_id: string;
@@ -276,6 +308,34 @@ export interface CashFlowReport {
 
 export type CashFlowGroupBy = "day" | "week" | "month";
 
+// Budget Alert Types
+export interface BudgetAlert {
+  id: string;
+  category: {
+    id: string;
+    name: string;
+    color?: string;
+    icon?: string;
+  };
+  amount: number;
+  spent: number;
+  remaining: number;
+  percentUsed: number;
+  status: "warning" | "exceeded";
+  period: BudgetPeriod;
+  periodStart: string;
+  periodEnd: string;
+}
+
+// Get budget alert status based on percentage used
+export const getBudgetAlertStatus = (
+  percentUsed: number
+): "on_track" | "warning" | "exceeded" => {
+  if (percentUsed >= 100) return "exceeded";
+  if (percentUsed >= 80) return "warning";
+  return "on_track";
+};
+
 // Budget vs Actual Report
 export type BudgetStatus = "over" | "warning" | "under";
 
@@ -310,6 +370,52 @@ export interface DateRange {
   startDate: string;
   endDate: string;
 }
+
+// Calendar Types
+export type CalendarEventType = "income" | "expense" | "subscription" | "budget_reset" | "recurring";
+
+export interface CalendarEvent {
+  id: string;
+  date: string;
+  type: CalendarEventType;
+  title: string;
+  amount: number;
+  category?: {
+    id: string;
+    name: string;
+    color?: string;
+  };
+}
+
+export interface CalendarDay {
+  date: string;
+  events: CalendarEvent[];
+  totals: {
+    income: number;
+    expenses: number;
+    net: number;
+  };
+}
+
+export interface CalendarMonthData {
+  month: string; // "2024-01"
+  days: CalendarDay[];
+  summary: {
+    totalIncome: number;
+    totalExpenses: number;
+    netCashFlow: number;
+    transactionCount: number;
+  };
+}
+
+// Calendar event type colors
+export const CALENDAR_EVENT_COLORS: Record<CalendarEventType, string> = {
+  income: "#22c55e", // green
+  expense: "#ef4444", // red
+  subscription: "#8b5cf6", // purple
+  budget_reset: "#0ea5e9", // blue
+  recurring: "#f59e0b", // amber
+};
 
 export interface AccountTotals {
   assets: number;

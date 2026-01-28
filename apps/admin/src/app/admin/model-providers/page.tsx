@@ -32,6 +32,7 @@ export default function ModelProvidersPage() {
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchProviders = useCallback(async () => {
     setLoading(true)
@@ -55,20 +56,28 @@ export default function ModelProvidersPage() {
     setConfigDialog({ open: false, provider: null })
     setApiKeyInput('')
     setShowApiKey(false)
+    setError(null)
   }
 
   async function handleToggleEnabled(provider: ModelProviderConfig) {
-    const res = await fetch('/api/admin/model-providers', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: provider.provider,
-        is_enabled: !provider.is_enabled
+    try {
+      const res = await fetch('/api/admin/model-providers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: provider.provider,
+          is_enabled: !provider.is_enabled
+        })
       })
-    })
 
-    if (res.ok) {
-      fetchProviders()
+      if (res.ok) {
+        fetchProviders()
+      } else {
+        const data = await res.json()
+        console.error('Failed to toggle provider:', data.error)
+      }
+    } catch (err) {
+      console.error('Network error toggling provider:', err)
     }
   }
 
@@ -76,19 +85,27 @@ export default function ModelProvidersPage() {
     if (!configDialog.provider) return
 
     setSaving(true)
+    setError(null)
 
-    const res = await fetch('/api/admin/model-providers', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: configDialog.provider.provider,
-        api_key: apiKeyInput.trim() || null
+    try {
+      const res = await fetch('/api/admin/model-providers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: configDialog.provider.provider,
+          api_key: apiKeyInput.trim() || null
+        })
       })
-    })
 
-    if (res.ok) {
-      fetchProviders()
-      closeConfigDialog()
+      if (res.ok) {
+        fetchProviders()
+        closeConfigDialog()
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Failed to save API key')
+      }
+    } catch (err) {
+      setError('Network error. Please try again.')
     }
     setSaving(false)
   }
@@ -97,19 +114,27 @@ export default function ModelProvidersPage() {
     if (!configDialog.provider) return
 
     setSaving(true)
+    setError(null)
 
-    const res = await fetch('/api/admin/model-providers', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: configDialog.provider.provider,
-        api_key: null
+    try {
+      const res = await fetch('/api/admin/model-providers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: configDialog.provider.provider,
+          api_key: null
+        })
       })
-    })
 
-    if (res.ok) {
-      fetchProviders()
-      closeConfigDialog()
+      if (res.ok) {
+        fetchProviders()
+        closeConfigDialog()
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Failed to remove API key')
+      }
+    } catch (err) {
+      setError('Network error. Please try again.')
     }
     setSaving(false)
   }
@@ -274,6 +299,12 @@ export default function ModelProvidersPage() {
                 </p>
               )}
             </div>
+
+            {error && (
+              <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
+                {error}
+              </div>
+            )}
           </div>
 
           <DialogFooter className="flex-col gap-2 sm:flex-row">

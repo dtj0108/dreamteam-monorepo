@@ -15,19 +15,40 @@ export async function GET(
 
     const supabase = createAdminClient()
     const { id } = await params
-
-    const { data: agent, error } = await supabase
+    
+    // First try to find by agents.id (workspace-specific agent)
+    let { data: agent, error } = await supabase
       .from("agents")
       .select(`
         *,
         creator:created_by(id, name, avatar_url)
       `)
       .eq("id", id)
-      .single()
+      .maybeSingle()
 
     if (error) {
-      console.error("Error fetching agent:", error)
+      console.error("Error fetching agent by id:", error)
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // If not found by id, try to find by ai_agent_id (the ID might be from ai_agents table)
+    if (!agent) {
+      const { data: agentByAiId, error: aiIdError } = await supabase
+        .from("agents")
+        .select(`
+          *,
+          creator:created_by(id, name, avatar_url)
+        `)
+        .eq("ai_agent_id", id)
+        .eq("is_active", true)
+        .maybeSingle()
+      
+      if (aiIdError) {
+        console.error("Error fetching agent by ai_agent_id:", aiIdError)
+        return NextResponse.json({ error: aiIdError.message }, { status: 500 })
+      }
+      
+      agent = agentByAiId
     }
 
     if (!agent) {
@@ -84,7 +105,7 @@ export async function PUT(
     const supabase = createAdminClient()
     const { id } = await params
     const body = await request.json()
-    const { name, description, systemPrompt, tools, model, avatarUrl, isActive, reportsTo, stylePresets, customInstructions } = body
+    const { name, description, systemPrompt, tools, model, avatarUrl, isActive, reportsTo, stylePresets, customInstructions, businessContext } = body
 
     // Get the agent first
     const { data: agent, error: fetchError } = await supabase
@@ -136,9 +157,10 @@ export async function PUT(
     if (isActive !== undefined) updateData.is_active = isActive
     // reportsTo is now an array of profile IDs
     if (reportsTo !== undefined) updateData.reports_to = Array.isArray(reportsTo) ? reportsTo : []
-    // Style presets and custom instructions for personality customization
+    // Style presets, custom instructions, and business context for personality customization
     if (stylePresets !== undefined) updateData.style_presets = stylePresets
     if (customInstructions !== undefined) updateData.custom_instructions = customInstructions?.trim() || null
+    if (businessContext !== undefined) updateData.business_context = businessContext
 
     const { data: updated, error: updateError } = await supabase
       .from("agents")

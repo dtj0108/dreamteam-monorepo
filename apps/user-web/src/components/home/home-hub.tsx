@@ -28,7 +28,7 @@ const features = [
     title: "Finance",
     description:
       "Track accounts, manage transactions, set budgets, and analyze your financial health",
-    href: "/dashboard",
+    href: "/finance",
   },
   {
     emoji: "📈",
@@ -59,11 +59,11 @@ const features = [
     href: "/knowledge",
   },
   {
-    emoji: "🎓",
-    title: "Learn",
+    emoji: "🤖",
+    title: "Agents",
     description:
-      "Tutorials and guides to help you get the most out of the platform",
-    href: "/learn",
+      "Create and manage AI agents to automate workflows and assist your team",
+    href: "/agents",
   },
 ]
 

@@ -19,6 +19,7 @@ export {
   type ReasoningMessage,
   type ToolStartMessage,
   type ToolResultMessage,
+  type AcknowledgmentMessage,
   type ErrorMessage,
   type DoneMessage,
   type PongMessage,

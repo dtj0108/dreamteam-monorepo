@@ -9,7 +9,10 @@
  */
 
 import type { Request, Response } from "express"
-import { streamText, stepCountIs, type CoreMessage } from "ai"
+import { streamText, stepCountIs } from "ai"
+
+// AI SDK 6 message type
+type CoreMessage = { role: "user" | "assistant" | "system"; content: string }
 import { z } from "zod"
 import { createMCPClient, type MCPClientInstance } from "./lib/mcp-client.js"
 import { getModel } from "./lib/ai-providers.js"
@@ -720,24 +723,28 @@ ${enhancedSystemPrompt}`
               // Send tool events for each step
               if (step.toolCalls && step.toolCalls.length > 0) {
                 for (const toolCall of step.toolCalls) {
+                  // AI SDK 6: use type assertion for tool call args
+                  const tc = toolCall as { toolName: string; toolCallId: string; input?: unknown }
                   sendEvent("tool_start", {
                     type: "tool_start",
-                    toolName: toolCall.toolName,
-                    toolCallId: toolCall.toolCallId,
-                    args: toolCall.args,
-                    displayName: toolCall.toolName
+                    toolName: tc.toolName,
+                    toolCallId: tc.toolCallId,
+                    args: tc.input,
+                    displayName: tc.toolName
                       .replace(/([A-Z])/g, " $1")
                       .trim(),
                   } as ToolStartMessage)
                 }
               }
               if (step.toolResults && step.toolResults.length > 0) {
-                for (const toolResult of step.toolResults as Array<{ toolCallId: string; toolName: string; result: unknown }>) {
+                for (const tr of step.toolResults) {
+                  // AI SDK 6: use type assertion for tool results
+                  const toolResult = tr as { toolCallId: string; toolName: string; output?: unknown }
                   sendEvent("tool_result", {
                     type: "tool_result",
                     toolCallId: toolResult.toolCallId,
                     toolName: toolResult.toolName,
-                    result: toolResult.result,
+                    result: toolResult.output,
                     success: true,
                     durationMs: 0,
                   } as ToolResultMessage)
@@ -768,10 +775,10 @@ ${enhancedSystemPrompt}`
           const steps = await result.steps;
           console.log(`[Agent Chat] Stream completed, got ${assistantContent.length} chars, ${steps.length} steps`);
 
-          // Get final usage stats
+          // Get final usage stats (AI SDK 6 uses inputTokens/outputTokens)
           const usage = await result.usage
-          totalInputTokens = usage.promptTokens
-          totalOutputTokens = usage.completionTokens
+          totalInputTokens = usage.inputTokens ?? 0
+          totalOutputTokens = usage.outputTokens ?? 0
 
           // Get step count for reporting (steps already fetched above)
           const turnCount = steps.length

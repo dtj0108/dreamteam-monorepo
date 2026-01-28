@@ -2,6 +2,8 @@
  * Style preset types and utilities for agent personality customization
  */
 
+import { buildBusinessContextInstructions, type BusinessContext } from './autonomy-context'
+
 export interface StylePresets {
   verbosity: 'concise' | 'balanced' | 'detailed'
   tone: 'casual' | 'balanced' | 'formal'
@@ -91,20 +93,29 @@ function isValidExamples(value: unknown): value is StylePresets['examples'] {
 }
 
 /**
- * Build the full system prompt with style and custom instructions
+ * Build the full system prompt with business context, style, and custom instructions
  */
 export function buildFullSystemPrompt(
   basePrompt: string,
   stylePresets: Partial<StylePresets> | null | undefined,
-  customInstructions: string | null | undefined
+  customInstructions: string | null | undefined,
+  businessContext?: BusinessContext | null
 ): string {
   const parts: string[] = [basePrompt]
 
+  // Business context first (the "who" and "why")
+  const businessInstructions = buildBusinessContextInstructions(businessContext)
+  if (businessInstructions) {
+    parts.push(businessInstructions)
+  }
+
+  // Style instructions (the "how")
   const styleInstructions = buildStyleInstructions(stylePresets)
   if (styleInstructions) {
     parts.push(styleInstructions)
   }
 
+  // Custom instructions (overrides)
   if (customInstructions?.trim()) {
     parts.push(`## Additional Instructions\n${customInstructions.trim()}`)
   }

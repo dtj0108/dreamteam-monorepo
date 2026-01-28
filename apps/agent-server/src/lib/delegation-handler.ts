@@ -257,8 +257,8 @@ export async function handleDelegation(
       stopWhen: stepCountIs(5), // AI SDK 6: lower for delegated queries
     })
 
-    const inputTokens = result.usage?.promptTokens || 0
-    const outputTokens = result.usage?.completionTokens || 0
+    const inputTokens = result.usage?.inputTokens || 0
+    const outputTokens = result.usage?.outputTokens || 0
 
     console.log(
       `[Delegation] Completed. Response length: ${result.text.length} chars`

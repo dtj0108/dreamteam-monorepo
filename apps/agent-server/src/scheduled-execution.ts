@@ -9,7 +9,10 @@
  */
 
 import type { Request, Response } from "express"
-import { generateText, stepCountIs, type CoreMessage } from "ai"
+import { generateText, stepCountIs } from "ai"
+
+// AI SDK 6 message type
+type CoreMessage = { role: "user" | "assistant" | "system"; content: string }
 import { z } from "zod"
 import { type MCPClientInstance } from "./lib/mcp-client.js"
 import { mcpClientPool } from "./lib/mcp-client-pool.js"
@@ -485,10 +488,12 @@ async function executeWithVercelAI(options: {
       onStepFinish: async (step) => {
         // Track tool calls
         if (step.toolCalls && step.toolCalls.length > 0) {
-          for (const tc of step.toolCalls) {
+          for (const toolCall of step.toolCalls) {
+            // AI SDK 6: use type assertion for tool call args
+            const tc = toolCall as { toolName: string; input?: unknown }
             toolCallRecords.push({
               name: tc.toolName,
-              input: tc.args,
+              input: tc.input,
               timestamp: new Date().toISOString(),
             })
           }
@@ -499,8 +504,8 @@ async function executeWithVercelAI(options: {
     return {
       success: true,
       content: result.text,
-      inputTokens: result.usage?.promptTokens || 0,
-      outputTokens: result.usage?.completionTokens || 0,
+      inputTokens: result.usage?.inputTokens || 0,
+      outputTokens: result.usage?.outputTokens || 0,
       toolCalls: toolCallRecords,
     }
   } finally {

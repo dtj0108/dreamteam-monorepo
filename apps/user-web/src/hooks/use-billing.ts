@@ -123,14 +123,21 @@ export function useBilling(): UseBillingReturn {
   }, [])
 
   // Computed values
+  // Infer active status from plan when plan_status is null
+  // This handles cases where Stripe webhook hasn't synced yet
   const isActiveSubscription =
-    billing?.plan_status === 'active' || billing?.plan_status === 'trialing'
+    billing?.plan_status === 'active' ||
+    billing?.plan_status === 'trialing' ||
+    (billing?.plan_status === null && billing?.plan !== 'free')
 
-  const isPro = isActiveSubscription && billing?.plan !== 'free'
+  const hasPaidPlan = isActiveSubscription && billing?.plan !== 'free'
 
   const hasAgents =
     billing?.agent_tier !== 'none' &&
     (billing?.agent_status === 'active' || billing?.agent_status === 'trialing')
+
+  // AI Agents subscription includes all Pro features
+  const isPro = hasPaidPlan || hasAgents
 
   const agentCount = hasAgents
     ? {

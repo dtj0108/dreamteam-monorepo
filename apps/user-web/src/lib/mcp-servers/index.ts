@@ -274,10 +274,6 @@ export async function executeTool(
   return toolDef.execute(parsed.data as never, context)
 }
 
-// Re-export workspace server factory
-export { createWorkspaceServer, buildWorkspaceAllowedTools } from "./workspace-server"
-export type { WorkspaceServerConfig } from "./workspace-server"
-
 // Default export for convenience
 export default {
   toolsByServer,

@@ -5,14 +5,15 @@
  * and UI message formats.
  */
 
-import type { AgentMessage, MessagePart, TextPart, ReasoningPart, ToolCallPart } from "@/hooks/use-agent-chat"
+import type { AgentMessage, MessagePart, TextPart, ReasoningPart, ToolCallPart, AcknowledgmentPart } from "@/hooks/use-agent-chat"
 
 // Database message type (from agent_messages table)
 export interface DbMessage {
   id: string
-  conversation_id: string
+  conversation_id?: string
   role: "user" | "assistant" | "system"
   content: string
+  parts?: MessagePart[] | null
   sdk_message_id?: string | null
   message_type?: "text" | "reasoning" | "tool_call" | "tool_result" | "system"
   metadata?: Record<string, unknown> | null
@@ -45,6 +46,24 @@ export function dbMessagesToAgentMessages(dbMessages: DbMessage[]): AgentMessage
   let currentAssistantMessage: AgentMessage | null = null
 
   for (const msg of dbMessages) {
+    // If message has stored parts, use them directly
+    if (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0) {
+      // Finalize any pending assistant message first
+      if (currentAssistantMessage) {
+        result.push(currentAssistantMessage)
+        currentAssistantMessage = null
+      }
+
+      result.push({
+        id: msg.id,
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+        parts: msg.parts,
+        createdAt: new Date(msg.created_at),
+      })
+      continue
+    }
+
     if (msg.role === "user") {
       // Finalize any pending assistant message
       if (currentAssistantMessage) {

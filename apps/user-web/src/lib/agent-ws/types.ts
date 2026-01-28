@@ -123,6 +123,15 @@ export interface DoneMessage {
 }
 
 /**
+ * Quick acknowledgment from agent (Haiku-generated)
+ */
+export interface AcknowledgmentMessage {
+  type: "acknowledgment"
+  content: string
+  agentName: string
+}
+
+/**
  * Pong response to ping
  */
 export interface PongMessage {
@@ -143,6 +152,7 @@ export type ServerMessage =
   | ReasoningMessage
   | ToolStartMessage
   | ToolResultMessage
+  | AcknowledgmentMessage
   | ErrorMessage
   | DoneMessage
   | PongMessage

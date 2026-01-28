@@ -12,13 +12,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { FileUIPart, UIMessage } from "ai";
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  PaperclipIcon,
-  XIcon,
-} from "lucide-react";
+import { cjk } from "@streamdown/cjk";
+import { code } from "@streamdown/code";
+import { math } from "@streamdown/math";
+import { mermaid } from "@streamdown/mermaid";
+import type { UIMessage } from "ai";
+import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import { createContext, memo, useContext, useEffect, useState } from "react";
 import { Streamdown } from "streamdown";
@@ -30,8 +29,11 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
 export const Message = ({ className, from, ...props }: MessageProps) => (
   <div
     className={cn(
-      "group flex w-full max-w-[95%] flex-col gap-2",
-      from === "user" ? "is-user ml-auto justify-end" : "is-assistant",
+      "group flex w-full flex-col gap-2",
+      // User messages - align right, limited width
+      from === "user" 
+        ? "is-user ml-auto max-w-[85%] items-end" 
+        : "is-assistant max-w-[90%] items-start",
       className
     )}
     {...props}
@@ -47,9 +49,11 @@ export const MessageContent = ({
 }: MessageContentProps) => (
   <div
     className={cn(
-      "is-user:dark flex w-fit max-w-full min-w-0 flex-col gap-2 overflow-hidden text-sm",
-      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
-      "group-[.is-assistant]:text-foreground",
+      "flex min-w-0 flex-col gap-2 overflow-hidden text-sm",
+      // User message styling - bubble style
+      "group-[.is-user]:w-fit group-[.is-user]:ml-auto group-[.is-user]:rounded-2xl group-[.is-user]:bg-secondary group-[.is-user]:px-5 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
+      // Assistant message styling - full width for better readability
+      "group-[.is-assistant]:w-full group-[.is-assistant]:text-foreground",
       className
     )}
     {...props}
@@ -106,14 +110,14 @@ export const MessageAction = ({
   return button;
 };
 
-type MessageBranchContextType = {
+interface MessageBranchContextType {
   currentBranch: number;
   totalBranches: number;
   goToPrevious: () => void;
   goToNext: () => void;
   branches: ReactElement[];
   setBranches: (branches: ReactElement[]) => void;
-};
+}
 
 const MessageBranchContext = createContext<MessageBranchContextType | null>(
   null
@@ -263,7 +267,6 @@ export type MessageBranchNextProps = ComponentProps<typeof Button>;
 
 export const MessageBranchNext = ({
   children,
-  className,
   ...props
 }: MessageBranchNextProps) => {
   const { goToNext, totalBranches } = useMessageBranch();
@@ -304,142 +307,45 @@ export const MessageBranchPage = ({
   );
 };
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown> & {
-  isStreaming?: boolean;
-};
+export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 export const MessageResponse = memo(
-  ({ className, isStreaming, ...props }: MessageResponseProps) => (
-    <div className="relative">
-      <Streamdown
-        className={cn(
-          "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-          className
-        )}
-        {...props}
-      />
-      {isStreaming && (
-        <span
-          className="inline-block w-0.5 h-4 bg-foreground/70 animate-pulse absolute -bottom-0.5"
-          aria-hidden="true"
-        />
+  ({ className, ...props }: MessageResponseProps) => (
+    <Streamdown
+      className={cn(
+        "w-full text-sm leading-relaxed",
+        // Remove default margins from first/last children
+        "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+        // Paragraphs
+        "[&_p]:my-3",
+        // Lists - ensure items flow properly
+        "[&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-3",
+        "[&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-3",
+        // List items - ensure content stays inline with bullet
+        "[&_li]:my-2 [&_li]:pl-1",
+        "[&_li>p]:my-0 [&_li>p]:inline",
+        "[&_li>p+p]:mt-2 [&_li>p+p]:block",
+        // Nested lists
+        "[&_li_ol]:mt-2 [&_li_ul]:mt-2 [&_li_ol]:mb-1 [&_li_ul]:mb-1",
+        // Bold text
+        "[&_strong]:font-semibold",
+        // Headings
+        "[&_h1]:text-lg [&_h1]:font-bold [&_h1]:my-4",
+        "[&_h2]:text-base [&_h2]:font-semibold [&_h2]:my-3",
+        "[&_h3]:text-sm [&_h3]:font-semibold [&_h3]:my-2",
+        // Code
+        "[&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded",
+        "[&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:my-3",
+        className
       )}
-    </div>
+      plugins={{ code, mermaid, math, cjk }}
+      {...props}
+    />
   ),
-  (prevProps, nextProps) =>
-    prevProps.children === nextProps.children &&
-    prevProps.isStreaming === nextProps.isStreaming
+  (prevProps, nextProps) => prevProps.children === nextProps.children
 );
 
 MessageResponse.displayName = "MessageResponse";
-
-export type MessageAttachmentProps = HTMLAttributes<HTMLDivElement> & {
-  data: FileUIPart;
-  className?: string;
-  onRemove?: () => void;
-};
-
-export function MessageAttachment({
-  data,
-  className,
-  onRemove,
-  ...props
-}: MessageAttachmentProps) {
-  const filename = data.filename || "";
-  const mediaType =
-    data.mediaType?.startsWith("image/") && data.url ? "image" : "file";
-  const isImage = mediaType === "image";
-  const attachmentLabel = filename || (isImage ? "Image" : "Attachment");
-
-  return (
-    <div
-      className={cn(
-        "group relative size-24 overflow-hidden rounded-lg",
-        className
-      )}
-      {...props}
-    >
-      {isImage ? (
-        <>
-          <img
-            alt={filename || "attachment"}
-            className="size-full object-cover"
-            height={100}
-            src={data.url}
-            width={100}
-          />
-          {onRemove && (
-            <Button
-              aria-label="Remove attachment"
-              className="absolute top-2 right-2 size-6 rounded-full bg-background/80 p-0 opacity-0 backdrop-blur-sm transition-opacity hover:bg-background group-hover:opacity-100 [&>svg]:size-3"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove();
-              }}
-              type="button"
-              variant="ghost"
-            >
-              <XIcon />
-              <span className="sr-only">Remove</span>
-            </Button>
-          )}
-        </>
-      ) : (
-        <>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex size-full shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                <PaperclipIcon className="size-4" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{attachmentLabel}</p>
-            </TooltipContent>
-          </Tooltip>
-          {onRemove && (
-            <Button
-              aria-label="Remove attachment"
-              className="size-6 shrink-0 rounded-full p-0 opacity-0 transition-opacity hover:bg-accent group-hover:opacity-100 [&>svg]:size-3"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove();
-              }}
-              type="button"
-              variant="ghost"
-            >
-              <XIcon />
-              <span className="sr-only">Remove</span>
-            </Button>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-export type MessageAttachmentsProps = ComponentProps<"div">;
-
-export function MessageAttachments({
-  children,
-  className,
-  ...props
-}: MessageAttachmentsProps) {
-  if (!children) {
-    return null;
-  }
-
-  return (
-    <div
-      className={cn(
-        "ml-auto flex w-fit flex-wrap items-start gap-2",
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-}
 
 export type MessageToolbarProps = ComponentProps<"div">;
 

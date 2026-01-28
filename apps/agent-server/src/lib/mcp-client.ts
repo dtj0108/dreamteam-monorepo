@@ -123,11 +123,11 @@ export async function createMCPClient(config: MCPClientConfig): Promise<MCPClien
     // Convert JSON Schema to Zod
     const zodSchema = jsonSchemaToZod(inputSchema) as z.ZodObject<Record<string, z.ZodTypeAny>>
 
-    // Create Vercel AI SDK tool
+    // Create Vercel AI SDK tool (AI SDK 6 syntax)
     aiTools[toolName] = tool({
       description: mcpTool.description || "",
-      parameters: zodSchema,
-      execute: async (args: Record<string, unknown>) => {
+      inputSchema: zodSchema,
+      execute: async (args: z.infer<typeof zodSchema>) => {
         try {
           // Call the MCP tool
           const result = await client.callTool({

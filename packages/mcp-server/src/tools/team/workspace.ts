@@ -155,11 +155,7 @@ async function workspaceUpdate(params: {
     if (params.description !== undefined) updateData.description = params.description
 
     if (Object.keys(updateData).length === 0) {
-      return success({
-        message: 'No fields provided to update',
-        workspace: null,
-        updated: false,
-      })
+      return error('No fields to update', 'validation')
     }
 
     const { data, error: dbError } = await supabase

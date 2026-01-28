@@ -89,6 +89,8 @@ export interface AIAgent {
   tools?: AgentTool[]
   skills?: AgentSkill[]
   rules?: AgentRule[]
+  // UX configuration
+  suggested_prompts?: string[]
 }
 
 /**
@@ -111,6 +113,8 @@ export interface AgentWithHireStatus extends AIAgent {
   localAgentId: string | null
   /** When the agent was hired/enabled (deployed_at for deployed teams) */
   hiredAt: string | null
+  /** Suggested prompts for the agent chat UX */
+  suggested_prompts?: string[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -135,6 +139,8 @@ export interface LocalAgent {
   hired_at: string | null
   created_at: string
   updated_at: string
+  // UX configuration
+  suggested_prompts?: string[]
 }
 
 // ─────────────────────────────────────────────────────────────

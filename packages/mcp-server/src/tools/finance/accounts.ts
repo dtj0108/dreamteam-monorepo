@@ -153,10 +153,7 @@ async function accountGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No account found with this ID',
-          account: null,
-        })
+        return error('Account not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
@@ -235,11 +232,7 @@ async function accountUpdate(params: {
     if (params.is_active !== undefined) updateData.is_active = params.is_active
 
     if (Object.keys(updateData).length === 0) {
-      return success({
-        message: 'No fields provided to update',
-        account: null,
-        updated: false,
-      })
+      return error('No fields to update', 'validation')
     }
 
     const { data, error: dbError } = await supabase
@@ -252,11 +245,7 @@ async function accountUpdate(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No account found with this ID',
-          account: null,
-          updated: false,
-        })
+        return error('Account not found', 'not_found')
       }
       return error(`Failed to update account: ${dbError.message}`)
     }
@@ -322,11 +311,7 @@ async function accountGetBalance(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No account found with this ID',
-          account: null,
-          balance: null,
-        })
+        return error('Account not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }

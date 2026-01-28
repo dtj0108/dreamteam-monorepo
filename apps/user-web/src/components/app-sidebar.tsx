@@ -319,14 +319,24 @@ const agentsNav = [
     icon: LayoutDashboard,
   },
   {
-    title: "Discover",
-    url: "/agents/discover",
-    icon: Compass,
+    title: "Autonomy",
+    url: "/agents/autonomy",
+    icon: Target,
   },
   {
     title: "My Agents",
     url: "/agents/hired",
     icon: Bot,
+  },
+  {
+    title: "Configurations",
+    url: "/agents/configurations",
+    icon: Settings2,
+  },
+  {
+    title: "Schedules",
+    url: "/agents/schedules",
+    icon: Calendar,
   },
   {
     title: "Activity",
@@ -338,14 +348,9 @@ const agentsNav = [
     ],
   },
   {
-    title: "Schedules",
-    url: "/agents/schedules",
-    icon: Calendar,
-  },
-  {
-    title: "Configurations",
-    url: "/agents/configurations",
-    icon: Settings2,
+    title: "Discover",
+    url: "/agents/discover",
+    icon: Compass,
   },
 ]
 

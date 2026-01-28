@@ -8,3 +8,11 @@ export {
   type SessionUser,
   type SessionData 
 } from './session'
+
+export {
+  checkRateLimit,
+  getRateLimitHeaders,
+  rateLimitPresets,
+  type RateLimitOptions,
+  type RateLimitResult,
+} from './rate-limit'

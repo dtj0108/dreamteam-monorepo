@@ -2,6 +2,7 @@ import { get } from "../api";
 import {
   AnalyticsOverview,
   BudgetVsActualReport,
+  CalendarMonthData,
   CashFlowGroupBy,
   CashFlowReport,
   DateRange,
@@ -84,4 +85,15 @@ export async function getBudgetVsActual(
 ): Promise<BudgetVsActualReport> {
   const queryString = buildDateParams(dateRange);
   return get<BudgetVsActualReport>(`/api/analytics/budget-vs-actual${queryString}`);
+}
+
+/**
+ * Fetch calendar data for a specific month
+ * Returns daily breakdown of transactions and events
+ */
+export async function getCalendarData(
+  year: number,
+  month: number
+): Promise<CalendarMonthData> {
+  return get<CalendarMonthData>(`/api/analytics/calendar?year=${year}&month=${month}`);
 }

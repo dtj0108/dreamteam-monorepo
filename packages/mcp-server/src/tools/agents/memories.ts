@@ -93,10 +93,7 @@ async function memoryList(params: {
     // Verify agent belongs to workspace
     const agent = await verifyAgentAccess(supabase, workspace_id, params.agent_id)
     if (!agent) {
-      return success({
-        message: 'No agent found with this ID in this workspace',
-        agent: null,
-      })
+      return error('Agent not found', 'not_found')
     }
 
     let query = supabase
@@ -147,10 +144,7 @@ async function memoryCreate(params: {
     // Verify agent belongs to workspace
     const agent = await verifyAgentAccess(supabase, workspace_id, params.agent_id)
     if (!agent) {
-      return success({
-        message: 'No agent found with this ID in this workspace',
-        agent: null,
-      })
+      return error('Agent not found', 'not_found')
     }
 
     // Check if memory with this path already exists
@@ -207,10 +201,7 @@ async function memoryUpdate(params: {
     // Verify agent belongs to workspace
     const agent = await verifyAgentAccess(supabase, workspace_id, params.agent_id)
     if (!agent) {
-      return success({
-        message: 'No agent found with this ID in this workspace',
-        agent: null,
-      })
+      return error('Agent not found', 'not_found')
     }
 
     // Verify memory exists and belongs to agent
@@ -222,7 +213,7 @@ async function memoryUpdate(params: {
       .single()
 
     if (!existing) {
-      return error('Memory not found for this agent')
+      return error('Memory not found for this agent', 'not_found')
     }
 
     const { data, error: dbError } = await supabase
@@ -262,10 +253,7 @@ async function memoryDelete(params: {
     // Verify agent belongs to workspace
     const agent = await verifyAgentAccess(supabase, workspace_id, params.agent_id)
     if (!agent) {
-      return success({
-        message: 'No agent found with this ID in this workspace',
-        agent: null,
-      })
+      return error('Agent not found', 'not_found')
     }
 
     // Verify memory exists and belongs to agent
@@ -277,7 +265,7 @@ async function memoryDelete(params: {
       .single()
 
     if (!existing) {
-      return error('Memory not found for this agent')
+      return error('Memory not found for this agent', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -315,10 +303,7 @@ async function memorySearch(params: {
     // Verify agent belongs to workspace
     const agent = await verifyAgentAccess(supabase, workspace_id, params.agent_id)
     if (!agent) {
-      return success({
-        message: 'No agent found with this ID in this workspace',
-        agent: null,
-      })
+      return error('Agent not found', 'not_found')
     }
 
     // Search in path and content (case-insensitive)

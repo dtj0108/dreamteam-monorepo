@@ -251,20 +251,14 @@ async function transactionGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No transaction found with this ID',
-          transaction: null,
-        })
+        return error('Transaction not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
 
     // Verify the transaction belongs to this workspace
     if (data.account?.workspace_id !== workspace_id) {
-      return success({
-        message: 'No transaction found with this ID in this workspace',
-        transaction: null,
-      })
+      return error('Transaction not found', 'not_found')
     }
 
     return success(data)
@@ -300,12 +294,7 @@ async function transactionCreate(params: {
       .single()
 
     if (accError || !account) {
-      return success({
-        message: 'No account found with this ID in this workspace',
-        account: null,
-        transaction: null,
-        created: false,
-      })
+      return error('Account not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase
@@ -365,11 +354,7 @@ async function transactionUpdate(params: {
     if (params.notes !== undefined) updateData.notes = params.notes
 
     if (Object.keys(updateData).length === 0) {
-      return success({
-        message: 'No fields provided to update',
-        transaction: null,
-        updated: false,
-      })
+      return error('No fields to update', 'validation')
     }
 
     // Get the transaction with account to verify workspace
@@ -380,20 +365,12 @@ async function transactionUpdate(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No transaction found with this ID',
-        transaction: null,
-        updated: false,
-      })
+      return error('Transaction not found', 'not_found')
     }
 
     const txAccount = existing.account as unknown as { workspace_id: string } | null
     if (txAccount?.workspace_id !== workspace_id) {
-      return success({
-        message: 'No transaction found with this ID in this workspace',
-        transaction: null,
-        updated: false,
-      })
+      return error('Transaction not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase
@@ -506,12 +483,7 @@ async function transactionCreateTransfer(params: {
     }
 
     if (!accounts || accounts.length !== 2) {
-      return success({
-        message: 'One or both accounts not found in this workspace',
-        accounts_found: accounts?.length || 0,
-        transfer: null,
-        created: false,
-      })
+      return error('One or both accounts not found', 'not_found')
     }
 
     const fromAccount = accounts.find((a) => a.id === params.from_account_id)

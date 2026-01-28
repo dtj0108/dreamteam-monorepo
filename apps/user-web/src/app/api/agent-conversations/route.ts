@@ -37,12 +37,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get user's conversations for this agent
+    // Get user's conversations for this workspace
+    // In team mode, conversations may be stored with a different agent_id (the workspace's agent)
+    // since team agent IDs don't exist in the agents table (FK constraint)
+    // So we query by workspace_id + user_id to get all conversations
     const { data: conversations, error } = await supabase
       .from("agent_conversations")
       .select("id, title, created_at, updated_at")
-      .eq("agent_id", agentId)
       .eq("user_id", session.id)
+      .eq("workspace_id", workspaceId)
       .order("updated_at", { ascending: false })
       .limit(50)
 

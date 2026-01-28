@@ -14,5 +14,5 @@ export { StartDMDialog } from "./start-dm-dialog"
 export { ChannelMembersDialog } from "./channel-members-dialog"
 export { TeamMembersCard, type TeamMember, type ProductId } from "./team-members-card"
 export { PendingInvitesCard, type PendingInvite } from "./pending-invites-card"
-export { TeamSettingsTabs } from "./settings"
+export { TeamSettingsTabs, BillingTab } from "./settings"
 

@@ -224,10 +224,7 @@ async function leadGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No lead found with this ID',
-          lead: null,
-        })
+        return error('Lead not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
@@ -358,10 +355,7 @@ async function leadUpdate(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+      return error('Lead not found', 'not_found')
     }
 
     const updateData: Record<string, unknown> = {}
@@ -423,10 +417,7 @@ async function leadDelete(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+      return error('Lead not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -470,10 +461,7 @@ async function leadChangeStatus(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+      return error('Lead not found', 'not_found')
     }
 
     const oldStatus = existing.status
@@ -527,10 +515,7 @@ async function leadMoveStage(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+      return error('Lead not found', 'not_found')
     }
 
     // Verify the stage exists and get its pipeline
@@ -601,10 +586,7 @@ async function leadAddTask(params: {
       .single()
 
     if (leadError || !lead) {
-      return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+      return error('Lead not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase
@@ -707,10 +689,7 @@ async function leadGetTasks(params: {
       .single()
 
     if (leadError || !lead) {
-      return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+      return error('Lead not found', 'not_found')
     }
 
     let query = supabase
@@ -761,10 +740,7 @@ async function leadGetOpportunities(params: {
       .single()
 
     if (leadError || !lead) {
-      return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+      return error('Lead not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase
@@ -816,10 +792,7 @@ async function leadGetContacts(params: {
       .single()
 
     if (leadError || !lead) {
-      return success({
-        message: 'No lead found with this ID in this workspace',
-        lead: null,
-      })
+      return error('Lead not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase

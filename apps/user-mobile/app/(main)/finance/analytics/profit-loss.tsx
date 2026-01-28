@@ -14,10 +14,16 @@ import {
   DateRangePicker,
   MetricCard,
 } from "@/components/finance";
+import { ExportButton } from "@/components/finance/ExportButton";
 import { Loading } from "@/components/Loading";
 import { Colors } from "@/constants/Colors";
 import { useProfitLoss } from "@/lib/hooks/useAnalytics";
 import { DateRange } from "@/lib/types/finance";
+import {
+  exportCSV,
+  getExportFilename,
+  profitLossToCSV,
+} from "@/lib/utils/export";
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("en-US", {
@@ -37,6 +43,15 @@ export default function ProfitLossScreen() {
   const router = useRouter();
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const { data, isLoading, refetch } = useProfitLoss(dateRange);
+
+  const handleExport = async () => {
+    if (!data) return;
+    const csv = profitLossToCSV(data);
+    await exportCSV({
+      filename: getExportFilename("profit_loss_report"),
+      data: csv,
+    });
+  };
 
   if (isLoading && !data) {
     return (
@@ -209,6 +224,13 @@ export default function ProfitLossScreen() {
                 maxItems={5}
               />
             </View>
+          </View>
+        )}
+
+        {/* Export Button */}
+        {data && (
+          <View className="mb-4">
+            <ExportButton onExport={handleExport} label="Export P&L Report" />
           </View>
         )}
       </ScrollView>

@@ -246,12 +246,7 @@ async function exitPlanGetScenarios(params: {
       .single()
 
     if (exitError || !exitPlan) {
-      return success({
-        message: 'No exit plan exists yet. Create one first to get scenarios.',
-        exit_plan: null,
-        revenue_multiples: [],
-        runway_analysis: null,
-      })
+      return error('Exit plan not found', 'not_found')
     }
 
     // Get latest KPI inputs for revenue calculation

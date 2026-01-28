@@ -227,10 +227,7 @@ async function projectGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No project found with this ID',
-          project: null,
-        })
+        return error('Project not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
@@ -273,12 +270,7 @@ async function projectCreate(params: {
         .single()
 
       if (deptError || !dept) {
-        return success({
-          message: 'No department found with this ID in this workspace',
-          department: null,
-          project: null,
-          created: false,
-        })
+        return error('Department not found', 'not_found')
       }
     }
 
@@ -357,11 +349,7 @@ async function projectUpdate(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No project found with this ID in this workspace',
-        project: null,
-        updated: false,
-      })
+      return error('Project not found', 'not_found')
     }
 
     // If updating department_id, verify it belongs to this workspace
@@ -396,11 +384,7 @@ async function projectUpdate(params: {
     if (params.department_id !== undefined) updateData.department_id = params.department_id
 
     if (Object.keys(updateData).length === 0) {
-      return success({
-        message: 'No fields provided to update',
-        project: null,
-        updated: false,
-      })
+      return error('No fields to update', 'validation')
     }
 
     const { data, error: dbError } = await supabase
@@ -448,10 +432,7 @@ async function projectDelete(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No project found with this ID in this workspace',
-        project: null,
-      })
+      return error('Project not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -494,18 +475,11 @@ async function projectArchive(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No project found with this ID in this workspace',
-        project: null,
-      })
+      return error('Project not found', 'not_found')
     }
 
     if (existing.status === 'archived') {
-      return success({
-        message: 'Project is already archived',
-        project: existing,
-        archived: true,
-      })
+      return error('Project is already archived', 'validation')
     }
 
     const { data, error: dbError } = await supabase
@@ -553,10 +527,7 @@ async function projectAddMember(params: {
       .single()
 
     if (projectError || !project) {
-      return success({
-        message: 'No project found with this ID in this workspace',
-        project: null,
-      })
+      return error('Project not found', 'not_found')
     }
 
     // Verify the user is a workspace member
@@ -633,10 +604,7 @@ async function projectRemoveMember(params: {
       .single()
 
     if (projectError || !project) {
-      return success({
-        message: 'No project found with this ID in this workspace',
-        project: null,
-      })
+      return error('Project not found', 'not_found')
     }
 
     // Cannot remove the owner
@@ -686,10 +654,7 @@ async function projectGetMembers(params: {
       .single()
 
     if (projectError || !project) {
-      return success({
-        message: 'No project found with this ID in this workspace',
-        project: null,
-      })
+      return error('Project not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase
@@ -737,10 +702,7 @@ async function projectGetProgress(params: {
       .single()
 
     if (projectError || !project) {
-      return success({
-        message: 'No project found with this ID in this workspace',
-        project: null,
-      })
+      return error('Project not found', 'not_found')
     }
 
     // Get task statistics
@@ -823,10 +785,7 @@ async function projectGetActivity(params: {
       .single()
 
     if (projectError || !project) {
-      return success({
-        message: 'No project found with this ID in this workspace',
-        project: null,
-      })
+      return error('Project not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase

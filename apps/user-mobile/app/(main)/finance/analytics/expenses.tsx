@@ -15,10 +15,16 @@ import {
   MetricCard,
   TrendChart,
 } from "@/components/finance";
+import { ExportButton } from "@/components/finance/ExportButton";
 import { Loading } from "@/components/Loading";
 import { Colors } from "@/constants/Colors";
 import { useExpenseAnalysis } from "@/lib/hooks/useAnalytics";
 import { DateRange, TrendDataPoint } from "@/lib/types/finance";
+import {
+  categoryBreakdownToCSV,
+  exportCSV,
+  getExportFilename,
+} from "@/lib/utils/export";
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("en-US", {
@@ -33,6 +39,15 @@ export default function ExpenseAnalysisScreen() {
   const router = useRouter();
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const { data, isLoading, refetch } = useExpenseAnalysis(dateRange);
+
+  const handleExport = async () => {
+    if (!data) return;
+    const csv = categoryBreakdownToCSV(data.byCategory);
+    await exportCSV({
+      filename: getExportFilename("expense_analysis"),
+      data: csv,
+    });
+  };
 
   // Convert monthly trend to TrendDataPoint format
   const trendData: TrendDataPoint[] =
@@ -142,6 +157,13 @@ export default function ExpenseAnalysisScreen() {
             />
           </View>
         </View>
+
+        {/* Export Button */}
+        {data && (
+          <View className="mb-4">
+            <ExportButton onExport={handleExport} label="Export Expense Report" />
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

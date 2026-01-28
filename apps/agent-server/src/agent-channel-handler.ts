@@ -164,8 +164,8 @@ async function runSpecialistQuery(
 
     return {
       text: result.text,
-      inputTokens: result.usage?.promptTokens || 0,
-      outputTokens: result.usage?.completionTokens || 0,
+      inputTokens: result.usage?.inputTokens || 0,
+      outputTokens: result.usage?.outputTokens || 0,
     }
   } finally {
     if (mcpClient) {

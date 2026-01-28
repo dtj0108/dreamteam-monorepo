@@ -252,6 +252,11 @@ export async function sendAgentMessage(
 
 /**
  * Format a scheduled task completion message for DM delivery.
+ *
+ * For completed tasks: Just return the AI's response directly.
+ * The AI has already been instructed on how to format its output conversationally.
+ *
+ * For failed tasks: Keep context for debugging purposes.
  */
 export function formatTaskCompletionMessage(params: {
   scheduleName: string
@@ -260,20 +265,16 @@ export function formatTaskCompletionMessage(params: {
   resultText: string
   durationMs?: number
 }): string {
-  const { scheduleName, taskPrompt, status, resultText, durationMs } = params
+  const { scheduleName, status, resultText } = params
 
   if (status === "completed") {
-    const truncatedResult = resultText.length > 500
-      ? `${resultText.slice(0, 500)}...`
-      : resultText
-    const durationStr = durationMs
-      ? `\n\n_Completed in ${(durationMs / 1000).toFixed(1)}s_`
-      : ""
-
-    return `**Scheduled Task Completed**\n\nI finished running your scheduled task: **${scheduleName}**\n\n**Task:** ${taskPrompt}\n\n**Result:** ${truncatedResult}${durationStr}`
+    // Return the AI's response directly - it should already be conversational
+    // No need to echo the task prompt or add templated headers
+    return resultText
   }
 
-  return `**Scheduled Task Failed**\n\nI encountered an error running: **${scheduleName}**\n\n**Task:** ${taskPrompt}\n\n**Error:** ${resultText}`
+  // For failures, keep context for debugging
+  return `Something went wrong with "${scheduleName}": ${resultText}`
 }
 
 // ============================================================================

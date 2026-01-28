@@ -3,6 +3,7 @@ import {
   processAgentSchedules,
   processApprovedExecutions,
 } from "@/lib/schedule-processor"
+import { checkRateLimit, getRateLimitHeaders, rateLimitPresets } from "@dreamteam/auth"
 import { createAdminClient } from "@dreamteam/database/server"
 import { executeAgentTask } from "@/lib/agent-executor"
 import { sendAgentMessage, formatTaskCompletionMessage, getWorkspaceAdminIds, getWorkspaceOwnerId } from "@/lib/agent-messaging"
@@ -20,10 +21,33 @@ export const maxDuration = 60
  * Test mode: Add ?test=true to force-run the first available schedule
  */
 export async function GET(request: NextRequest) {
+  // Rate limiting - use IP address as identifier
+  const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0] || 
+                   request.headers.get('x-real-ip') || 
+                   'unknown'
+  
+  const rateLimitResult = checkRateLimit(clientIp, rateLimitPresets.cron)
+  
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Try again later.' },
+      { 
+        status: 429,
+        headers: getRateLimitHeaders(rateLimitResult)
+      }
+    )
+  }
+
   const authHeader = request.headers.get("authorization")
   const cronSecret = process.env.CRON_SECRET
   const { searchParams } = new URL(request.url)
   const testMode = searchParams.get("test") === "true"
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production'
+
+  // Block test mode in production (security fix)
+  if (testMode && isProduction) {
+    return NextResponse.json({ error: "Test mode not allowed in production" }, { status: 403 })
+  }
 
   // Verify authorization (if CRON_SECRET is configured) - skip in test mode for local dev
   if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !testMode) {
@@ -43,10 +67,6 @@ export async function GET(request: NextRequest) {
         .select(`id, name, ai_agent:ai_agents(id, name, provider, model)`)
         .eq("is_enabled", true)
         .order("created_at", { ascending: true })
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'check-schedules:list-all',message:'All enabled schedules',data:{schedules:allSchedules?.map((s: NonNullable<typeof allSchedules>[number],i: number)=>({offset:i,scheduleId:s.id,scheduleName:s.name,agentName:s.ai_agent?.name,provider:s.ai_agent?.provider,model:s.ai_agent?.model}))},timestamp:Date.now(),sessionId:'debug-session',runId:'list-schedules',hypothesisId:'LIST'})}).catch(()=>{});
-      // #endregion
       
       return NextResponse.json({
         testMode: true,
@@ -84,10 +104,6 @@ export async function GET(request: NextRequest) {
 
     const schedule = schedules[0]
     console.log(`[Cron] TEST: Found schedule ${schedule.id} - ${schedule.name}`)
-
-    // #region agent log
-    fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'check-schedules:test-mode',message:'Schedule data from DB query',data:{scheduleId:schedule.id,scheduleName:schedule.name,agentId:schedule.agent_id,aiAgentFull:schedule.ai_agent,rawProvider:schedule.ai_agent?.provider,rawProviderType:typeof schedule.ai_agent?.provider,rawModel:schedule.ai_agent?.model,hasXaiKey:!!process.env.XAI_API_KEY,hasAnthropicKey:!!process.env.ANTHROPIC_API_KEY,xaiKeyLength:process.env.XAI_API_KEY?.length||0,anthropicKeyLength:process.env.ANTHROPIC_API_KEY?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'provider-debug',hypothesisId:'C-cron-test'})}).catch(()=>{});
-    // #endregion
 
     // Find local agent
     const { data: localAgent, error: agentError } = await supabase

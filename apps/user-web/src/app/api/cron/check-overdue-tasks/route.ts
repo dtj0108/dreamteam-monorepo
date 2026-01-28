@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
+import { checkRateLimit, getRateLimitHeaders, rateLimitPresets } from "@dreamteam/auth"
 import { fireWebhooks } from "@/lib/make-webhooks"
 
 /**
@@ -12,6 +13,23 @@ import { fireWebhooks } from "@/lib/make-webhooks"
  */
 export async function GET(request: NextRequest) {
   try {
+    // Rate limiting - use IP address as identifier
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0] || 
+                     request.headers.get('x-real-ip') || 
+                     'unknown'
+    
+    const rateLimitResult = checkRateLimit(clientIp, rateLimitPresets.cron)
+    
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Try again later.' },
+        { 
+          status: 429,
+          headers: getRateLimitHeaders(rateLimitResult)
+        }
+      )
+    }
+
     // Optional: Verify cron secret to prevent abuse
     const cronSecret = request.headers.get("x-cron-secret")
     if (process.env.CRON_SECRET && cronSecret !== process.env.CRON_SECRET) {

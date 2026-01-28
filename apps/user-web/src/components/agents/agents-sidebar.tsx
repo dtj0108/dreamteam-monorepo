@@ -16,6 +16,7 @@ import {
   Compass,
   Calendar,
   Sparkles,
+  Target,
 } from "lucide-react"
 import {
   Collapsible,
@@ -183,6 +184,22 @@ export function AgentsSidebar({
             >
               <Calendar className="size-4" />
               <span>Schedules</span>
+            </Link>
+          </div>
+
+          {/* Autonomy Link */}
+          <div className="mt-1">
+            <Link
+              href="/agents/autonomy"
+              className={cn(
+                "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors",
+                isActive("/agents/autonomy")
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Target className="size-4" />
+              <span>Autonomy</span>
             </Link>
           </div>
 

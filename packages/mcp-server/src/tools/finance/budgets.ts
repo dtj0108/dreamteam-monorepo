@@ -242,10 +242,7 @@ async function budgetGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No budget found with this ID',
-          budget: null,
-        })
+        return error('Budget not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
@@ -338,11 +335,7 @@ async function budgetUpdate(params: {
     if (params.is_active !== undefined) updateData.is_active = params.is_active
 
     if (Object.keys(updateData).length === 0) {
-      return success({
-        message: 'No fields provided to update',
-        budget: null,
-        updated: false,
-      })
+      return error('No fields to update', 'validation')
     }
 
     const { data, error: dbError } = await supabase
@@ -358,11 +351,7 @@ async function budgetUpdate(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No budget found with this ID',
-          budget: null,
-          updated: false,
-        })
+        return error('Budget not found', 'not_found')
       }
       return error(`Failed to update budget: ${dbError.message}`)
     }
@@ -536,11 +525,7 @@ async function budgetAddAlert(params: {
       .single()
 
     if (budgetError || !budget) {
-      return success({
-        message: 'No budget found with this ID in this workspace',
-        budget: null,
-        alert_added: false,
-      })
+      return error('Budget not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase
@@ -591,11 +576,7 @@ async function budgetRemoveAlert(params: {
       .single()
 
     if (!budget) {
-      return success({
-        message: 'No budget found with this ID in this workspace',
-        budget: null,
-        alert_removed: false,
-      })
+      return error('Budget not found', 'not_found')
     }
 
     const { error: dbError } = await supabase

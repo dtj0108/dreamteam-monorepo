@@ -113,10 +113,7 @@ async function departmentGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No department found with this ID',
-          department: null,
-        })
+        return error('Department not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
@@ -212,11 +209,7 @@ async function departmentUpdate(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No department found with this ID in this workspace',
-        department: null,
-        updated: false,
-      })
+      return error('Department not found', 'not_found')
     }
 
     const updateData: Record<string, unknown> = {}
@@ -227,11 +220,7 @@ async function departmentUpdate(params: {
     if (params.position !== undefined) updateData.position = params.position
 
     if (Object.keys(updateData).length === 0) {
-      return success({
-        message: 'No fields provided to update',
-        department: null,
-        updated: false,
-      })
+      return error('No fields to update', 'validation')
     }
 
     const { data, error: dbError } = await supabase
@@ -276,10 +265,7 @@ async function departmentDelete(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No department found with this ID in this workspace',
-        deleted: false,
-      })
+      return error('Department not found', 'not_found')
     }
 
     const { error: dbError } = await supabase

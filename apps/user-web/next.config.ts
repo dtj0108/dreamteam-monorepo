@@ -13,12 +13,10 @@ const nextConfig: NextConfig = {
     return config;
   },
   // Rewrite agent-chat to agent-server before filesystem/middleware
-  // Use AGENT_SERVER_URL env var, with fallbacks for dev/prod
+  // Use AGENT_SERVER_URL env var, or default to Railway production URL
   async rewrites() {
     const agentServerUrl = process.env.AGENT_SERVER_URL 
-      || (process.env.NODE_ENV === 'production'
-        ? "https://agent-server-production-580f.up.railway.app"
-        : "http://localhost:3002");
+      || "https://agent-server-production-580f.up.railway.app";
     // #region agent log
     console.log(`[DEBUG] agent-server rewrite target: ${agentServerUrl}`);
     // #endregion

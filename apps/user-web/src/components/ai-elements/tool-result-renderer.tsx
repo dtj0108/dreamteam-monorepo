@@ -1,41 +1,7 @@
 "use client"
 
-import { Wrench, CheckCircle2 } from "lucide-react"
 import { Loader } from "./loader"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { getToolIdFromName } from "@/lib/agent"
-import {
-  TransactionsResult,
-  BudgetsResult,
-  AccountsResult,
-  GoalsResult,
-  WebSearchResult,
-  DataExportResult,
-  ProjectsResult,
-  ProjectTasksResult,
-  TeamMembersResult,
-  KnowledgeResult,
-  MemoryResult,
-  ToolResultCard,
-} from "./tool-results"
-
-// Map tool names to result components
-const toolComponents: Record<string, React.ComponentType<{ result: any }>> = {
-  getTransactions: TransactionsResult,
-  getBudgets: BudgetsResult,
-  getAccounts: AccountsResult,
-  getGoals: GoalsResult,
-  searchWeb: WebSearchResult,
-  exportData: DataExportResult,
-  // Project Management Tools
-  manageProjects: ProjectsResult,
-  manageProjectTasks: ProjectTasksResult,
-  getTeamMembers: TeamMembersResult,
-  manageKnowledge: KnowledgeResult,
-  // Memory Tool
-  manageMemory: MemoryResult,
-}
 
 // Tool display names for loading state
 const toolDisplayNames: Record<string, string> = {
@@ -92,7 +58,7 @@ function getActionSummary(toolName: string, args?: Record<string, unknown>): str
   }
 }
 
-// Get action description for step indicator
+// Get action description for step indicator (present tense - used during loading)
 export function getActionDescription(toolName: string, args?: Record<string, unknown>): string {
   switch (toolName) {
     case "manageProjects":
@@ -139,6 +105,51 @@ export function getActionDescription(toolName: string, args?: Record<string, unk
   }
 }
 
+// Get completed action text (past tense - brief, vague descriptions for completed steps)
+export function getCompletedActionText(toolName: string, args?: Record<string, unknown>): string {
+  switch (toolName) {
+    case "getTransactions":
+      return "Got transactions"
+    case "getBudgets":
+      return "Retrieved budgets"
+    case "getAccounts":
+      return "Retrieved accounts"
+    case "getGoals":
+      return "Retrieved goals"
+    case "searchWeb":
+      return "Searched web"
+    case "exportData":
+      return "Exported data"
+    case "manageProjects":
+      if (args?.action === "create") return "Created project"
+      if (args?.action === "update") return "Updated project"
+      if (args?.action === "delete") return "Deleted project"
+      return "Retrieved projects"
+    case "manageProjectTasks":
+      if (args?.action === "create") return "Created task"
+      if (args?.action === "assign") return "Assigned task"
+      if (args?.action === "update") return "Updated task"
+      if (args?.action === "delete") return "Deleted task"
+      return "Retrieved tasks"
+    case "getTeamMembers":
+      return "Retrieved team members"
+    case "manageKnowledge":
+      if (args?.action === "create") return "Created knowledge page"
+      if (args?.action === "update") return "Updated knowledge page"
+      if (args?.action === "search") return "Searched knowledge"
+      return "Retrieved knowledge"
+    case "manageMemory":
+      if (args?.action === "view") return "Read from memory"
+      if (args?.action === "create") return "Saved to memory"
+      if (args?.action === "str_replace") return "Updated memory"
+      if (args?.action === "delete") return "Deleted from memory"
+      if (args?.action === "list") return "Listed memories"
+      return "Accessed memory"
+    default:
+      return `Completed ${toolName}`
+  }
+}
+
 export function ToolResultRenderer({
   toolName,
   state,
@@ -167,46 +178,10 @@ export function ToolResultRenderer({
     )
   }
 
-  // Result state
+  // Result state - show simple, brief completion text
   if (state === "result" && result) {
-    const Component = toolComponents[toolName]
-
-    if (Component) {
-      return <Component result={result} />
-    }
-
-    // Better fallback for unknown tools - summarize instead of raw JSON
-    // Guard against non-object results (strings, primitives, null)
-    if (result === null || typeof result !== 'object') {
-      return (
-        <ToolResultCard
-          icon={<Wrench className="size-4 text-red-500" />}
-          title={`${toolName} error`}
-          status="error"
-        >
-          <p className="text-xs text-muted-foreground">{String(result)}</p>
-        </ToolResultCard>
-      )
-    }
-
-    const resultObj = result as Record<string, unknown>
-    const hasSuccess = "success" in resultObj
-    const hasMessage = "message" in resultObj
-    const hasCount = "count" in resultObj || (resultObj.summary && typeof resultObj.summary === "object" && "count" in (resultObj.summary as Record<string, unknown>))
-
-    return (
-      <ToolResultCard
-        icon={hasSuccess && resultObj.success ? <CheckCircle2 className="size-4 text-green-500" /> : <Wrench className="size-4" />}
-        title={hasMessage ? String(resultObj.message) : `${toolName} completed`}
-        status="success"
-      >
-        {hasCount ? (
-          <p className="text-xs text-muted-foreground">
-            {String((resultObj.summary as Record<string, unknown>)?.count || resultObj.count)} items
-          </p>
-        ) : null}
-      </ToolResultCard>
-    )
+    const description = getCompletedActionText(toolName, args)
+    return <span className="text-sm text-muted-foreground">{description}</span>
   }
 
   return null

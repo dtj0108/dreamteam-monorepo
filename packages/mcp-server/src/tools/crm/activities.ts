@@ -219,10 +219,7 @@ async function activityGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-        message: 'No activity found with this ID',
-        activity: null,
-      })
+        return error('Activity not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
@@ -261,10 +258,7 @@ async function activityCreate(params: {
         .single()
 
       if (contactError || !contact) {
-        return success({
-          message: 'No contact found with this ID in this workspace',
-          contact: null,
-        })
+        return error('Contact not found', 'not_found')
       }
     }
 
@@ -278,10 +272,7 @@ async function activityCreate(params: {
         .single()
 
       if (dealError || !deal) {
-        return success({
-          message: 'No deal found with this ID in this workspace',
-          deal: null,
-        })
+        return error('Deal not found', 'not_found')
       }
     }
 
@@ -342,10 +333,7 @@ async function activityUpdate(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No activity found with this ID',
-        activity: null,
-      })
+      return error('Activity not found', 'not_found')
     }
 
     const updateData: Record<string, unknown> = {}
@@ -403,10 +391,7 @@ async function activityDelete(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No activity found with this ID',
-        activity: null,
-      })
+      return error('Activity not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -449,10 +434,7 @@ async function activityMarkComplete(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No activity found with this ID',
-        activity: null,
-      })
+      return error('Activity not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase

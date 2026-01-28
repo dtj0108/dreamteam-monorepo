@@ -15,10 +15,16 @@ import {
   DateRangePicker,
   MetricCard,
 } from "@/components/finance";
+import { ExportButton } from "@/components/finance/ExportButton";
 import { Loading } from "@/components/Loading";
 import { Colors } from "@/constants/Colors";
 import { useCashFlow } from "@/lib/hooks/useAnalytics";
 import { CashFlowGroupBy, DateRange } from "@/lib/types/finance";
+import {
+  cashFlowToCSV,
+  exportCSV,
+  getExportFilename,
+} from "@/lib/utils/export";
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("en-US", {
@@ -40,6 +46,15 @@ export default function CashFlowScreen() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [groupBy, setGroupBy] = useState<CashFlowGroupBy>("month");
   const { data, isLoading, refetch } = useCashFlow(groupBy, dateRange);
+
+  const handleExport = async () => {
+    if (!data) return;
+    const csv = cashFlowToCSV(data);
+    await exportCSV({
+      filename: getExportFilename("cash_flow_report"),
+      data: csv,
+    });
+  };
 
   if (isLoading && !data) {
     return (
@@ -200,6 +215,13 @@ export default function CashFlowScreen() {
                 </View>
               ))}
             </View>
+          </View>
+        )}
+
+        {/* Export Button */}
+        {data && (
+          <View className="mb-4">
+            <ExportButton onExport={handleExport} label="Export Cash Flow Report" />
           </View>
         )}
       </ScrollView>

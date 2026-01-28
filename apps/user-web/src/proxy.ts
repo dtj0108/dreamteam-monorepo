@@ -156,18 +156,24 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
-    // Check if user needs 2FA for protected routes
-    if (user && protected2FARoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
+    // Check if user needs 2FA for protected routes (skip in development)
+    const isDev = process.env.NODE_ENV === 'development'
+    if (!isDev && user && protected2FARoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
       try {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('pending_2fa')
+          .select('pending_2fa, phone')
           .eq('id', user.id)
           .single()
 
         if (profile?.pending_2fa) {
           const url = request.nextUrl.clone()
           url.pathname = '/verify'
+          // Include phone number so the verify page can send OTP
+          if (profile.phone) {
+            url.searchParams.set('phone', profile.phone)
+            url.searchParams.set('userId', user.id)
+          }
           return NextResponse.redirect(url)
         }
       } catch {

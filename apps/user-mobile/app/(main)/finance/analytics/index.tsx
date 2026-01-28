@@ -152,6 +152,13 @@ export default function AnalyticsOverviewScreen() {
               subtitle="Compare spending against budgets"
               onPress={() => router.push("/(main)/finance/analytics/budget-vs-actual")}
             />
+            <ReportCard
+              icon="calendar"
+              iconColor="#0ea5e9"
+              title="Financial Calendar"
+              subtitle="View transactions by date"
+              onPress={() => router.push("/(main)/finance/analytics/calendar")}
+            />
           </View>
         </View>
       </ScrollView>

@@ -38,6 +38,13 @@ export async function GET(
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
 
+    console.log("[GET /api/agent-conversations/[id]] Messages query result:", {
+      conversationId,
+      messageCount: messages?.length ?? 0,
+      error: msgError,
+      firstMessage: messages?.[0],
+    })
+
     if (msgError) {
       console.error("Error fetching messages:", msgError)
       return NextResponse.json({ error: msgError.message }, { status: 500 })

@@ -55,7 +55,9 @@ export async function POST(request: NextRequest) {
     user_description,
     department_id,
     avatar_url,
+    provider = 'anthropic',
     model = 'sonnet',
+    provider_config = {},
     system_prompt,
     permission_mode = 'default',
     max_turns = 10,
@@ -71,7 +73,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'system_prompt is required' }, { status: 400 })
   }
 
-  if (!['sonnet', 'opus', 'haiku'].includes(model)) {
+  // Validate provider
+  const validProviders = ['anthropic', 'openai', 'xai', 'google', 'groq', 'mistral']
+  if (!validProviders.includes(provider)) {
+    return NextResponse.json({ error: `Invalid provider. Must be one of: ${validProviders.join(', ')}` }, { status: 400 })
+  }
+
+  // Validate model (basic validation - provider-specific models validated elsewhere)
+  if (!model || typeof model !== 'string') {
     return NextResponse.json({ error: 'Invalid model' }, { status: 400 })
   }
 
@@ -93,7 +102,9 @@ export async function POST(request: NextRequest) {
       user_description: user_description || null,
       department_id: department_id || null,
       avatar_url: avatar_url || null,
+      provider,
       model,
+      provider_config: provider_config || {},
       system_prompt,
       permission_mode,
       max_turns,
@@ -121,7 +132,9 @@ export async function POST(request: NextRequest) {
       version: 1,
       config_snapshot: {
         name: data.name,
+        provider: data.provider,
         model: data.model,
+        providerConfig: data.provider_config,
         systemPrompt: data.system_prompt,
         maxTurns: data.max_turns,
         permissionMode: data.permission_mode,
@@ -138,7 +151,7 @@ export async function POST(request: NextRequest) {
     'agent_created',
     'ai_agent',
     data.id,
-    { name, model },
+    { name, provider, model },
     request
   )
 

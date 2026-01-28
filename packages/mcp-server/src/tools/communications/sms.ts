@@ -92,10 +92,7 @@ async function smsSend(params: {
     }
 
     if (!fromNumber) {
-      return success({
-        message: 'No from number specified and no default number set. Please provide a from_number or configure a default.',
-        sent: false,
-      })
+      return error('No from number available', 'not_found')
     }
 
     // Create the communication record

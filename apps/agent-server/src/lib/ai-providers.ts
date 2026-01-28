@@ -9,7 +9,7 @@ import { anthropic } from "@ai-sdk/anthropic"
 import { openai } from "@ai-sdk/openai"
 import { xai } from "@ai-sdk/xai"
 import { google } from "@ai-sdk/google"
-import type { LanguageModelV1 } from "ai"
+import type { LanguageModel } from "ai"
 
 /**
  * Supported AI providers
@@ -30,7 +30,7 @@ export type AIProvider =
  * Provider configuration with model aliases
  */
 interface ProviderConfig {
-  provider: (model: string) => LanguageModelV1
+  provider: (model: string) => LanguageModel
   modelAliases?: Record<string, string>
   defaultModel: string
 }
@@ -88,9 +88,9 @@ const providerRegistry: Record<string, ProviderConfig> = {
  *
  * @param provider - The AI provider name (e.g., 'anthropic', 'openai', 'xai')
  * @param model - The model name or alias (e.g., 'sonnet', 'gpt-4o', 'grok-3')
- * @returns LanguageModelV1 instance ready for use with Vercel AI SDK
+ * @returns LanguageModel instance ready for use with Vercel AI SDK
  */
-export function getModel(provider: string, model: string): LanguageModelV1 {
+export function getModel(provider: string, model: string): LanguageModel {
   const config = providerRegistry[provider]
 
   if (!config) {

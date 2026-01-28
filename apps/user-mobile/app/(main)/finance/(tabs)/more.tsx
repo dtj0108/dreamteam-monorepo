@@ -64,21 +64,21 @@ export default function MoreScreen() {
             iconColor="#6b7280"
             title="Categories"
             subtitle="Manage transaction categories"
-            onPress={() => {}}
+            onPress={() => router.push("/(main)/finance/categories")}
           />
           <MenuItem
             icon="refresh"
-            iconColor="#6b7280"
+            iconColor="#8b5cf6"
             title="Recurring Rules"
             subtitle="Automate recurring transactions"
-            onPress={() => {}}
+            onPress={() => router.push("/(main)/finance/recurring")}
           />
           <MenuItem
             icon="cog"
             iconColor="#6b7280"
             title="Finance Settings"
             subtitle="Customize your finance workspace"
-            onPress={() => {}}
+            onPress={() => router.push("/(main)/finance/settings")}
           />
         </View>
       </ScrollView>

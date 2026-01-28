@@ -315,20 +315,14 @@ async function taskGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No task found with this ID',
-          task: null,
-        })
+        return error('Task not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
 
     const project = data.project as unknown as { workspace_id: string }
     if (project.workspace_id !== workspace_id) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     return success(data)
@@ -367,10 +361,7 @@ async function taskCreate(params: {
       .single()
 
     if (projectError || !project) {
-      return success({
-        message: 'No project found with this ID in this workspace',
-        project: null,
-      })
+      return error('Project not found', 'not_found')
     }
 
     // If parent_id provided, verify it's in the same project
@@ -451,10 +442,7 @@ async function taskUpdate(params: {
     const task = await getTaskProject(supabase, params.task_id, workspace_id)
 
     if (!task) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     const updateData: Record<string, unknown> = {}
@@ -468,11 +456,7 @@ async function taskUpdate(params: {
     if (params.actual_hours !== undefined) updateData.actual_hours = params.actual_hours
 
     if (Object.keys(updateData).length === 0) {
-      return success({
-        message: 'No fields provided to update',
-        task: null,
-        updated: false,
-      })
+      return error('No fields to update', 'validation')
     }
 
     const { data, error: dbError } = await supabase
@@ -510,10 +494,7 @@ async function taskDelete(params: {
     const task = await getTaskProject(supabase, params.task_id, workspace_id)
 
     if (!task) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -550,10 +531,7 @@ async function taskAssign(params: {
     const task = await getTaskProject(supabase, params.task_id, workspace_id)
 
     if (!task) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     // Verify the assignee is a workspace member
@@ -621,10 +599,7 @@ async function taskUnassign(params: {
     const task = await getTaskProject(supabase, params.task_id, workspace_id)
 
     if (!task) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -663,10 +638,7 @@ async function taskChangeStatus(params: {
     const task = await getTaskProject(supabase, params.task_id, workspace_id)
 
     if (!task) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase
@@ -709,10 +681,7 @@ async function taskAddDependency(params: {
     const dependsOn = await getTaskProject(supabase, params.depends_on_task_id, workspace_id)
 
     if (!task) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     if (!dependsOn) {
@@ -765,10 +734,7 @@ async function taskRemoveDependency(params: {
     const task = await getTaskProject(supabase, params.task_id, workspace_id)
 
     if (!task) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -813,18 +779,12 @@ async function taskAddLabel(params: {
       .single()
 
     if (!task) {
-      return success({
-          message: 'No task found with this ID',
-          task: null,
-        })
+      return error('Task not found', 'not_found')
     }
 
     const project = task.project as unknown as { workspace_id: string }
     if (project.workspace_id !== workspace_id) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     // Verify label belongs to the same project
@@ -883,10 +843,7 @@ async function taskRemoveLabel(params: {
     const task = await getTaskProject(supabase, params.task_id, workspace_id)
 
     if (!task) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -926,10 +883,7 @@ async function taskAddComment(params: {
     const task = await getTaskProject(supabase, params.task_id, workspace_id)
 
     if (!task) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     // If parent_id provided, verify it's a comment on this task
@@ -988,10 +942,7 @@ async function taskGetComments(params: {
     const task = await getTaskProject(supabase, params.task_id, workspace_id)
 
     if (!task) {
-      return success({
-        message: 'No task found with this ID in this workspace',
-        task: null,
-      })
+      return error('Task not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase

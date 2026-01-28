@@ -163,10 +163,7 @@ async function agentGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No agent found with this ID',
-          agent: null,
-        })
+        return error('Agent not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
@@ -270,10 +267,7 @@ async function agentUpdate(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No agent found with this ID in this workspace',
-        agent: null,
-      })
+      return error('Agent not found', 'not_found')
     }
 
     const updateData: Record<string, unknown> = {}
@@ -330,10 +324,7 @@ async function agentDelete(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No agent found with this ID in this workspace',
-        agent: null,
-      })
+      return error('Agent not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -377,10 +368,7 @@ async function agentAddSkill(params: {
       .single()
 
     if (!agent) {
-      return success({
-        message: 'No agent found with this ID in this workspace',
-        agent: null,
-      })
+      return error('Agent not found', 'not_found')
     }
 
     // Verify skill belongs to workspace or is system skill
@@ -392,10 +380,7 @@ async function agentAddSkill(params: {
       .single()
 
     if (!skill) {
-      return success({
-        message: 'No skill found with this ID or not available in this workspace',
-        skill: null,
-      })
+      return error('Skill not found', 'not_found')
     }
 
     // Check if already assigned
@@ -407,10 +392,7 @@ async function agentAddSkill(params: {
       .single()
 
     if (existing) {
-      return success({
-        message: 'Skill is already assigned to this agent',
-        already_assigned: true,
-      })
+      return error('Skill is already assigned to this agent', 'validation')
     }
 
     const { error: dbError } = await supabase
@@ -457,10 +439,7 @@ async function agentRemoveSkill(params: {
       .single()
 
     if (!agent) {
-      return success({
-        message: 'No agent found with this ID in this workspace',
-        agent: null,
-      })
+      return error('Agent not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -505,10 +484,7 @@ async function agentGetSkills(params: {
       .single()
 
     if (!agent) {
-      return success({
-        message: 'No agent found with this ID in this workspace',
-        agent: null,
-      })
+      return error('Agent not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase

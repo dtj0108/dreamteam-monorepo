@@ -154,10 +154,7 @@ async function messageList(params: {
         .single()
 
       if (!channel) {
-        return success({
-          message: 'No channel found with this ID',
-          channel: null,
-        })
+        return error('Channel not found', 'not_found')
       }
 
       if (channel.is_private) {
@@ -169,10 +166,7 @@ async function messageList(params: {
           .single()
 
         if (!membership) {
-          return success({
-          message: 'No channel found with this ID',
-          channel: null,
-        })
+          return error('Channel not found', 'not_found')
         }
       }
     }
@@ -285,10 +279,7 @@ async function messageGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-        message: 'No message found with this ID',
-        data: null,
-      })
+        return error('Message not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
@@ -427,10 +418,7 @@ async function messageUpdate(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No message found with this ID',
-        data: null,
-      })
+      return error('Message not found', 'not_found')
     }
 
     if (existing.sender_id !== member.profile_id) {
@@ -487,10 +475,7 @@ async function messageDelete(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No message found with this ID',
-        data: null,
-      })
+      return error('Message not found', 'not_found')
     }
 
     // Only sender or admins can delete
@@ -602,10 +587,7 @@ async function messageAddReaction(params: {
       .single()
 
     if (messageError || !message) {
-      return success({
-        message: 'No message found with this ID',
-        data: null,
-      })
+      return error('Message not found', 'not_found')
     }
 
     // Check if reaction already exists
@@ -760,10 +742,7 @@ async function messageGetThread(params: {
       .single()
 
     if (parentError || !parent) {
-      return success({
-        message: 'No message found with this ID',
-        data: null,
-      })
+      return error('Message not found', 'not_found')
     }
 
     // Get replies
@@ -815,10 +794,7 @@ async function messagePin(params: {
       .single()
 
     if (messageError || !message) {
-      return success({
-        message: 'No message found with this ID',
-        data: null,
-      })
+      return error('Message not found', 'not_found')
     }
 
     if (!message.channel_id) {

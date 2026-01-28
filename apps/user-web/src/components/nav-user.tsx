@@ -3,14 +3,10 @@
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import {
-  BadgeCheck,
-  Bell,
   ChevronsUpDown,
   LogOut,
-  Sparkles,
   Loader2,
-  Building2,
-  Users,
+  Settings,
 } from "lucide-react"
 
 import {
@@ -21,9 +17,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -41,7 +35,6 @@ export function NavUser({
     name: string
     email: string
     phone?: string
-    companyName?: string | null
     avatar?: string
   }
 }) {
@@ -99,53 +92,10 @@ export function NavUser({
             align="end"
             sideOffset={4}
           >
-            <DropdownMenuLabel className="p-0 font-normal">
-              <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg bg-primary/10 text-primary">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">{user.name}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {user.email}
-                  </span>
-                </div>
-              </div>
-            </DropdownMenuLabel>
-            {user.companyName && (
-              <>
-                <DropdownMenuSeparator />
-                <div className="px-2 py-1.5 text-xs text-muted-foreground flex items-center gap-1">
-                  <Building2 className="h-3 w-3" />
-                  {user.companyName}
-                </div>
-              </>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <Sparkles />
-                Upgrade to Pro
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => router.push("/account")}>
-                <BadgeCheck />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push("/account?tab=team")}>
-                <Users />
-                Team
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push("/account?tab=notifications")}>
-                <Bell />
-                Notifications
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
+            <DropdownMenuItem onClick={() => router.push("/account")}>
+              <Settings className="mr-2 h-4 w-4" />
+              Settings
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={handleLogout}
@@ -153,9 +103,9 @@ export function NavUser({
               className="text-destructive focus:text-destructive focus:bg-destructive/10"
             >
               {loggingOut ? (
-                <Loader2 className="animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                <LogOut />
+                <LogOut className="mr-2 h-4 w-4" />
               )}
               {loggingOut ? "Logging out..." : "Log out"}
             </DropdownMenuItem>

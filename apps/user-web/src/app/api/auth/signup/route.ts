@@ -194,14 +194,18 @@ export async function POST(request: NextRequest) {
                 ? checkoutSession.customer
                 : checkoutSession.customer?.id
 
-              // Update workspace_billing with Stripe IDs
+              // Upsert workspace_billing with Stripe IDs (handles case where billing record may not exist yet)
               await adminSupabase
                 .from('workspace_billing')
-                .update({
+                .upsert({
+                  workspace_id: workspace.id,
                   stripe_customer_id: customerId,
                   stripe_subscription_id: subscriptionId,
-                })
-                .eq('workspace_id', workspace.id)
+                  plan: 'free', // Will be updated by updateBillingFromSubscription
+                  agent_tier: 'none',
+                  included_users: 3,
+                  storage_limit_gb: 1,
+                }, { onConflict: 'workspace_id' })
 
               // Update subscription metadata to include workspace_id
               await stripe.subscriptions.update(subscriptionId, {

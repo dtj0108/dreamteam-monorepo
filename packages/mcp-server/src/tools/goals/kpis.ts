@@ -175,10 +175,7 @@ async function kpiGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No KPI input found with this ID',
-          kpi: null,
-        })
+        return error('KPI input not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`)
     }

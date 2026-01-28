@@ -31,7 +31,12 @@ export interface ToolCallPart {
   state: "pending" | "running" | "completed" | "error"
 }
 
-export type MessagePart = TextPart | ReasoningPart | ToolCallPart
+export interface AcknowledgmentPart {
+  type: "acknowledgment"
+  content: string
+}
+
+export type MessagePart = TextPart | ReasoningPart | ToolCallPart | AcknowledgmentPart
 
 export interface AgentMessage {
   id: string
@@ -101,6 +106,8 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
     toolCalls: Map<string, ToolCallState>
   } | null>(null)
   const isConnectingRef = useRef<boolean>(false)
+  // Ref to track in-flight request to prevent race conditions
+  const isProcessingRef = useRef<boolean>(false)
 
   // Update conversationId when prop changes
   useEffect(() => {
@@ -122,8 +129,8 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
 
     const parts: MessagePart[] = []
 
-    // Add reasoning if present, or if we're connecting (to show "Thinking..." immediately)
-    if (current.reasoning || isConnectingRef.current) {
+    // Add reasoning only if we have actual reasoning content
+    if (current.reasoning) {
       parts.push({
         type: "reasoning",
         reasoning: current.reasoning,
@@ -181,8 +188,10 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim()) return
-      // Prevent duplicate sends if already processing
-      if (status !== "idle") return
+      // Prevent duplicate sends if already processing (atomic check using ref)
+      if (isProcessingRef.current) return
+      isProcessingRef.current = true
+      setStatus("connecting")
 
       // Add user message immediately
       const userMessage: AgentMessage = {
@@ -195,7 +204,6 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
       setMessages((prev) => [...prev, userMessage])
 
       // Reset state
-      setStatus("connecting")
       setError(null)
       setUsage(null)
 
@@ -291,6 +299,9 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
               case "text":
                 if (currentAssistantMessageRef.current) {
                   currentAssistantMessageRef.current.text += data.content
+                  if (process.env.NODE_ENV === "development") {
+                    console.log("[useAgentChat] Received text:", data.content.slice(0, 50))
+                  }
                   updateAssistantMessage()
                 }
                 break
@@ -344,6 +355,13 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
                   costUsd: data.usage.costUsd,
                 })
                 setStatus("idle")
+                if (process.env.NODE_ENV === "development") {
+                  console.log("[useAgentChat] Stream complete, final message:", {
+                    textLength: currentAssistantMessageRef.current?.text.length,
+                    reasoningLength: currentAssistantMessageRef.current?.reasoning.length,
+                    toolCalls: currentAssistantMessageRef.current?.toolCalls.size,
+                  })
+                }
                 break
             }
           }
@@ -356,6 +374,7 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
         isConnectingRef.current = false
         if ((err as Error).name === "AbortError") {
           setStatus("idle")
+          isProcessingRef.current = false
           return
         }
         const error = err instanceof Error ? err : new Error(String(err))
@@ -364,9 +383,10 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
         onError?.(error)
       } finally {
         abortControllerRef.current = null
+        isProcessingRef.current = false
       }
     },
-    [agentId, workspaceId, conversationId, onConversationCreated, onError, updateAssistantMessage, status]
+    [agentId, workspaceId, conversationId, onConversationCreated, onError, updateAssistantMessage]
   )
 
   const stopGeneration = useCallback(() => {
@@ -379,6 +399,7 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
       currentAssistantMessageRef.current = null
     }
     setStatus("idle")
+    isProcessingRef.current = false
   }, [])
 
   const clearMessages = useCallback(() => {

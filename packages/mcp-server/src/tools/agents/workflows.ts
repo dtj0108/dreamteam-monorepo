@@ -170,10 +170,7 @@ async function workflowGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No workflow found with this ID',
-          workflow: null,
-        })
+        return error('Workflow not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`)
     }
@@ -245,11 +242,7 @@ async function workflowUpdate(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No workflow found with this ID',
-        workflow: null,
-        updated: false,
-      })
+      return error('Workflow not found', 'not_found')
     }
 
     const updateData: Record<string, unknown> = {}
@@ -300,10 +293,7 @@ async function workflowDelete(params: {
       .single()
 
     if (getError || !existing) {
-      return success({
-        message: 'No workflow found with this ID',
-        deleted: false,
-      })
+      return error('Workflow not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -341,11 +331,7 @@ async function workflowExecute(params: {
       .single()
 
     if (getError || !workflow) {
-      return success({
-        message: 'No workflow found with this ID',
-        workflow: null,
-        executed: false,
-      })
+      return error('Workflow not found', 'not_found')
     }
 
     if (!workflow.is_active) {
@@ -402,11 +388,7 @@ async function workflowGetExecutions(params: {
       .single()
 
     if (!workflow) {
-      return success({
-        message: 'No workflow found with this ID',
-        executions: [],
-        count: 0,
-      })
+      return error('Workflow not found', 'not_found')
     }
 
     let query = supabase
@@ -455,11 +437,7 @@ async function workflowEnable(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No workflow found with this ID',
-          workflow: null,
-          enabled: false,
-        })
+        return error('Workflow not found', 'not_found')
       }
       return error(`Failed to enable workflow: ${dbError.message}`)
     }
@@ -490,11 +468,7 @@ async function workflowDisable(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No workflow found with this ID',
-          workflow: null,
-          disabled: false,
-        })
+        return error('Workflow not found', 'not_found')
       }
       return error(`Failed to disable workflow: ${dbError.message}`)
     }

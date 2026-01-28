@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import '@testing-library/jest-dom'
 
 // Mock environment variables
 vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://localhost:54321')

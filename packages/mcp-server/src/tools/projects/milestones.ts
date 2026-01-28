@@ -133,10 +133,7 @@ async function milestoneList(params: {
       .single()
 
     if (!project) {
-      return success({
-        message: 'No project found with this ID in this workspace',
-        project: null,
-      })
+      return error('Project not found', 'not_found')
     }
 
     let query = supabase
@@ -192,20 +189,14 @@ async function milestoneGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No milestone found with this ID',
-          milestone: null,
-        })
+        return error('Milestone not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
 
     const project = milestone.project as unknown as { workspace_id: string }
     if (project.workspace_id !== workspace_id) {
-      return success({
-        message: 'No milestone found with this ID in this workspace',
-        milestone: null,
-      })
+      return error('Milestone not found', 'not_found')
     }
 
     return success(milestone)
@@ -239,10 +230,7 @@ async function milestoneCreate(params: {
       .single()
 
     if (!project) {
-      return success({
-        message: 'No project found with this ID in this workspace',
-        project: null,
-      })
+      return error('Project not found', 'not_found')
     }
 
     const { data, error: dbError } = await supabase
@@ -289,10 +277,7 @@ async function milestoneUpdate(params: {
     const milestone = await getMilestoneWithProject(supabase, params.milestone_id, workspace_id)
 
     if (!milestone) {
-      return success({
-        message: 'No milestone found with this ID in this workspace',
-        milestone: null,
-      })
+      return error('Milestone not found', 'not_found')
     }
 
     const updateData: Record<string, unknown> = {}
@@ -302,11 +287,7 @@ async function milestoneUpdate(params: {
     if (params.status !== undefined) updateData.status = params.status
 
     if (Object.keys(updateData).length === 0) {
-      return success({
-        message: 'No fields provided to update',
-        milestone: null,
-        updated: false,
-      })
+      return error('No fields to update', 'validation')
     }
 
     const { data, error: dbError } = await supabase
@@ -344,10 +325,7 @@ async function milestoneDelete(params: {
     const milestone = await getMilestoneWithProject(supabase, params.milestone_id, workspace_id)
 
     if (!milestone) {
-      return success({
-        message: 'No milestone found with this ID in this workspace',
-        milestone: null,
-      })
+      return error('Milestone not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -390,18 +368,12 @@ async function milestoneAddTask(params: {
       .single()
 
     if (!milestone) {
-      return success({
-          message: 'No milestone found with this ID',
-          milestone: null,
-        })
+      return error('Milestone not found', 'not_found')
     }
 
     const project = milestone.project as unknown as { workspace_id: string }
     if (project.workspace_id !== workspace_id) {
-      return success({
-        message: 'No milestone found with this ID in this workspace',
-        milestone: null,
-      })
+      return error('Milestone not found', 'not_found')
     }
 
     // Verify task is in the same project
@@ -413,11 +385,7 @@ async function milestoneAddTask(params: {
       .single()
 
     if (!task) {
-      return success({
-        message: 'Task not found in the same project as milestone',
-        task: null,
-        linked: false,
-      })
+      return error('Task not found in the same project', 'not_found')
     }
 
     // Check if already linked
@@ -473,10 +441,7 @@ async function milestoneRemoveTask(params: {
     const milestone = await getMilestoneWithProject(supabase, params.milestone_id, workspace_id)
 
     if (!milestone) {
-      return success({
-        message: 'No milestone found with this ID in this workspace',
-        milestone: null,
-      })
+      return error('Milestone not found', 'not_found')
     }
 
     const { error: dbError } = await supabase
@@ -526,18 +491,12 @@ async function milestoneGetProgress(params: {
       .single()
 
     if (!milestone) {
-      return success({
-          message: 'No milestone found with this ID',
-          milestone: null,
-        })
+      return error('Milestone not found', 'not_found')
     }
 
     const project = milestone.project as unknown as { workspace_id: string }
     if (project.workspace_id !== workspace_id) {
-      return success({
-        message: 'No milestone found with this ID in this workspace',
-        milestone: null,
-      })
+      return error('Milestone not found', 'not_found')
     }
 
     // Calculate progress

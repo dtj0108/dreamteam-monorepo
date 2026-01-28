@@ -164,10 +164,7 @@ async function pipelineGet(params: {
 
     if (dbError) {
       if (dbError.code === 'PGRST116') {
-        return success({
-          message: 'No pipeline found with this ID',
-          pipeline: null,
-        })
+        return error('Pipeline not found', 'not_found')
       }
       return error(`Database error: ${dbError.message}`, 'database')
     }
