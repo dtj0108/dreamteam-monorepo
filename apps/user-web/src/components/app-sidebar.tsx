@@ -210,6 +210,7 @@ const salesNav = [
     items: [
       { title: "Phone Numbers", url: "/sales/settings/phone-numbers" },
       { title: "Email & Calendar", url: "/sales/settings/email" },
+      { title: "Messaging", url: "/sales/settings/messaging" },
     ],
   },
   {

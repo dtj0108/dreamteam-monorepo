@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -37,6 +37,8 @@ import {
   Loader2Icon,
   Trash2Icon,
   PencilIcon,
+  Activity,
+  Loader2,
 } from "lucide-react"
 import { WorkflowsProvider, useWorkflows } from "@/providers/workflows-provider"
 import { TRIGGERS, getTriggerDefinition, type TriggerType } from "@/types/workflow"
@@ -48,8 +50,41 @@ function WorkflowsPageContent() {
   const [newWorkflowName, setNewWorkflowName] = useState("")
   const [newWorkflowTrigger, setNewWorkflowTrigger] = useState<TriggerType>("lead_created")
   const [isCreating, setIsCreating] = useState(false)
+  const [executionCounts, setExecutionCounts] = useState<Record<string, number>>({})
+  const [loadingCounts, setLoadingCounts] = useState(false)
 
   const activeCount = workflows.filter(w => w.is_active).length
+
+  const fetchExecutionCounts = async () => {
+    if (!workflows.length) return
+
+    setLoadingCounts(true)
+    try {
+      const counts: Record<string, number> = {}
+
+      await Promise.all(
+        workflows.map(async (workflow) => {
+          const response = await fetch(
+            `/api/workflows/${workflow.id}/executions?limit=1&offset=0`
+          )
+          if (response.ok) {
+            const data = await response.json()
+            counts[workflow.id] = data.total || 0
+          }
+        })
+      )
+
+      setExecutionCounts(counts)
+    } finally {
+      setLoadingCounts(false)
+    }
+  }
+
+  useEffect(() => {
+    if (workflows.length > 0) {
+      fetchExecutionCounts()
+    }
+  }, [workflows.length])
 
   const handleCreateWorkflow = async () => {
     if (!newWorkflowName.trim()) return
@@ -167,8 +202,23 @@ function WorkflowsPageContent() {
                     </p>
                   </div>
                   <div className="text-right mr-4">
-                    <div className="text-sm font-medium">{workflow.actions?.length || 0} actions</div>
-                    <p className="text-sm text-muted-foreground">
+                    <div className="flex gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <ZapIcon className="h-4 w-4" />
+                        <span>{workflow.actions?.length || 0} actions</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Activity className="h-4 w-4" />
+                        <span>
+                          {loadingCounts ? (
+                            <Loader2 className="h-3 w-3 animate-spin inline" />
+                          ) : (
+                            executionCounts[workflow.id] || 0
+                          )} executions
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
                       {workflow.is_active ? "Active" : "Inactive"}
                     </p>
                   </div>

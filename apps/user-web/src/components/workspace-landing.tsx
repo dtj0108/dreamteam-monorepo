@@ -35,6 +35,10 @@ const workspaceConfig: Record<WorkspaceId, {
       { emoji: "🎯", label: "Opportunities", description: "Track deals through stages", href: "/sales/opportunities" },
       { emoji: "👤", label: "Add Lead", description: "Capture new opportunities", href: "/sales/leads" },
       { emoji: "👥", label: "Contacts", description: "Manage relationships", href: "/sales/contacts" },
+      { emoji: "⚙️", label: "Workflows", description: "Automate sales processes", href: "/sales/workflows" },
+      { emoji: "📅", label: "Activities", description: "Track calls, emails, meetings", href: "/sales/activities" },
+      { emoji: "💬", label: "Conversations", description: "View all communications", href: "/sales/conversations" },
+      { emoji: "📊", label: "Reports", description: "Sales analytics and insights", href: "/sales/reports" },
     ],
   },
   team: {

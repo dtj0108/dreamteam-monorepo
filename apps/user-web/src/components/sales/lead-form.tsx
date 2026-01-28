@@ -28,7 +28,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Check, ChevronDown, X } from "lucide-react"
+import { Check, ChevronDown, X, AlertCircle } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { LeadStatus, CustomField, LeadPipeline, LeadPipelineStage } from "@/types/customization"
 
@@ -130,6 +132,11 @@ export function LeadForm({
   const [customValues, setCustomValues] = React.useState<Record<string, string>>({})
   const [selectedPipelineId, setSelectedPipelineId] = React.useState<string | undefined>()
   const [selectedTagIds, setSelectedTagIds] = React.useState<string[]>([])
+  const [duplicateCheck, setDuplicateCheck] = React.useState<{
+    isDuplicate: boolean
+    similarity: number
+    matchedLead?: { id: string; name: string }
+  } | null>(null)
 
   // Build status options from custom statuses or fall back to defaults
   const statusOptions = React.useMemo(() => {
@@ -228,6 +235,48 @@ export function LeadForm({
       setCustomValues({})
     }
   }, [customFieldValues, open])
+
+  // Check for duplicates when name or website changes
+  React.useEffect(() => {
+    // Only check for new leads, not when editing
+    if (lead) {
+      setDuplicateCheck(null)
+      return
+    }
+
+    if (!formData.name || !open) {
+      setDuplicateCheck(null)
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch("/api/leads/check-duplicates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            leads: [{
+              name: formData.name,
+              website: formData.website || null
+            }]
+          })
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.results?.[0]) {
+            setDuplicateCheck(data.results[0])
+          } else {
+            setDuplicateCheck(null)
+          }
+        }
+      } catch (error) {
+        console.error("Error checking duplicates:", error)
+      }
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [formData.name, formData.website, open, lead])
 
   // Toggle tag selection
   const toggleTag = (tagId: string) => {
@@ -345,7 +394,7 @@ export function LeadForm({
   }
 
   // Get the selected assigned user for display
-  const selectedMember = members.find((m) => m.profileId === formData.assigned_to)
+  const selectedMember = Array.isArray(members) ? members.find((m) => m.profileId === formData.assigned_to) : undefined
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -451,7 +500,7 @@ export function LeadForm({
                 </Select>
               </div>
 
-              {members.length > 0 && (
+              {members && members.length > 0 && (
                 <div className="grid gap-2">
                   <Label htmlFor="assigned_to">Assigned To</Label>
                   <Select
@@ -484,7 +533,7 @@ export function LeadForm({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {members.map((member) => (
+                      {Array.isArray(members) && members.map((member) => (
                         <SelectItem key={member.profileId} value={member.profileId}>
                           <div className="flex items-center gap-2">
                             <Avatar className="h-5 w-5">
@@ -566,7 +615,7 @@ export function LeadForm({
             )}
 
             {/* Tags */}
-            {tags.length > 0 && (
+            {tags && tags.length > 0 && (
               <div className="grid gap-2">
                 <Label>Tags</Label>
                 <Popover>
@@ -584,7 +633,7 @@ export function LeadForm({
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {selectedTagIds.slice(0, 3).map((tagId) => {
-                            const tag = tags.find((t) => t.id === tagId)
+                            const tag = Array.isArray(tags) ? tags.find((t) => t.id === tagId) : undefined
                             if (!tag) return null
                             return (
                               <Badge
@@ -613,7 +662,7 @@ export function LeadForm({
                   </PopoverTrigger>
                   <PopoverContent className="w-64 p-2" align="start">
                     <div className="space-y-1 max-h-48 overflow-y-auto">
-                      {tags.map((tag) => {
+                      {Array.isArray(tags) && tags.map((tag) => {
                         const isSelected = selectedTagIds.includes(tag.id)
                         return (
                           <div
@@ -655,7 +704,7 @@ export function LeadForm({
                 {selectedTagIds.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
                     {selectedTagIds.map((tagId) => {
-                      const tag = tags.find((t) => t.id === tagId)
+                      const tag = Array.isArray(tags) ? tags.find((t) => t.id === tagId) : undefined
                       if (!tag) return null
                       return (
                         <Badge
@@ -772,6 +821,24 @@ export function LeadForm({
                   </div>
                 ))}
               </div>
+            )}
+
+            {duplicateCheck?.isDuplicate && (
+              <Alert variant="default" className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+                <AlertCircle className="h-4 w-4 text-yellow-600" />
+                <AlertTitle className="text-yellow-900 dark:text-yellow-100">Possible Duplicate</AlertTitle>
+                <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                  Similar lead found: {duplicateCheck.matchedLead?.name}
+                  {" "}({Math.round(duplicateCheck.similarity * 100)}% match).
+                  <Link
+                    href={`/sales/leads/${duplicateCheck.matchedLead?.id}`}
+                    className="ml-2 underline hover:no-underline"
+                    target="_blank"
+                  >
+                    View existing lead
+                  </Link>
+                </AlertDescription>
+              </Alert>
             )}
           </div>
           <DialogFooter>
