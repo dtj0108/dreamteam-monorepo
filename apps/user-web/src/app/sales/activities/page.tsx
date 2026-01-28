@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -31,6 +32,8 @@ import {
 import { useSales, Activity, ActivityType } from "@/providers/sales-provider"
 import { ActivityForm, Activity as ActivityFormData } from "@/components/sales/activity-form"
 import type { WorkspaceMember } from "@/components/sales/activity-assignee-picker"
+import { BulkActionBar } from "@/components/sales/bulk-action-bar"
+import { cn } from "@/lib/utils"
 
 interface Contact {
   id: string
@@ -60,11 +63,15 @@ function getInitials(name: string) {
 
 function ActivityItem({
   activity,
+  selected,
+  onSelect,
   onComplete,
   onEdit,
   onDelete,
 }: {
   activity: Activity
+  selected: boolean
+  onSelect: (id: string, selected: boolean) => void
   onComplete: (id: string, completed: boolean) => void
   onEdit: (activity: Activity) => void
   onDelete: (id: string) => void
@@ -93,11 +100,14 @@ function ActivityItem({
   return (
     <div className="flex items-center gap-4 p-4 border-b last:border-b-0">
       <Checkbox
-        checked={activity.is_completed}
-        onCheckedChange={(checked) => onComplete(activity.id, !checked)}
+        checked={selected}
+        onCheckedChange={(checked) => onSelect(activity.id, checked === true)}
       />
-      <div className="size-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-        <Icon className="size-5 text-muted-foreground" />
+      <div className={cn(
+        "size-10 rounded-lg bg-muted flex items-center justify-center shrink-0",
+        activity.is_completed && "opacity-50"
+      )}>
+        <Icon className={cn("size-5 text-muted-foreground", activity.is_completed && "line-through")} />
       </div>
       <div className="flex-1 min-w-0">
         <p className="font-medium truncate">
@@ -160,6 +170,9 @@ function ActivityItem({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => onComplete(activity.id, activity.is_completed)}>
+            {activity.is_completed ? "Mark Incomplete" : "Mark Complete"}
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => onEdit(activity)}>Edit</DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => onDelete(activity.id)}
@@ -190,6 +203,10 @@ export default function ActivitiesPage() {
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [currentUserId, setCurrentUserId] = useState<string>()
   const [activeTab, setActiveTab] = useState("upcoming")
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
+  const [isBulkCompleting, setIsBulkCompleting] = useState(false)
+
+  const selectedActivities = Object.keys(rowSelection).filter((id) => rowSelection[id])
 
   // Fetch activities, contacts, and members on mount
   useEffect(() => {
@@ -286,6 +303,29 @@ export default function ActivitiesPage() {
     await deleteActivity(id)
   }
 
+  const handleBulkComplete = async () => {
+    setIsBulkCompleting(true)
+    try {
+      await fetch("/api/activities/bulk-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          activity_ids: selectedActivities,
+          updates: {
+            is_completed: true,
+            completed_at: new Date().toISOString(),
+          },
+        }),
+      })
+      await fetchActivities()
+      setRowSelection({})
+    } catch (error) {
+      console.error("Error bulk completing activities:", error)
+    } finally {
+      setIsBulkCompleting(false)
+    }
+  }
+
   const getActivitiesForTab = () => {
     switch (activeTab) {
       case "upcoming":
@@ -310,6 +350,10 @@ export default function ActivitiesPage() {
             <ActivityItem
               key={activity.id}
               activity={activity}
+              selected={rowSelection[activity.id] || false}
+              onSelect={(id, selected) =>
+                setRowSelection((prev) => ({ ...prev, [id]: selected }))
+              }
               onComplete={handleComplete}
               onEdit={openEditForm}
               onDelete={handleDelete}
@@ -384,7 +428,22 @@ export default function ActivitiesPage() {
     <div className="p-6">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Activities</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold">Activities</h1>
+            {upcomingActivities.length > 0 && (
+              <Badge
+                variant={
+                  upcomingActivities.length > 10
+                    ? "destructive"
+                    : upcomingActivities.length > 5
+                      ? "default"
+                      : "secondary"
+                }
+              >
+                {upcomingActivities.length} open
+              </Badge>
+            )}
+          </div>
           <p className="text-muted-foreground">Track calls, emails, meetings, and tasks</p>
         </div>
         <Button onClick={() => openFormWithType("task")}>
@@ -424,6 +483,22 @@ export default function ActivitiesPage() {
             : renderEmptyState("all")}
         </TabsContent>
       </Tabs>
+
+      {selectedActivities.length > 0 && (
+        <BulkActionBar
+          selectedCount={selectedActivities.length}
+          onClearSelection={() => setRowSelection({})}
+          actions={[
+            {
+              id: "complete",
+              label: "Mark Complete",
+              icon: <CheckCircleIcon className="h-4 w-4" />,
+              onClick: handleBulkComplete,
+              loading: isBulkCompleting,
+            },
+          ]}
+        />
+      )}
 
       <ActivityForm
         open={activityFormOpen}

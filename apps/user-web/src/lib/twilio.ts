@@ -22,6 +22,10 @@ export const MessagingResponse = twilio.twiml.MessagingResponse
  */
 export async function sendVerificationCode(phoneNumber: string): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log('[Twilio] Sending verification code to:', phoneNumber)
+    console.log('[Twilio] Using Verify Service SID:', verifyServiceSid)
+    console.log('[Twilio] Using Account SID:', accountSid)
+
     const verification = await client.verify.v2
       .services(verifyServiceSid)
       .verifications.create({
@@ -29,12 +33,14 @@ export async function sendVerificationCode(phoneNumber: string): Promise<{ succe
         channel: 'sms',
       })
 
+    console.log('[Twilio] Verification status:', verification.status)
     return { success: verification.status === 'pending' }
   } catch (error) {
     console.error('Failed to send verification code:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to send code' 
+    console.error('[Twilio] Error details:', JSON.stringify(error, null, 2))
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send code'
     }
   }
 }

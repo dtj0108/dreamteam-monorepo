@@ -166,7 +166,7 @@ export default function LeadsPage() {
         }
         if (membersRes.ok) {
           const data = await membersRes.json()
-          setMembers(data)
+          setMembers(data.members)
         }
       } catch (error) {
         console.error("Error fetching customization data:", error)
