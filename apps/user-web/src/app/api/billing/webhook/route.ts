@@ -8,6 +8,7 @@ import {
   handleSubscriptionCanceled,
   recordInvoice,
   completeCheckoutSession,
+  savePaymentMethodFromIntent,
   type WorkspacePlan,
   type AgentTier,
 } from '@/lib/billing-queries'
@@ -83,6 +84,27 @@ export async function POST(request: NextRequest) {
           if (purchase) {
             await addSMSCredits(purchase.workspace_id, bundleType, purchase.id)
             console.log(`SMS credits added for workspace ${purchase.workspace_id}: ${bundleType}`)
+
+            // Save payment method from the completed checkout session
+            const paymentIntentId = session.payment_intent as string
+            console.log(`[webhook] Attempting to save payment method. PI: ${paymentIntentId}, workspace: ${purchase.workspace_id}`)
+            if (paymentIntentId && purchase.workspace_id) {
+              try {
+                await savePaymentMethodFromIntent(purchase.workspace_id, paymentIntentId)
+                console.log(`[webhook] Payment method saved successfully for workspace ${purchase.workspace_id}`)
+              } catch (pmError) {
+                console.error('[webhook] Failed to save payment method:', pmError)
+                // Log full error details
+                if (pmError instanceof Error) {
+                  console.error('[webhook] Error name:', pmError.name)
+                  console.error('[webhook] Error message:', pmError.message)
+                  console.error('[webhook] Error stack:', pmError.stack)
+                }
+                // Don't fail the webhook - credits were still added
+              }
+            } else {
+              console.error(`[webhook] Missing data: paymentIntentId=${paymentIntentId}, workspace_id=${purchase.workspace_id}`)
+            }
           } else {
             console.error('Could not find pending SMS purchase for session:', session.id)
           }
@@ -97,6 +119,27 @@ export async function POST(request: NextRequest) {
           if (purchase) {
             await addCallMinutes(purchase.workspace_id, bundleType, purchase.id)
             console.log(`Call minutes added for workspace ${purchase.workspace_id}: ${bundleType}`)
+
+            // Save payment method from the completed checkout session
+            const paymentIntentId = session.payment_intent as string
+            console.log(`[webhook] Attempting to save payment method. PI: ${paymentIntentId}, workspace: ${purchase.workspace_id}`)
+            if (paymentIntentId && purchase.workspace_id) {
+              try {
+                await savePaymentMethodFromIntent(purchase.workspace_id, paymentIntentId)
+                console.log(`[webhook] Payment method saved successfully for workspace ${purchase.workspace_id}`)
+              } catch (pmError) {
+                console.error('[webhook] Failed to save payment method:', pmError)
+                // Log full error details
+                if (pmError instanceof Error) {
+                  console.error('[webhook] Error name:', pmError.name)
+                  console.error('[webhook] Error message:', pmError.message)
+                  console.error('[webhook] Error stack:', pmError.stack)
+                }
+                // Don't fail the webhook - minutes were still added
+              }
+            } else {
+              console.error(`[webhook] Missing data: paymentIntentId=${paymentIntentId}, workspace_id=${purchase.workspace_id}`)
+            }
           } else {
             console.error('Could not find pending call minutes purchase for session:', session.id)
           }
@@ -291,6 +334,69 @@ export async function POST(request: NextRequest) {
             await markCallMinutesPurchaseFailed(purchase.id)
             console.log(`Call minutes purchase marked as failed (expired): ${purchase.id}`)
           }
+        }
+        break
+      }
+
+      // ============================================
+      // PAYMENT INTENT SUCCEEDED (Direct charges)
+      // ============================================
+      case 'payment_intent.succeeded': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent
+        const workspaceId = paymentIntent.metadata?.workspace_id
+        const chargeType = paymentIntent.metadata?.type
+        const isDirectCharge = paymentIntent.metadata?.direct_charge === 'true'
+
+        // Only handle direct charges (not checkout session payments)
+        if (!isDirectCharge || !workspaceId) {
+          break
+        }
+
+        // Direct charges are handled synchronously in the charge endpoint
+        // This webhook confirms the charge was successful
+        console.log(`Direct charge succeeded for workspace ${workspaceId}: ${chargeType}, amount: ${paymentIntent.amount}`)
+
+        // Update auto_replenish_attempts if this was an auto-replenish charge
+        if (paymentIntent.metadata?.auto_replenish_attempt_id) {
+          await supabase
+            .from('auto_replenish_attempts')
+            .update({
+              status: 'succeeded',
+              stripe_charge_id: paymentIntent.latest_charge as string,
+              succeeded_at: new Date().toISOString(),
+            })
+            .eq('id', paymentIntent.metadata.auto_replenish_attempt_id)
+        }
+        break
+      }
+
+      // ============================================
+      // PAYMENT INTENT FAILED (Direct charges)
+      // ============================================
+      case 'payment_intent.payment_failed': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent
+        const workspaceId = paymentIntent.metadata?.workspace_id
+        const chargeType = paymentIntent.metadata?.type
+        const isDirectCharge = paymentIntent.metadata?.direct_charge === 'true'
+
+        if (!isDirectCharge || !workspaceId) {
+          break
+        }
+
+        const lastError = paymentIntent.last_payment_error
+        console.log(`Direct charge failed for workspace ${workspaceId}: ${chargeType}`, lastError?.message)
+
+        // Update auto_replenish_attempts if this was an auto-replenish charge
+        if (paymentIntent.metadata?.auto_replenish_attempt_id) {
+          await supabase
+            .from('auto_replenish_attempts')
+            .update({
+              status: 'failed',
+              error_code: lastError?.code || null,
+              error_message: lastError?.message || 'Payment failed',
+              failed_at: new Date().toISOString(),
+            })
+            .eq('id', paymentIntent.metadata.auto_replenish_attempt_id)
         }
         break
       }

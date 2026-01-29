@@ -1,19 +1,21 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
 import { MessageSquare, Phone, PhoneCall, CheckCircle, XCircle } from 'lucide-react'
-import { useSMSCredits, useCallMinutes, usePhoneNumbers } from '@/hooks/use-addons'
+import { useSMSCredits, useCallMinutes, usePhoneNumbers, usePaymentMethod, type PurchaseResult } from '@/hooks/use-addons'
 import { CreditsBalanceCard } from './credits-balance-card'
 import { BundlesGrid } from './bundles-grid'
 import { UsageTable } from './usage-table'
 import { PhoneBillingCard } from './phone-billing-card'
 import { AddonsOverview } from './addons-overview'
-import { isSMSBalanceLow, isCallMinutesLow } from '@/types/addons'
+import { PurchaseConfirmDialog } from './purchase-confirm-dialog'
+import { PaymentMethodCard } from '@/components/billing/payment-method-card'
+import { isSMSBalanceLow, isCallMinutesLow, type CreditBundle } from '@/types/addons'
 
 export function AddOnsPage() {
   const searchParams = useSearchParams()
@@ -21,6 +23,19 @@ export function AddOnsPage() {
   const canceled = searchParams.get('canceled')
   const creditsAdded = searchParams.get('credits')
   const minutesAdded = searchParams.get('minutes')
+
+  // Confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean
+    type: 'sms_credits' | 'call_minutes'
+    bundle: CreditBundle
+  }>({ open: false, type: 'sms_credits', bundle: 'starter' })
+
+  // Direct charge result message
+  const [chargeResult, setChargeResult] = useState<{
+    type: 'success' | 'error'
+    message: string
+  } | null>(null)
 
   const {
     credits: smsCredits,
@@ -48,14 +63,73 @@ export function AddOnsPage() {
     isLoading: phoneLoading,
   } = usePhoneNumbers()
 
+  const {
+    hasPaymentMethod,
+    paymentMethod,
+    isLoading: paymentMethodLoading,
+    refresh: refreshPaymentMethod,
+  } = usePaymentMethod()
+
   // Refresh data when returning from successful checkout
   useEffect(() => {
     if (successType === 'sms') {
       refreshSMS()
+      refreshPaymentMethod() // Card may have been saved
     } else if (successType === 'minutes') {
       refreshMinutes()
+      refreshPaymentMethod() // Card may have been saved
     }
-  }, [successType, refreshSMS, refreshMinutes])
+  }, [successType, refreshSMS, refreshMinutes, refreshPaymentMethod])
+
+  // Handle purchase with confirmation dialog for saved cards
+  const handlePurchase = async (type: 'sms_credits' | 'call_minutes', bundle: CreditBundle) => {
+    if (hasPaymentMethod) {
+      // Show confirmation dialog for instant charge
+      setConfirmDialog({ open: true, type, bundle })
+    } else {
+      // No saved card - go directly to Stripe Checkout
+      if (type === 'sms_credits') {
+        await purchaseSMSBundle(bundle)
+      } else {
+        await purchaseMinutesBundle(bundle)
+      }
+    }
+  }
+
+  // Execute the confirmed purchase
+  const handleConfirmPurchase = async () => {
+    const { type, bundle } = confirmDialog
+    let result: PurchaseResult
+
+    if (type === 'sms_credits') {
+      result = await purchaseSMSBundle(bundle)
+    } else {
+      result = await purchaseMinutesBundle(bundle)
+    }
+
+    setConfirmDialog({ ...confirmDialog, open: false })
+
+    if (result.success) {
+      setChargeResult({
+        type: 'success',
+        message: type === 'sms_credits'
+          ? `${result.creditsAdded?.toLocaleString()} SMS credits added!`
+          : `${result.minutesAdded?.toLocaleString()} call minutes added!`
+      })
+      // Clear message after 5 seconds
+      setTimeout(() => setChargeResult(null), 5000)
+    } else if (result.requiresAction) {
+      // 3DS required - for now, fall back to checkout
+      if (type === 'sms_credits') {
+        await purchaseSMSBundle(bundle, { skipDirectCharge: true })
+      } else {
+        await purchaseMinutesBundle(bundle, { skipDirectCharge: true })
+      }
+    } else if (result.error && !result.requiresRedirect) {
+      setChargeResult({ type: 'error', message: result.error })
+      setTimeout(() => setChargeResult(null), 5000)
+    }
+  }
 
   const isLoading = smsLoading || minutesLoading || phoneLoading
 
@@ -88,6 +162,23 @@ export function AddOnsPage() {
         </Alert>
       )}
 
+      {/* Direct Charge Result Alert */}
+      {chargeResult && (
+        <Alert className={chargeResult.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}>
+          {chargeResult.type === 'success' ? (
+            <CheckCircle className="h-4 w-4 text-green-600" />
+          ) : (
+            <XCircle className="h-4 w-4 text-red-600" />
+          )}
+          <AlertTitle className={chargeResult.type === 'success' ? 'text-green-800' : 'text-red-800'}>
+            {chargeResult.type === 'success' ? 'Purchase successful!' : 'Purchase failed'}
+          </AlertTitle>
+          <AlertDescription className={chargeResult.type === 'success' ? 'text-green-700' : 'text-red-700'}>
+            {chargeResult.message}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="mb-2">
         <h1 className="text-3xl font-bold">Add-ons</h1>
@@ -104,6 +195,24 @@ export function AddOnsPage() {
           phoneSubscription={phoneSubscription}
         />
       )}
+
+      {/* Payment Method Card */}
+      {!paymentMethodLoading && (
+        <PaymentMethodCard
+          paymentMethod={paymentMethod}
+          isLoading={paymentMethodLoading}
+        />
+      )}
+
+      {/* Purchase Confirmation Dialog */}
+      <PurchaseConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}
+        type={confirmDialog.type}
+        bundle={confirmDialog.bundle}
+        paymentMethod={paymentMethod}
+        onConfirm={handleConfirmPurchase}
+      />
 
       {/* Tabs */}
       <Tabs defaultValue="sms" className="space-y-6">
@@ -140,7 +249,7 @@ export function AddOnsPage() {
                 <h2 className="text-lg font-semibold mb-4">Purchase Credits</h2>
                 <BundlesGrid
                   type="sms"
-                  onPurchase={purchaseSMSBundle}
+                  onPurchase={(bundle) => handlePurchase('sms_credits', bundle)}
                   isPurchasing={smsPurchasing}
                 />
               </div>
@@ -171,7 +280,7 @@ export function AddOnsPage() {
                 <h2 className="text-lg font-semibold mb-4">Purchase Minutes</h2>
                 <BundlesGrid
                   type="minutes"
-                  onPurchase={purchaseMinutesBundle}
+                  onPurchase={(bundle) => handlePurchase('call_minutes', bundle)}
                   isPurchasing={minutesPurchasing}
                 />
               </div>
