@@ -37,6 +37,50 @@ export interface BillingState {
   current_user_count: number
   storage_limit_gb: number
   storage_used_gb: number
+  // Payment method fields for card-on-file
+  default_payment_method_id: string | null
+  payment_method_last4: string | null
+  payment_method_brand: string | null
+  payment_method_exp_month: number | null
+  payment_method_exp_year: number | null
+  payment_method_updated_at: string | null
+}
+
+/**
+ * Saved payment method info for display
+ */
+export interface PaymentMethodInfo {
+  id: string
+  last4: string
+  brand: string
+  expMonth: number
+  expYear: number
+}
+
+/**
+ * Auto-replenish attempt status
+ */
+export type AutoReplenishStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'requires_action'
+
+/**
+ * Auto-replenish attempt record
+ */
+export interface AutoReplenishAttempt {
+  id: string
+  workspace_id: string
+  replenish_type: 'sms_credits' | 'call_minutes'
+  bundle: string
+  amount_cents: number
+  credits_or_minutes: number
+  stripe_payment_intent_id: string | null
+  stripe_charge_id: string | null
+  status: AutoReplenishStatus
+  error_code: string | null
+  error_message: string | null
+  succeeded_at: string | null
+  failed_at: string | null
+  created_at: string
+  updated_at: string
 }
 
 /**
@@ -198,4 +242,57 @@ export function getTrialDaysRemaining(trialEnd: string | null): number | null {
   const diffMs = endDate.getTime() - now.getTime()
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
   return diffDays > 0 ? diffDays : 0
+}
+
+/**
+ * Check if billing has a saved payment method
+ */
+export function hasPaymentMethod(billing: BillingState | null): boolean {
+  return !!(billing?.default_payment_method_id && billing?.payment_method_last4)
+}
+
+/**
+ * Get payment method info from billing state
+ */
+export function getPaymentMethodInfo(billing: BillingState | null): PaymentMethodInfo | null {
+  if (!billing?.default_payment_method_id || !billing?.payment_method_last4) {
+    return null
+  }
+  return {
+    id: billing.default_payment_method_id,
+    last4: billing.payment_method_last4,
+    brand: billing.payment_method_brand || 'card',
+    expMonth: billing.payment_method_exp_month || 0,
+    expYear: billing.payment_method_exp_year || 0,
+  }
+}
+
+/**
+ * Format card brand for display
+ */
+export function formatCardBrand(brand: string): string {
+  const brands: Record<string, string> = {
+    visa: 'Visa',
+    mastercard: 'Mastercard',
+    amex: 'American Express',
+    discover: 'Discover',
+    diners: 'Diners Club',
+    jcb: 'JCB',
+    unionpay: 'UnionPay',
+    unknown: 'Card',
+  }
+  return brands[brand.toLowerCase()] || 'Card'
+}
+
+/**
+ * Check if card is expiring soon (within 2 months)
+ */
+export function isCardExpiringSoon(billing: BillingState | null): boolean {
+  if (!billing?.payment_method_exp_month || !billing?.payment_method_exp_year) {
+    return false
+  }
+  const now = new Date()
+  const expiry = new Date(billing.payment_method_exp_year, billing.payment_method_exp_month - 1)
+  const twoMonthsFromNow = new Date(now.getFullYear(), now.getMonth() + 2)
+  return expiry <= twoMonthsFromNow
 }

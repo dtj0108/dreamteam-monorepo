@@ -118,6 +118,7 @@ export async function POST(request: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001'
 
     // Create Stripe checkout session for one-time payment
+    // setup_future_usage saves the card for future off-session charges (auto-replenish, quick purchases)
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
@@ -128,6 +129,9 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
+      payment_intent_data: {
+        setup_future_usage: 'off_session',
+      },
       success_url: `${appUrl}/sales/add-ons?success=minutes&minutes=${bundleConfig.minutes}`,
       cancel_url: `${appUrl}/sales/add-ons?canceled=true`,
       metadata: {

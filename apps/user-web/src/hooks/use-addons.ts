@@ -18,6 +18,75 @@ import {
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 // ============================================
+// TYPES FOR DIRECT CHARGING
+// ============================================
+
+interface ChargeResponse {
+  success: boolean
+  noPaymentMethod?: boolean
+  requiresAction?: boolean
+  clientSecret?: string
+  paymentIntentId?: string
+  error?: string
+  errorCode?: string
+  creditsAdded?: number
+  minutesAdded?: number
+}
+
+interface PaymentMethodInfo {
+  brand: string
+  last4: string
+  expMonth: number
+  expYear: number
+}
+
+interface PaymentMethodData {
+  hasPaymentMethod: boolean
+  paymentMethod: PaymentMethodInfo | null
+}
+
+export type PurchaseResult = {
+  success: boolean
+  requiresRedirect?: boolean
+  requiresAction?: boolean
+  clientSecret?: string
+  paymentIntentId?: string
+  error?: string
+  creditsAdded?: number
+  minutesAdded?: number
+}
+
+// ============================================
+// PAYMENT METHOD HOOK
+// ============================================
+
+export function usePaymentMethod() {
+  const { data, error, mutate } = useSWR<PaymentMethodData>(
+    '/api/addons/charge',
+    fetcher
+  )
+
+  const removePaymentMethod = useCallback(async () => {
+    const response = await fetch('/api/addons/payment-method', {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      throw new Error('Failed to remove payment method')
+    }
+    mutate()
+  }, [mutate])
+
+  return {
+    hasPaymentMethod: data?.hasPaymentMethod ?? false,
+    paymentMethod: data?.paymentMethod ?? null,
+    isLoading: !data && !error,
+    error,
+    refresh: mutate,
+    removePaymentMethod,
+  }
+}
+
+// ============================================
 // SMS CREDITS HOOK
 // ============================================
 
@@ -35,9 +104,59 @@ export function useSMSCredits() {
     fetcher
   )
 
-  const purchaseBundle = useCallback(async (bundle: CreditBundle) => {
+  /**
+   * Purchase SMS credits bundle
+   * First tries direct charge, falls back to Stripe Checkout if no card on file
+   * Returns result for caller to handle (e.g., show confirmation dialog, handle 3DS)
+   */
+  const purchaseBundle = useCallback(async (
+    bundle: CreditBundle,
+    { skipDirectCharge = false }: { skipDirectCharge?: boolean } = {}
+  ): Promise<PurchaseResult> => {
     setIsPurchasing(true)
     try {
+      // Try direct charge first (unless explicitly skipped)
+      if (!skipDirectCharge) {
+        const chargeResponse = await fetch('/api/addons/charge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'sms_credits', bundle }),
+        })
+
+        const chargeResult: ChargeResponse = await chargeResponse.json()
+
+        // Direct charge succeeded
+        if (chargeResult.success) {
+          await mutate() // Refresh balance
+          return {
+            success: true,
+            creditsAdded: chargeResult.creditsAdded,
+          }
+        }
+
+        // 3DS required - caller should handle with Stripe.js
+        if (chargeResult.requiresAction) {
+          return {
+            success: false,
+            requiresAction: true,
+            clientSecret: chargeResult.clientSecret,
+            paymentIntentId: chargeResult.paymentIntentId,
+          }
+        }
+
+        // No payment method - need to redirect to Stripe Checkout
+        if (chargeResult.noPaymentMethod) {
+          // Fall through to Stripe Checkout
+        } else {
+          // Other error (card declined, etc.)
+          return {
+            success: false,
+            error: chargeResult.error || 'Charge failed',
+          }
+        }
+      }
+
+      // Fall back to Stripe Checkout (creates session and redirects)
       const response = await fetch('/api/addons/sms-credits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -51,11 +170,24 @@ export function useSMSCredits() {
       const { url } = await response.json()
       if (url) {
         window.location.href = url
+        return { success: false, requiresRedirect: true }
       }
+
+      return { success: false, error: 'No checkout URL returned' }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Purchase failed'
+      return { success: false, error }
     } finally {
       setIsPurchasing(false)
     }
-  }, [])
+  }, [mutate])
+
+  /**
+   * Legacy method - redirects to Stripe Checkout directly
+   */
+  const purchaseBundleCheckout = useCallback(async (bundle: CreditBundle) => {
+    return purchaseBundle(bundle, { skipDirectCharge: true })
+  }, [purchaseBundle])
 
   const updateAutoReplenish = useCallback(async (
     enabled: boolean,
@@ -78,6 +210,7 @@ export function useSMSCredits() {
     error,
     isPurchasing,
     purchaseBundle,
+    purchaseBundleCheckout,
     updateAutoReplenish,
     refresh: mutate,
   }
@@ -101,9 +234,59 @@ export function useCallMinutes() {
     fetcher
   )
 
-  const purchaseBundle = useCallback(async (bundle: CreditBundle) => {
+  /**
+   * Purchase call minutes bundle
+   * First tries direct charge, falls back to Stripe Checkout if no card on file
+   * Returns result for caller to handle (e.g., show confirmation dialog, handle 3DS)
+   */
+  const purchaseBundle = useCallback(async (
+    bundle: CreditBundle,
+    { skipDirectCharge = false }: { skipDirectCharge?: boolean } = {}
+  ): Promise<PurchaseResult> => {
     setIsPurchasing(true)
     try {
+      // Try direct charge first (unless explicitly skipped)
+      if (!skipDirectCharge) {
+        const chargeResponse = await fetch('/api/addons/charge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'call_minutes', bundle }),
+        })
+
+        const chargeResult: ChargeResponse = await chargeResponse.json()
+
+        // Direct charge succeeded
+        if (chargeResult.success) {
+          await mutate() // Refresh balance
+          return {
+            success: true,
+            minutesAdded: chargeResult.minutesAdded,
+          }
+        }
+
+        // 3DS required - caller should handle with Stripe.js
+        if (chargeResult.requiresAction) {
+          return {
+            success: false,
+            requiresAction: true,
+            clientSecret: chargeResult.clientSecret,
+            paymentIntentId: chargeResult.paymentIntentId,
+          }
+        }
+
+        // No payment method - need to redirect to Stripe Checkout
+        if (chargeResult.noPaymentMethod) {
+          // Fall through to Stripe Checkout
+        } else {
+          // Other error (card declined, etc.)
+          return {
+            success: false,
+            error: chargeResult.error || 'Charge failed',
+          }
+        }
+      }
+
+      // Fall back to Stripe Checkout (creates session and redirects)
       const response = await fetch('/api/addons/call-minutes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -117,11 +300,24 @@ export function useCallMinutes() {
       const { url } = await response.json()
       if (url) {
         window.location.href = url
+        return { success: false, requiresRedirect: true }
       }
+
+      return { success: false, error: 'No checkout URL returned' }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Purchase failed'
+      return { success: false, error }
     } finally {
       setIsPurchasing(false)
     }
-  }, [])
+  }, [mutate])
+
+  /**
+   * Legacy method - redirects to Stripe Checkout directly
+   */
+  const purchaseBundleCheckout = useCallback(async (bundle: CreditBundle) => {
+    return purchaseBundle(bundle, { skipDirectCharge: true })
+  }, [purchaseBundle])
 
   const updateAutoReplenish = useCallback(async (
     enabled: boolean,
@@ -144,6 +340,7 @@ export function useCallMinutes() {
     error,
     isPurchasing,
     purchaseBundle,
+    purchaseBundleCheckout,
     updateAutoReplenish,
     refresh: mutate,
   }
