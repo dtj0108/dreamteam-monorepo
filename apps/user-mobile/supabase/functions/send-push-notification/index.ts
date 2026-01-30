@@ -98,16 +98,16 @@ async function getChannelMemberIds(
 ): Promise<string[]> {
   const { data, error } = await supabase
     .from("channel_members")
-    .select("user_id")
+    .select("profile_id")
     .eq("channel_id", channelId)
-    .neq("user_id", excludeUserId);
+    .neq("profile_id", excludeUserId);
 
   if (error) {
     console.error("Error fetching channel members:", error);
     return [];
   }
 
-  return (data || []).map((m) => m.user_id);
+  return (data || []).map((m) => m.profile_id);
 }
 
 // Get the other participant in a DM conversation
@@ -118,9 +118,9 @@ async function getDmRecipientId(
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from("dm_participants")
-    .select("user_id")
-    .eq("dm_conversation_id", dmConversationId)
-    .neq("user_id", excludeUserId)
+    .select("profile_id")
+    .eq("conversation_id", dmConversationId)
+    .neq("profile_id", excludeUserId)
     .single();
 
   if (error) {
@@ -128,7 +128,7 @@ async function getDmRecipientId(
     return null;
   }
 
-  return data?.user_id || null;
+  return data?.profile_id || null;
 }
 
 // Build the notification title and body based on type

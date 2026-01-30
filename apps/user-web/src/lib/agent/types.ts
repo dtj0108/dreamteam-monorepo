@@ -236,6 +236,7 @@ export interface TeamMembersResult {
     avatarUrl: string | null
     status: string | null
     joinedAt: string
+    isAgent: boolean
     workload: {
       totalOpenTasks: number
       inProgressCount: number
@@ -249,4 +250,5 @@ export interface TeamMembersResult {
     byRole: Record<string, number>
     byWorkloadLevel?: Record<string, number>
   }
+  warnings?: string[]
 }

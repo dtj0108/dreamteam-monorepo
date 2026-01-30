@@ -2,6 +2,7 @@
 
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { AgentsProvider } from "@/providers/agents-provider"
+import { BillingProvider } from "@/providers/billing-provider"
 
 export default function AgentsListLayout({
   children,
@@ -10,9 +11,11 @@ export default function AgentsListLayout({
 }) {
   return (
     <DashboardLayout>
-      <AgentsProvider>
-        {children}
-      </AgentsProvider>
+      <BillingProvider>
+        <AgentsProvider>
+          {children}
+        </AgentsProvider>
+      </BillingProvider>
     </DashboardLayout>
   )
 }

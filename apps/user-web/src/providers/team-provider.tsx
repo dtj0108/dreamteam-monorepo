@@ -5,7 +5,15 @@ import { useRouter } from "next/navigation"
 import { useUser } from "@/hooks/use-user"
 import { useTeamChannels } from "@/hooks/use-team-channels"
 import { getSupabaseClient } from "@/lib/supabase"
-import type { Channel, DirectMessage, Agent } from "@/components/team"
+import type { Channel, DirectMessage } from "@/components/team"
+
+interface Agent {
+  id: string
+  name: string
+  description?: string | null
+  avatar_url?: string | null
+  unreadCount?: number
+}
 
 interface TeamContextType {
   // State

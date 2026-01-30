@@ -40,6 +40,35 @@ const requestSchema = z.object({
 type OutputConfig = z.infer<typeof outputConfigSchema>
 
 /**
+ * Format time context for agent execution.
+ * Provides unambiguous datetime information for the LLM.
+ */
+function formatTimeContext(timezone: string = 'UTC'): string {
+  const now = new Date();
+
+  // ISO format for precision
+  const isoTime = now.toISOString();
+
+  // Human-readable format in the schedule's timezone
+  const localFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+  const localTime = localFormatter.format(now);
+
+  return `## Current Time
+- Date/Time: ${localTime}
+- ISO: ${isoTime}
+- Timezone: ${timezone}`;
+}
+
+/**
  * Build output instructions based on output_config.
  * These instructions guide the AI on HOW to present its response.
  */
@@ -272,12 +301,24 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
       return res.status(404).json({ error: agentError || "Agent not found" })
     }
 
+    // Get schedule timezone for time context
+    let scheduleTimezone = 'UTC';
+    if (executionId) {
+      const { data: execution } = await supabase
+        .from("agent_schedule_executions")
+        .select("schedule:schedule_id(timezone)")
+        .eq("id", executionId)
+        .single();
+      scheduleTimezone = (execution?.schedule as { timezone?: string } | null)?.timezone || 'UTC';
+    }
+
     // #region agent log - DEBUG scheduled execution provider
     console.log(`[Scheduled Execution] ====== AGENT DEBUG ======`)
     console.log(`[Scheduled Execution] Agent ID: ${agentId}`)
     console.log(`[Scheduled Execution] Agent name: ${agent.name}`)
     console.log(`[Scheduled Execution] Agent provider (raw): "${agent.provider}" (type: ${typeof agent.provider})`)
     console.log(`[Scheduled Execution] Agent model (raw): "${agent.model}" (type: ${typeof agent.model})`)
+    console.log(`[Scheduled Execution] Schedule timezone: ${scheduleTimezone}`)
     // #endregion
 
     // Build system prompt with rules and skills
@@ -301,7 +342,9 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
         ? toolNames.join(', ')
         : 'None available'
 
-      const contextSection = `## Execution Context
+      const contextSection = `${formatTimeContext(scheduleTimezone)}
+
+## Execution Context
 - Workspace ID: ${workspaceId}
 - Execution Type: Scheduled Task
 - Available Tools: ${toolList}
@@ -316,7 +359,9 @@ ${toolNames.length > 0
       finalTaskPrompt = contextSection + taskPrompt
     } else {
       // No workspaceId means no MCP tools can be created
-      const noToolsWarning = `## IMPORTANT: No Workspace Context
+      const noToolsWarning = `${formatTimeContext(scheduleTimezone)}
+
+## IMPORTANT: No Workspace Context
 
 This scheduled execution has no workspace context, which means NO data tools are available.
 You CANNOT query real workspace data (tasks, projects, team members, etc.).

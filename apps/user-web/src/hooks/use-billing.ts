@@ -9,6 +9,12 @@ import type {
   AgentTier,
 } from '@/types/billing'
 
+interface CheckoutResult {
+  upgraded?: boolean
+  newTier?: string
+  redirected?: boolean
+}
+
 interface UseBillingReturn {
   // Data
   billing: BillingState | null
@@ -25,7 +31,7 @@ interface UseBillingReturn {
     type: 'workspace_plan' | 'agent_tier'
     plan?: 'monthly' | 'annual'
     tier?: 'startup' | 'teams' | 'enterprise'
-  }) => Promise<void>
+  }) => Promise<CheckoutResult>
   openPortal: () => Promise<void>
 
   // Computed helpers
@@ -76,31 +82,42 @@ export function useBilling(): UseBillingReturn {
   }, [refresh])
 
   /**
-   * Create a checkout session and redirect to Stripe
+   * Create a checkout session and redirect to Stripe, or handle immediate upgrade
    */
   const createCheckoutSession = useCallback(
     async (params: {
       type: 'workspace_plan' | 'agent_tier'
       plan?: 'monthly' | 'annual'
       tier?: 'startup' | 'teams' | 'enterprise'
-    }) => {
+    }): Promise<CheckoutResult> => {
       const response = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        const data = await response.json()
         throw new Error(data.error || 'Failed to create checkout session')
       }
 
-      const { url } = await response.json()
+      // Handle immediate upgrade (no redirect needed)
+      if (data.upgraded) {
+        // Refresh billing data to get new tier
+        await refresh()
+        return { upgraded: true, newTier: data.newTier }
+      }
 
-      // Redirect to Stripe Checkout
-      window.location.href = url
+      // Handle checkout redirect
+      if (data.url) {
+        window.location.href = data.url
+        return { redirected: true }
+      }
+
+      throw new Error('Unexpected response from checkout API')
     },
-    []
+    [refresh]
   )
 
   /**

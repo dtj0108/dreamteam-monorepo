@@ -25,6 +25,8 @@ export function createAgent(overrides: Partial<Agent> = {}): Agent {
     workspace_id: overrides.workspace_id ?? null,
     config: overrides.config ?? {},
     plan_id: overrides.plan_id ?? null,
+    tier_required: overrides.tier_required ?? null,
+    product_line: overrides.product_line ?? null,
     current_version: overrides.current_version ?? 1,
     published_version: overrides.published_version ?? null,
     created_at: overrides.created_at ?? new Date().toISOString(),

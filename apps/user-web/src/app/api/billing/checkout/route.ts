@@ -12,6 +12,7 @@ import {
   getOrCreateStripeCustomer,
   recordCheckoutSession,
   isActiveSubscription,
+  updateAgentTierSubscription,
 } from '@/lib/billing-queries'
 import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
 
@@ -127,6 +128,43 @@ export async function POST(request: NextRequest) {
         { error: 'Stripe price not configured. Please set up Stripe pricing in admin or environment variables.' },
         { status: 500 }
       )
+    }
+
+    // For agent tier: Check if upgrading from existing tier
+    if (type === 'agent_tier' && tier) {
+      // Check if user has an existing agent subscription to upgrade
+      if (billing?.stripe_agent_subscription_id && billing.agent_tier !== 'none') {
+        // Validate this is an upgrade (not a downgrade)
+        const tierOrder = { none: 0, startup: 1, teams: 2, enterprise: 3 }
+        if (tierOrder[tier] <= tierOrder[billing.agent_tier]) {
+          return NextResponse.json(
+            { error: 'Use Stripe portal for downgrades. Contact support for assistance.' },
+            { status: 400 }
+          )
+        }
+
+        // Perform direct subscription update with proration
+        const result = await updateAgentTierSubscription(
+          workspaceId,
+          billing.stripe_agent_subscription_id,
+          tier,
+          priceId
+        )
+
+        if (!result.success) {
+          return NextResponse.json(
+            { error: result.error || 'Failed to upgrade subscription' },
+            { status: 500 }
+          )
+        }
+
+        // Return success without redirect (immediate upgrade)
+        return NextResponse.json({
+          success: true,
+          upgraded: true,
+          newTier: tier,
+        })
+      }
     }
 
     // Build checkout session config

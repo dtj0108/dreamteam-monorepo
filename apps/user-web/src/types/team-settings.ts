@@ -127,6 +127,7 @@ export interface WorkspaceSettings {
   avatar_url: string | null
   owner_id: string
   created_at: string
+  timezone: string
 }
 
 // Permission category for UI grouping

@@ -76,6 +76,9 @@ export async function DELETE(
           )
         }
 
+        // Disable workspace schedules for this agent
+        await disableWorkspaceSchedules(supabase, id, workspaceId)
+
         return NextResponse.json({ success: true, disabled: true })
       }
     }
@@ -102,9 +105,47 @@ export async function DELETE(
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
+    // For legacy path, we need to get the ai_agent_id from the local agent record
+    const { data: agentRecord } = await supabase
+      .from("agents")
+      .select("ai_agent_id")
+      .eq("id", id)
+      .single()
+
+    if (agentRecord?.ai_agent_id) {
+      await disableWorkspaceSchedules(supabase, agentRecord.ai_agent_id, workspaceId)
+    }
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Error in DELETE /api/agents/[id]/unhire:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+/**
+ * Disable workspace-specific schedules when an agent is unhired.
+ * This stops scheduled tasks from running but preserves the schedule data
+ * in case the workspace re-hires the agent later.
+ */
+async function disableWorkspaceSchedules(
+  supabase: ReturnType<typeof createAdminClient>,
+  agentId: string,
+  workspaceId: string
+) {
+  try {
+    const { error } = await supabase
+      .from("agent_schedules")
+      .update({ is_enabled: false })
+      .eq("agent_id", agentId)
+      .eq("workspace_id", workspaceId)
+      .eq("is_template", false)
+
+    if (error) {
+      console.error("Error disabling workspace schedules:", error)
+    }
+  } catch (error) {
+    // Log but don't fail the unhire operation if schedule disabling fails
+    console.error("Error in disableWorkspaceSchedules:", error)
   }
 }
