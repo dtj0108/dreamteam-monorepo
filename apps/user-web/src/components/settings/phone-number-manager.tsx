@@ -37,8 +37,10 @@ import {
   AlertCircleIcon,
   RefreshCwIcon,
   PencilIcon,
+  MailIcon,
 } from "lucide-react"
 import { PHONE_PRICING, formatAddOnPrice } from "@/types/addons"
+import { Badge } from "@dreamteam/ui/badge"
 
 interface AvailableNumber {
   phoneNumber: string
@@ -64,6 +66,10 @@ interface OwnedNumber {
   }
   is_primary: boolean
   created_at: string
+  campaign?: {
+    id: string
+    campaign_name: string
+  }
 }
 
 export function PhoneNumberManager() {
@@ -103,7 +109,44 @@ export function PhoneNumberManager() {
       const res = await fetch("/api/twilio/numbers/owned")
       if (res.ok) {
         const data = await res.json()
-        setOwnedNumbers(data.numbers || [])
+        const numbers = data.numbers || []
+
+        // Fetch campaign associations for each number
+        const numbersWithCampaigns = await Promise.all(
+          numbers.map(async (number: OwnedNumber) => {
+            try {
+              // Check if this number is assigned to a campaign
+              // We'll need to query all campaigns and check their assignments
+              const campaignsRes = await fetch("/api/a2p/campaigns")
+              if (campaignsRes.ok) {
+                const campaignsData = await campaignsRes.json()
+                for (const campaign of campaignsData.campaigns || []) {
+                  const numbersRes = await fetch(`/api/a2p/campaigns/${campaign.id}/numbers`)
+                  if (numbersRes.ok) {
+                    const numbersData = await numbersRes.json()
+                    const assignment = numbersData.numbers?.find(
+                      (n: any) => n.phone_number_id === number.id
+                    )
+                    if (assignment) {
+                      return {
+                        ...number,
+                        campaign: {
+                          id: campaign.id,
+                          campaign_name: campaign.campaign_name,
+                        },
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              console.error("Failed to fetch campaign for number:", err)
+            }
+            return number
+          })
+        )
+
+        setOwnedNumbers(numbersWithCampaigns)
       }
     } catch (error) {
       console.error("Failed to fetch owned numbers:", error)
@@ -362,6 +405,12 @@ export function PhoneNumberManager() {
                             Primary
                           </span>
                         )}
+                        {number.campaign && (
+                          <Badge variant="secondary" className="gap-1">
+                            <MailIcon className="size-3" />
+                            {number.campaign.campaign_name}
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         {number.friendly_name && (
@@ -379,6 +428,15 @@ export function PhoneNumberManager() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => window.location.href = '/sales/settings/messaging'}
+                      title={number.campaign ? "Change campaign assignment" : "Assign to campaign"}
+                    >
+                      <MailIcon className="size-4 mr-1" />
+                      {number.campaign ? "Change Campaign" : "Assign to Campaign"}
+                    </Button>
                     {!number.is_primary && (
                       <Button
                         variant="ghost"

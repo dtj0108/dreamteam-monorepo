@@ -206,11 +206,15 @@ export async function recordSMSUsage(
 
 /**
  * Record SMS credit purchase
+ * @param checkoutSessionId - Stripe checkout session ID (null for direct charges)
+ * @param paymentIntentId - Stripe payment intent ID (for direct charges)
+ * @param isAutoReplenish - Whether this is an auto-replenish purchase
  */
 export async function recordSMSPurchase(
   workspaceId: string,
   bundle: CreditBundle,
-  checkoutSessionId: string,
+  checkoutSessionId: string | null,
+  paymentIntentId?: string,
   isAutoReplenish: boolean = false
 ): Promise<string> {
   const supabase = createAdminClient()
@@ -224,6 +228,7 @@ export async function recordSMSPurchase(
       credits_amount: bundleConfig.credits,
       price_cents: bundleConfig.price,
       stripe_checkout_session_id: checkoutSessionId,
+      stripe_payment_intent_id: paymentIntentId || null,
       is_auto_replenish: isAutoReplenish,
       status: 'pending',
     })
@@ -429,11 +434,15 @@ export async function recordCallUsage(
 
 /**
  * Record call minutes purchase
+ * @param checkoutSessionId - Stripe checkout session ID (null for direct charges)
+ * @param paymentIntentId - Stripe payment intent ID (for direct charges)
+ * @param isAutoReplenish - Whether this is an auto-replenish purchase
  */
 export async function recordCallMinutesPurchase(
   workspaceId: string,
   bundle: CreditBundle,
-  checkoutSessionId: string,
+  checkoutSessionId: string | null,
+  paymentIntentId?: string,
   isAutoReplenish: boolean = false
 ): Promise<string> {
   const supabase = createAdminClient()
@@ -447,6 +456,7 @@ export async function recordCallMinutesPurchase(
       minutes_amount: bundleConfig.minutes,
       price_cents: bundleConfig.price,
       stripe_checkout_session_id: checkoutSessionId,
+      stripe_payment_intent_id: paymentIntentId || null,
       is_auto_replenish: isAutoReplenish,
       status: 'pending',
     })

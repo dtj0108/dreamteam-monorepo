@@ -6,18 +6,21 @@ import { ProductSwitcher } from "./product-switcher"
 import { FinanceSidebar } from "./finance-sidebar"
 import { CRMSidebar } from "./crm-sidebar"
 import { MessagingSidebar } from "./messaging-sidebar"
-import { 
-  SidebarProvider, 
+import {
+  SidebarProvider,
   SidebarInset,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { 
-  Breadcrumb, 
-  BreadcrumbItem, 
-  BreadcrumbList, 
-  BreadcrumbPage 
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage
 } from "@/components/ui/breadcrumb"
+import { useKeyboardShortcutsContext } from "@/providers/keyboard-shortcuts-provider"
+import { LeadForm } from "@/components/sales/lead-form"
+import { ActivityForm } from "@/components/sales/activity-form"
 import type { SessionUser } from "@/lib/session"
 
 interface SuiteLayoutProps {
@@ -27,7 +30,13 @@ interface SuiteLayoutProps {
 
 export function SuiteLayout({ children, user }: SuiteLayoutProps) {
   const pathname = usePathname()
-  
+  const {
+    createLeadOpen,
+    setCreateLeadOpen,
+    activityFormOpen,
+    setActivityFormOpen
+  } = useKeyboardShortcutsContext()
+
   // Determine which sidebar to show based on route
   const currentProduct = React.useMemo(() => {
     if (pathname.startsWith("/crm")) return "crm"
@@ -42,6 +51,38 @@ export function SuiteLayout({ children, user }: SuiteLayoutProps) {
     const last = segments[segments.length - 1]
     return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, " ")
   }, [pathname])
+
+  // Handle lead creation
+  const handleLeadSubmit = async (data: any) => {
+    try {
+      const response = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+      if (response.ok) {
+        setCreateLeadOpen(false)
+      }
+    } catch (error) {
+      console.error("Error creating lead:", error)
+    }
+  }
+
+  // Handle activity creation
+  const handleActivitySubmit = async (data: any) => {
+    try {
+      const response = await fetch("/api/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+      if (response.ok) {
+        setActivityFormOpen(false)
+      }
+    } catch (error) {
+      console.error("Error creating activity:", error)
+    }
+  }
 
   return (
     <SidebarProvider>
@@ -67,6 +108,21 @@ export function SuiteLayout({ children, user }: SuiteLayoutProps) {
           {children}
         </main>
       </SidebarInset>
+
+      {/* Global keyboard shortcut dialogs */}
+      <LeadForm
+        open={createLeadOpen}
+        onOpenChange={setCreateLeadOpen}
+        onSubmit={handleLeadSubmit}
+      />
+
+      <ActivityForm
+        open={activityFormOpen}
+        onOpenChange={setActivityFormOpen}
+        contacts={[]}
+        members={[]}
+        onSubmit={handleActivitySubmit}
+      />
     </SidebarProvider>
   )
 }

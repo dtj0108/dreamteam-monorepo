@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { RouteProvider, ThemeProvider, UserProvider, WorkspaceProvider, CallProvider } from "@/providers";
+import { KeyboardShortcutsProvider } from "@/providers/keyboard-shortcuts-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CallOverlay } from "@/components/calls";
 import "./globals.css";
@@ -56,14 +57,16 @@ export default function RootLayout({
         <RouteProvider>
           <ThemeProvider>
             <TooltipProvider>
-              <UserProvider>
-                <WorkspaceProvider>
-                  <CallProvider>
-                    {children}
-                    <CallOverlay />
-                  </CallProvider>
-                </WorkspaceProvider>
-              </UserProvider>
+              <KeyboardShortcutsProvider>
+                <UserProvider>
+                  <WorkspaceProvider>
+                    <CallProvider>
+                      {children}
+                      <CallOverlay />
+                    </CallProvider>
+                  </WorkspaceProvider>
+                </UserProvider>
+              </KeyboardShortcutsProvider>
             </TooltipProvider>
           </ThemeProvider>
         </RouteProvider>

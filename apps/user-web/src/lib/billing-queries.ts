@@ -36,8 +36,24 @@ export interface WorkspaceBilling {
   current_user_count: number
   storage_limit_gb: number
   storage_used_gb: number
+  // Payment method fields for card-on-file
+  default_payment_method_id: string | null
+  payment_method_last4: string | null
+  payment_method_brand: string | null
+  payment_method_exp_month: number | null
+  payment_method_exp_year: number | null
+  payment_method_updated_at: string | null
   created_at: string
   updated_at: string
+}
+
+export interface DirectChargeResult {
+  success: boolean
+  paymentIntentId?: string
+  clientSecret?: string // For 3DS completion on frontend
+  requiresAction?: boolean
+  error?: string
+  errorCode?: string
 }
 
 export interface BillingInvoice {
@@ -600,4 +616,293 @@ export function getProductLineDisplayName(productLine: 'v2' | 'v3' | 'v4'): stri
     v4: 'DreamTeam V4',
   }
   return names[productLine]
+}
+
+// =============================================================================
+// PAYMENT METHOD FUNCTIONS
+// =============================================================================
+
+/**
+ * Save a payment method for card-on-file payments
+ * Retrieves card details from Stripe and stores in database
+ */
+export async function savePaymentMethod(
+  workspaceId: string,
+  paymentMethodId: string
+): Promise<void> {
+  console.log(`[savePaymentMethod] Starting for workspace ${workspaceId}, PM: ${paymentMethodId}`)
+  const supabase = createAdminClient()
+
+  // Get payment method details from Stripe
+  console.log(`[savePaymentMethod] Retrieving payment method from Stripe...`)
+  const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId)
+  console.log(`[savePaymentMethod] Payment method type: ${paymentMethod.type}`)
+
+  if (paymentMethod.type !== 'card' || !paymentMethod.card) {
+    throw new Error('Payment method is not a card')
+  }
+
+  const card = paymentMethod.card
+  console.log(`[savePaymentMethod] Card: ${card.brand} ****${card.last4} exp ${card.exp_month}/${card.exp_year}`)
+
+  // Get billing record to find Stripe customer ID
+  console.log(`[savePaymentMethod] Getting workspace billing record...`)
+  const billing = await getWorkspaceBilling(workspaceId)
+  if (!billing?.stripe_customer_id) {
+    console.error(`[savePaymentMethod] No stripe_customer_id found for workspace ${workspaceId}`)
+    throw new Error('No Stripe customer ID for workspace')
+  }
+  console.log(`[savePaymentMethod] Found Stripe customer: ${billing.stripe_customer_id}`)
+
+  // Attach payment method to customer if not already attached
+  try {
+    await stripe.paymentMethods.attach(paymentMethodId, {
+      customer: billing.stripe_customer_id,
+    })
+  } catch (err: unknown) {
+    // Ignore if already attached - Stripe may use different error codes
+    const stripeErr = err as { code?: string; message?: string }
+    const isAlreadyAttached =
+      stripeErr.code === 'resource_already_exists' ||
+      stripeErr.code === 'payment_method_already_attached' ||
+      stripeErr.message?.includes('already been attached')
+    if (!isAlreadyAttached) {
+      console.error('Error attaching payment method:', stripeErr.code, stripeErr.message)
+      throw err
+    }
+    console.log('Payment method already attached to customer, continuing...')
+  }
+
+  // Set as default payment method for the customer
+  console.log(`[savePaymentMethod] Setting as default payment method for customer...`)
+  await stripe.customers.update(billing.stripe_customer_id, {
+    invoice_settings: {
+      default_payment_method: paymentMethodId,
+    },
+  })
+  console.log(`[savePaymentMethod] Successfully set default payment method in Stripe`)
+
+  // Store in database
+  console.log(`[savePaymentMethod] Storing payment method in database...`)
+  const { error: updateError } = await supabase
+    .from('workspace_billing')
+    .update({
+      default_payment_method_id: paymentMethodId,
+      payment_method_last4: card.last4,
+      payment_method_brand: card.brand,
+      payment_method_exp_month: card.exp_month,
+      payment_method_exp_year: card.exp_year,
+      payment_method_updated_at: new Date().toISOString(),
+    })
+    .eq('workspace_id', workspaceId)
+
+  if (updateError) {
+    console.error(`[savePaymentMethod] Database update failed:`, updateError)
+    throw new Error(`Failed to save payment method to database: ${updateError.message}`)
+  }
+  console.log(`[savePaymentMethod] Successfully saved payment method to database for workspace ${workspaceId}`)
+}
+
+/**
+ * Save payment method from a completed PaymentIntent
+ * Used by webhook after checkout.session.completed
+ */
+export async function savePaymentMethodFromIntent(
+  workspaceId: string,
+  paymentIntentId: string
+): Promise<void> {
+  console.log(`[savePaymentMethodFromIntent] Starting for workspace ${workspaceId}, PI: ${paymentIntentId}`)
+
+  // Get the PaymentIntent to find the payment method
+  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
+    expand: ['payment_method'],
+  })
+
+  console.log(`[savePaymentMethodFromIntent] PaymentIntent status: ${paymentIntent.status}`)
+  console.log(`[savePaymentMethodFromIntent] payment_method type: ${typeof paymentIntent.payment_method}`)
+
+  const paymentMethodId =
+    typeof paymentIntent.payment_method === 'string'
+      ? paymentIntent.payment_method
+      : paymentIntent.payment_method?.id
+
+  if (!paymentMethodId) {
+    console.error(`[savePaymentMethodFromIntent] No payment method found. Raw value:`, paymentIntent.payment_method)
+    throw new Error('No payment method found on PaymentIntent')
+  }
+
+  console.log(`[savePaymentMethodFromIntent] Found payment method: ${paymentMethodId}`)
+  await savePaymentMethod(workspaceId, paymentMethodId)
+  console.log(`[savePaymentMethodFromIntent] Successfully saved payment method for workspace ${workspaceId}`)
+}
+
+/**
+ * Remove saved payment method
+ * Detaches from Stripe customer and clears database fields
+ */
+export async function removePaymentMethod(workspaceId: string): Promise<void> {
+  const supabase = createAdminClient()
+
+  const billing = await getWorkspaceBilling(workspaceId)
+
+  if (billing?.default_payment_method_id) {
+    // Detach from Stripe customer
+    try {
+      await stripe.paymentMethods.detach(billing.default_payment_method_id)
+    } catch (err) {
+      // Ignore if already detached
+      console.error('Error detaching payment method:', err)
+    }
+  }
+
+  // Clear database fields
+  await supabase
+    .from('workspace_billing')
+    .update({
+      default_payment_method_id: null,
+      payment_method_last4: null,
+      payment_method_brand: null,
+      payment_method_exp_month: null,
+      payment_method_exp_year: null,
+      payment_method_updated_at: null,
+    })
+    .eq('workspace_id', workspaceId)
+}
+
+/**
+ * Check if workspace has a saved payment method
+ */
+export async function hasPaymentMethodSaved(workspaceId: string): Promise<boolean> {
+  const billing = await getWorkspaceBilling(workspaceId)
+  return !!(billing?.default_payment_method_id && billing?.payment_method_last4)
+}
+
+/**
+ * Create a direct charge using the saved payment method
+ * Returns immediately for successful charges, or client_secret for 3DS
+ */
+export async function createDirectCharge(
+  workspaceId: string,
+  amountCents: number,
+  metadata: {
+    type: 'sms_credits' | 'call_minutes'
+    bundle: string
+    credits_or_minutes: number
+    auto_replenish_attempt_id?: string
+  }
+): Promise<DirectChargeResult> {
+  const billing = await getWorkspaceBilling(workspaceId)
+
+  if (!billing?.stripe_customer_id) {
+    return { success: false, error: 'No Stripe customer', errorCode: 'no_customer' }
+  }
+
+  if (!billing.default_payment_method_id) {
+    return { success: false, error: 'No payment method on file', errorCode: 'no_payment_method' }
+  }
+
+  try {
+    // Create and confirm PaymentIntent in one call
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountCents,
+      currency: 'usd',
+      customer: billing.stripe_customer_id,
+      payment_method: billing.default_payment_method_id,
+      off_session: true, // Customer is not present
+      confirm: true, // Confirm immediately
+      metadata: {
+        workspace_id: workspaceId,
+        type: metadata.type,
+        bundle: metadata.bundle,
+        credits_or_minutes: metadata.credits_or_minutes.toString(),
+        direct_charge: 'true',
+        auto_replenish_attempt_id: metadata.auto_replenish_attempt_id || '',
+      },
+    })
+
+    if (paymentIntent.status === 'succeeded') {
+      return {
+        success: true,
+        paymentIntentId: paymentIntent.id,
+      }
+    }
+
+    if (paymentIntent.status === 'requires_action') {
+      // 3DS required - return client_secret for frontend handling
+      return {
+        success: false,
+        paymentIntentId: paymentIntent.id,
+        clientSecret: paymentIntent.client_secret || undefined,
+        requiresAction: true,
+        error: '3D Secure authentication required',
+        errorCode: 'requires_action',
+      }
+    }
+
+    // Other statuses (processing, requires_payment_method, etc.)
+    return {
+      success: false,
+      paymentIntentId: paymentIntent.id,
+      error: `Payment status: ${paymentIntent.status}`,
+      errorCode: paymentIntent.status,
+    }
+  } catch (err: unknown) {
+    const stripeErr = err as {
+      type?: string
+      code?: string
+      message?: string
+      payment_intent?: { id: string; client_secret: string }
+    }
+
+    // Handle card errors
+    if (stripeErr.type === 'StripeCardError') {
+      // Check if 3DS is required
+      if (stripeErr.code === 'authentication_required' && stripeErr.payment_intent) {
+        return {
+          success: false,
+          paymentIntentId: stripeErr.payment_intent.id,
+          clientSecret: stripeErr.payment_intent.client_secret,
+          requiresAction: true,
+          error: '3D Secure authentication required',
+          errorCode: 'requires_action',
+        }
+      }
+
+      return {
+        success: false,
+        error: stripeErr.message || 'Card was declined',
+        errorCode: stripeErr.code || 'card_declined',
+      }
+    }
+
+    // Re-throw unexpected errors
+    throw err
+  }
+}
+
+/**
+ * Create a Stripe SetupIntent for adding/updating payment method
+ * Returns client_secret for frontend Stripe Elements
+ */
+export async function createSetupIntent(workspaceId: string): Promise<{ clientSecret: string }> {
+  const billing = await getWorkspaceBilling(workspaceId)
+
+  if (!billing?.stripe_customer_id) {
+    throw new Error('No Stripe customer for workspace')
+  }
+
+  const setupIntent = await stripe.setupIntents.create({
+    customer: billing.stripe_customer_id,
+    payment_method_types: ['card'],
+    usage: 'off_session',
+    metadata: {
+      workspace_id: workspaceId,
+    },
+  })
+
+  if (!setupIntent.client_secret) {
+    throw new Error('Failed to create SetupIntent')
+  }
+
+  return { clientSecret: setupIntent.client_secret }
 }

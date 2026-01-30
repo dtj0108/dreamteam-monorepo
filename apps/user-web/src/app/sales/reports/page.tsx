@@ -161,7 +161,7 @@ export default function ReportsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {reportCards.map((report) => (
           <Link key={report.title} href={report.href}>
-            <Card className="cursor-pointer hover:bg-muted/50 transition-colors h-full">
+            <Card className="cursor-pointer hover:bg-muted/50 hover:shadow-md transition-all h-full">
               <CardContent className="flex items-center gap-4 p-6">
                 <div className={`size-12 rounded-lg flex items-center justify-center ${report.color}`}>
                   <report.icon className="size-6" />
