@@ -52,6 +52,11 @@ function formatDate(dateString: string) {
   })
 }
 
+function isOverdue(dueDate: string | null, isCompleted: boolean): boolean {
+  if (!dueDate || isCompleted) return false
+  return new Date(dueDate) < new Date()
+}
+
 function getInitials(name: string) {
   return name
     .split(" ")
@@ -118,7 +123,16 @@ function ActivityItem({
         )}
         <div className="flex gap-3 text-xs text-muted-foreground mt-1">
           {activity.due_date && (
-            <span>Due: {formatDate(activity.due_date)}</span>
+            <span className={cn(
+              isOverdue(activity.due_date, activity.is_completed) && "text-red-500 font-medium"
+            )}>
+              {isOverdue(activity.due_date, activity.is_completed) && (
+                <Badge variant="destructive" className="mr-1 text-[10px] px-1 py-0">
+                  Overdue
+                </Badge>
+              )}
+              Due: {formatDate(activity.due_date)}
+            </span>
           )}
           {activity.contact && (
             <span>
@@ -241,9 +255,16 @@ export default function ActivitiesPage() {
   }
 
   // Filter activities by tab
-  // Show ALL incomplete activities in "Upcoming", not just those with due dates
+  // Upcoming: incomplete activities with future due dates or no due date (excludes overdue)
+  const now = new Date()
   const upcomingActivities = activities
-    .filter((a) => !a.is_completed)
+    .filter((a) => {
+      // Must be incomplete
+      if (a.is_completed) return false
+      // If has due date, must be in the future
+      if (a.due_date && new Date(a.due_date) < now) return false
+      return true
+    })
     .sort((a, b) => {
       // Activities with due dates come first, sorted by due date
       if (a.due_date && b.due_date) {

@@ -8,12 +8,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
 import { MessageSquare, Phone, PhoneCall, CheckCircle, XCircle } from 'lucide-react'
 import { useSMSCredits, useCallMinutes, usePhoneNumbers, usePaymentMethod, type PurchaseResult } from '@/hooks/use-addons'
+import { useBilling } from '@/hooks/use-billing'
 import { CreditsBalanceCard } from './credits-balance-card'
 import { BundlesGrid } from './bundles-grid'
 import { UsageTable } from './usage-table'
 import { PhoneBillingCard } from './phone-billing-card'
 import { AddonsOverview } from './addons-overview'
 import { PurchaseConfirmDialog } from './purchase-confirm-dialog'
+import { AutoReplenishSettings } from './auto-replenish-settings'
 import { PaymentMethodCard } from '@/components/billing/payment-method-card'
 import { isSMSBalanceLow, isCallMinutesLow, type CreditBundle } from '@/types/addons'
 
@@ -44,6 +46,7 @@ export function AddOnsPage() {
     isLoading: smsLoading,
     isPurchasing: smsPurchasing,
     purchaseBundle: purchaseSMSBundle,
+    updateAutoReplenish: updateSMSAutoReplenish,
     refresh: refreshSMS,
   } = useSMSCredits()
 
@@ -54,6 +57,7 @@ export function AddOnsPage() {
     isLoading: minutesLoading,
     isPurchasing: minutesPurchasing,
     purchaseBundle: purchaseMinutesBundle,
+    updateAutoReplenish: updateMinutesAutoReplenish,
     refresh: refreshMinutes,
   } = useCallMinutes()
 
@@ -68,7 +72,73 @@ export function AddOnsPage() {
     paymentMethod,
     isLoading: paymentMethodLoading,
     refresh: refreshPaymentMethod,
+    removePaymentMethod,
   } = usePaymentMethod()
+
+  const {
+    canManageBilling,
+    loading: billingLoading,
+  } = useBilling()
+
+  // Auto-replenish update state
+  const [isUpdatingAutoReplenish, setIsUpdatingAutoReplenish] = useState(false)
+
+  // Handle SMS auto-replenish update
+  const handleSMSAutoReplenishUpdate = async (
+    enabled: boolean,
+    threshold?: number,
+    bundle?: CreditBundle
+  ) => {
+    setIsUpdatingAutoReplenish(true)
+    try {
+      await updateSMSAutoReplenish(enabled, threshold, bundle)
+    } finally {
+      setIsUpdatingAutoReplenish(false)
+    }
+  }
+
+  // Handle call minutes auto-replenish update
+  const handleMinutesAutoReplenishUpdate = async (
+    enabled: boolean,
+    threshold?: number,
+    bundle?: CreditBundle
+  ) => {
+    setIsUpdatingAutoReplenish(true)
+    try {
+      await updateMinutesAutoReplenish(enabled, threshold, bundle)
+    } finally {
+      setIsUpdatingAutoReplenish(false)
+    }
+  }
+
+  // Handle payment method update (create SetupIntent)
+  const handleUpdatePaymentMethod = async () => {
+    try {
+      const response = await fetch('/api/addons/payment-method', {
+        method: 'POST',
+      })
+      if (!response.ok) {
+        throw new Error('Failed to create setup intent')
+      }
+      const { clientSecret } = await response.json()
+      // For now, we'll redirect to a setup page or show modal
+      // TODO: Implement Stripe Elements modal for card update
+      console.log('SetupIntent created:', clientSecret)
+      // For now, fall back to Stripe Checkout flow
+      alert('Card update feature coming soon. Please make a purchase to update your card.')
+    } catch (error) {
+      console.error('Error updating payment method:', error)
+    }
+  }
+
+  // Handle payment method removal
+  const handleRemovePaymentMethod = async () => {
+    try {
+      await removePaymentMethod()
+    } catch (error) {
+      console.error('Error removing payment method:', error)
+    }
+  }
 
   // Refresh data when returning from successful checkout
   useEffect(() => {
@@ -201,6 +271,8 @@ export function AddOnsPage() {
         <PaymentMethodCard
           paymentMethod={paymentMethod}
           isLoading={paymentMethodLoading}
+          onUpdate={canManageBilling ? handleUpdatePaymentMethod : undefined}
+          onRemove={canManageBilling ? handleRemovePaymentMethod : undefined}
         />
       )}
 
@@ -245,6 +317,18 @@ export function AddOnsPage() {
                 isLow={smsCredits ? isSMSBalanceLow(smsCredits) : false}
               />
 
+              {/* Auto-Replenish Settings */}
+              <AutoReplenishSettings
+                type="sms"
+                enabled={smsCredits?.auto_replenish_enabled ?? false}
+                threshold={smsCredits?.auto_replenish_threshold ?? 50}
+                bundle={smsCredits?.auto_replenish_bundle ?? null}
+                hasPaymentMethod={hasPaymentMethod}
+                canManageBilling={canManageBilling}
+                onUpdate={handleSMSAutoReplenishUpdate}
+                isUpdating={isUpdatingAutoReplenish}
+              />
+
               <div>
                 <h2 className="text-lg font-semibold mb-4">Purchase Credits</h2>
                 <BundlesGrid
@@ -274,6 +358,18 @@ export function AddOnsPage() {
                 lifetimeUsed={callMinutes?.lifetime_used_minutes ?? 0}
                 lifetimeTotal={callMinutes?.lifetime_minutes ?? 0}
                 isLow={callMinutes ? isCallMinutesLow(callMinutes) : false}
+              />
+
+              {/* Auto-Replenish Settings */}
+              <AutoReplenishSettings
+                type="minutes"
+                enabled={callMinutes?.auto_replenish_enabled ?? false}
+                threshold={callMinutes?.auto_replenish_threshold ?? 10}
+                bundle={callMinutes?.auto_replenish_bundle ?? null}
+                hasPaymentMethod={hasPaymentMethod}
+                canManageBilling={canManageBilling}
+                onUpdate={handleMinutesAutoReplenishUpdate}
+                isUpdating={isUpdatingAutoReplenish}
               />
 
               <div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createServerSupabaseClient } from "@/lib/supabase-server"
+import { createServerSupabaseClient, createAdminClient } from "@/lib/supabase-server"
+import { triggerActivityLogged } from "@/lib/workflow-trigger-service"
 
 // GET /api/activities - List activities, optionally filtered
 export async function GET(request: NextRequest) {
@@ -155,6 +156,51 @@ export async function POST(request: NextRequest) {
     `)
     .eq("id", activity.id)
     .single()
+
+  // Trigger activity_logged workflow if there's a contact with an associated lead
+  if (contact_id) {
+    const adminSupabase = createAdminClient()
+
+    // Get contact and its lead
+    const { data: contact } = await adminSupabase
+      .from("contacts")
+      .select("id, first_name, last_name, email, phone, lead_id")
+      .eq("id", contact_id)
+      .single()
+
+    if (contact?.lead_id) {
+      // Get the lead details
+      const { data: lead } = await adminSupabase
+        .from("leads")
+        .select("id, name, status, notes, user_id")
+        .eq("id", contact.lead_id)
+        .single()
+
+      if (lead) {
+        // Fire the workflow trigger (non-blocking)
+        triggerActivityLogged(
+          {
+            id: activity.id,
+            type: activity.type,
+            subject: activity.subject || "",
+            description: activity.description,
+            is_completed: activity.is_completed,
+            completed_at: activity.completed_at,
+          },
+          {
+            id: lead.id,
+            name: lead.name,
+            status: lead.status,
+            notes: lead.notes,
+            user_id: lead.user_id,
+          },
+          user.id
+        ).catch((err) => {
+          console.error("Error triggering activity_logged workflows:", err)
+        })
+      }
+    }
+  }
 
   return NextResponse.json({ activity: completeActivity || activity })
 }

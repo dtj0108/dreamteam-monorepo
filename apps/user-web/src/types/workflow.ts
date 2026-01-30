@@ -254,3 +254,28 @@ export function getFieldsForTrigger(triggerType: TriggerType): ConditionFieldDef
   }
   return TRIGGER_CONDITION_FIELDS
 }
+
+// Execution types for workflow runs
+export type ExecutionStatus = 'running' | 'completed' | 'failed' | 'paused'
+
+export interface ExecutionResult {
+  success: boolean
+  actionType: ActionType
+  actionId: string
+  error?: string
+  data?: Record<string, unknown>
+  executedAt: string
+}
+
+export interface WorkflowExecution {
+  id: string
+  workflow_id: string
+  user_id: string
+  trigger_type: TriggerType
+  trigger_context: Record<string, unknown>
+  status: ExecutionStatus
+  started_at: string
+  completed_at: string | null
+  action_results: ExecutionResult[]
+  error_message: string | null
+}

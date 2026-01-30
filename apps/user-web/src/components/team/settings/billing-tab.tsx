@@ -100,6 +100,7 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
   const {
     billing,
     invoices,
+    canManageBilling,
     loading: billingLoading,
     error,
     createCheckoutSession,
@@ -116,7 +117,8 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
   // Get prices from database with fallbacks
   const { monthlyPrice, annualPrice } = getWorkspacePlanPrices(workspacePlans)
 
-  if (!isOwner) {
+  // Check if user can manage billing (owner always can, others need permission)
+  if (!canManageBilling && !billingLoading) {
     return (
       <div className="space-y-6">
         <Card>
@@ -128,7 +130,7 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Only the workspace owner can manage billing settings.
+              You don&apos;t have permission to manage billing settings.
             </p>
           </CardContent>
         </Card>

@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@dreamteam/ui/button"
 import { Input } from "@dreamteam/ui/input"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   ArrowLeftIcon,
   Loader2Icon,
@@ -11,6 +12,8 @@ import {
   PencilIcon,
   CheckIcon,
   XIcon,
+  BotIcon,
+  HistoryIcon,
 } from "lucide-react"
 import {
   DndContext,
@@ -35,6 +38,7 @@ import { ActionPicker } from "@/components/workflows/action-picker"
 import { ConfigSidePanel } from "@/components/workflows/config-side-panel"
 import { FlowConnector } from "@/components/workflows/flow-connector"
 import { ConditionBranchView } from "@/components/workflows/condition-branch-view"
+import { WorkflowRunsList } from "@/components/workflows/workflow-runs-list"
 import type { Workflow, WorkflowAction, ConditionActionConfig } from "@/types/workflow"
 
 // Sortable wrapper for ActionCard
@@ -81,6 +85,9 @@ function SortableActionCard({
 export default function WorkflowBuilderPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const initialTab = searchParams.get('tab') === 'runs' ? 'runs' : 'builder'
+  const [activeTab, setActiveTab] = useState(initialTab)
 
   const [workflow, setWorkflow] = useState<Workflow | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -154,6 +161,15 @@ export default function WorkflowBuilderPage() {
     }
     fetchWorkflow()
   }, [params.id, router])
+
+  // Handle tab change with URL update
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab)
+    const url = tab === 'runs'
+      ? `/sales/workflows/${params.id}?tab=runs`
+      : `/sales/workflows/${params.id}`
+    router.replace(url, { scroll: false })
+  }
 
   // Handle drag end
   const handleDragEnd = (event: DragEndEvent) => {
@@ -394,158 +410,193 @@ export default function WorkflowBuilderPage() {
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon">
-              <PencilIcon className="size-4" />
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleSave}
-              disabled={isSaving}
-              className={
-                saveStatus === "saved"
-                  ? "text-green-600 border-green-300"
-                  : saveStatus === "error"
-                  ? "text-red-600 border-red-300"
-                  : ""
-              }
-            >
-              {isSaving ? (
-                <>
-                  <Loader2Icon className="size-4 mr-1 animate-spin" />
-                  Saving...
-                </>
-              ) : saveStatus === "saved" ? (
-                <>
-                  <CheckIcon className="size-4 mr-1" />
-                  Saved!
-                </>
-              ) : saveStatus === "error" ? (
-                <>
-                  <XIcon className="size-4 mr-1" />
-                  {saveError || "Error"}
-                </>
-              ) : (
-                <>
-                  Save Draft
-                  {isDirty && (
-                    <span className="ml-1.5 size-2 rounded-full bg-amber-400" />
+            {activeTab === 'builder' && (
+              <>
+                <Button variant="ghost" size="icon">
+                  <PencilIcon className="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className={
+                    saveStatus === "saved"
+                      ? "text-green-600 border-green-300"
+                      : saveStatus === "error"
+                      ? "text-red-600 border-red-300"
+                      : ""
+                  }
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2Icon className="size-4 mr-1 animate-spin" />
+                      Saving...
+                    </>
+                  ) : saveStatus === "saved" ? (
+                    <>
+                      <CheckIcon className="size-4 mr-1" />
+                      Saved!
+                    </>
+                  ) : saveStatus === "error" ? (
+                    <>
+                      <XIcon className="size-4 mr-1" />
+                      {saveError || "Error"}
+                    </>
+                  ) : (
+                    <>
+                      Save Draft
+                      {isDirty && (
+                        <span className="ml-1.5 size-2 rounded-full bg-amber-400" />
+                      )}
+                    </>
                   )}
-                </>
-              )}
-            </Button>
-            <Button onClick={handleActivate} disabled={isSaving}>
-              Activate
-            </Button>
-          </div>
-        </div>
-
-        {/* Workflow name */}
-        <div className="px-6 py-4 border-b">
-          <Input
-            value={workflowName}
-            onChange={(e) => setWorkflowName(e.target.value)}
-            className="text-2xl font-semibold border-none shadow-none h-auto px-0 focus-visible:ring-0 max-w-md"
-            placeholder="Workflow name"
-          />
-          <span className="inline-block mt-1 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs font-medium rounded">
-            DRAFT
-          </span>
-        </div>
-
-        {/* Flow canvas */}
-        <div className="flex-1 overflow-auto p-8 bg-gray-50/50">
-          <div className="flex flex-col items-center">
-            {/* Trigger */}
-            <TriggerCard
-              triggerType={workflow.trigger_type}
-              triggerConfig={workflow.trigger_config}
-            />
-
-            {/* Connector with inline "+ Add Step" */}
-            <FlowConnector>
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-full bg-background shadow-sm"
-                onClick={() => setShowActionPicker(true)}
-              >
-                <PlusIcon className="size-4 mr-1" />
-                Add Step
-              </Button>
-            </FlowConnector>
-
-            {/* Actions */}
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={actions.map((a) => a.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {actions.map((action) => (
-                  <div key={action.id} className="flex flex-col items-center w-full">
-                    {action.type === "condition" ? (
-                      <>
-                        <ConditionBranchView
-                          action={action}
-                          selectedActionId={selectedActionId}
-                          onSelectCondition={() => {
-                            setSelectedActionId(action.id)
-                            setSelectedBranchContext(null)
-                          }}
-                          onSelectAction={(actionId) => {
-                            setSelectedActionId(actionId)
-                            setSelectedBranchContext(null)
-                          }}
-                          onAddToBranch={(branch) => {
-                            setAddToBranchContext({ conditionId: action.id, branch })
-                            setShowActionPicker(true)
-                          }}
-                          onSelectBranchAction={(actionId, branch) => {
-                            setSelectedActionId(actionId)
-                            setSelectedBranchContext({ conditionId: action.id, branch })
-                          }}
-                        />
-                        <FlowConnector />
-                      </>
-                    ) : (
-                      <>
-                        <SortableActionCard
-                          action={action}
-                          selected={selectedActionId === action.id}
-                          onClick={() => {
-                            setSelectedActionId(action.id)
-                            setSelectedBranchContext(null)
-                          }}
-                        />
-                        <FlowConnector />
-                      </>
-                    )}
-                  </div>
-                ))}
-              </SortableContext>
-            </DndContext>
-
-            {/* Bottom add button if there are actions */}
-            {actions.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-full bg-background shadow-sm"
-                onClick={() => setShowActionPicker(true)}
-              >
-                <PlusIcon className="size-4 mr-1" />
-                Add Step
-              </Button>
+                </Button>
+                <Button onClick={handleActivate} disabled={isSaving}>
+                  Activate
+                </Button>
+              </>
             )}
           </div>
         </div>
+
+        {/* Workflow name and tabs */}
+        <div className="px-6 py-4 border-b">
+          <div className="flex items-center justify-between">
+            <div>
+              <Input
+                value={workflowName}
+                onChange={(e) => setWorkflowName(e.target.value)}
+                className="text-2xl font-semibold border-none shadow-none h-auto px-0 focus-visible:ring-0 max-w-md"
+                placeholder="Workflow name"
+                disabled={activeTab === 'runs'}
+              />
+              <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded ${
+                workflow.is_active
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-yellow-100 text-yellow-800'
+              }`}>
+                {workflow.is_active ? 'ACTIVE' : 'DRAFT'}
+              </span>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="mt-4">
+            <TabsList>
+              <TabsTrigger value="builder" className="flex items-center gap-2">
+                <BotIcon className="size-4" />
+                Builder
+              </TabsTrigger>
+              <TabsTrigger value="runs" className="flex items-center gap-2">
+                <HistoryIcon className="size-4" />
+                Runs
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        {/* Tab content */}
+        {activeTab === 'builder' ? (
+          /* Flow canvas */
+          <div className="flex-1 overflow-auto p-8 bg-gray-50/50">
+            <div className="flex flex-col items-center">
+              {/* Trigger */}
+              <TriggerCard
+                triggerType={workflow.trigger_type}
+                triggerConfig={workflow.trigger_config}
+              />
+
+              {/* Connector with inline "+ Add Step" */}
+              <FlowConnector>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full bg-background shadow-sm"
+                  onClick={() => setShowActionPicker(true)}
+                >
+                  <PlusIcon className="size-4 mr-1" />
+                  Add Step
+                </Button>
+              </FlowConnector>
+
+              {/* Actions */}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={actions.map((a) => a.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {actions.map((action) => (
+                    <div key={action.id} className="flex flex-col items-center w-full">
+                      {action.type === "condition" ? (
+                        <>
+                          <ConditionBranchView
+                            action={action}
+                            selectedActionId={selectedActionId}
+                            onSelectCondition={() => {
+                              setSelectedActionId(action.id)
+                              setSelectedBranchContext(null)
+                            }}
+                            onSelectAction={(actionId) => {
+                              setSelectedActionId(actionId)
+                              setSelectedBranchContext(null)
+                            }}
+                            onAddToBranch={(branch) => {
+                              setAddToBranchContext({ conditionId: action.id, branch })
+                              setShowActionPicker(true)
+                            }}
+                            onSelectBranchAction={(actionId, branch) => {
+                              setSelectedActionId(actionId)
+                              setSelectedBranchContext({ conditionId: action.id, branch })
+                            }}
+                          />
+                          <FlowConnector />
+                        </>
+                      ) : (
+                        <>
+                          <SortableActionCard
+                            action={action}
+                            selected={selectedActionId === action.id}
+                            onClick={() => {
+                              setSelectedActionId(action.id)
+                              setSelectedBranchContext(null)
+                            }}
+                          />
+                          <FlowConnector />
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </SortableContext>
+              </DndContext>
+
+              {/* Bottom add button if there are actions */}
+              {actions.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full bg-background shadow-sm"
+                  onClick={() => setShowActionPicker(true)}
+                >
+                  <PlusIcon className="size-4 mr-1" />
+                  Add Step
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Runs tab */
+          <div className="flex-1 overflow-auto p-6">
+            <WorkflowRunsList workflowId={workflow.id} />
+          </div>
+        )}
       </div>
 
-      {/* Config side panel */}
-      {selectedAction && (
+      {/* Config side panel - only show in builder tab */}
+      {activeTab === 'builder' && selectedAction && (
         <ConfigSidePanel
           action={selectedAction}
           onClose={() => {
