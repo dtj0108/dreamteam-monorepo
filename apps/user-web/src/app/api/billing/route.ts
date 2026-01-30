@@ -41,10 +41,51 @@ export async function GET() {
       .eq('id', workspaceId)
       .single()
 
+    const isOwner = workspace?.owner_id === user.id
+
+    // Check can_manage_billing permission for non-owners
+    let canManageBilling = isOwner // Owners always have billing permission
+
+    if (!isOwner) {
+      // Get current user's membership and check for billing permission
+      const { data: membership } = await supabase
+        .from('workspace_members')
+        .select('id, role')
+        .eq('workspace_id', workspaceId)
+        .eq('profile_id', user.id)
+        .single()
+
+      if (membership) {
+        // Check for user-specific override first
+        const { data: override } = await supabase
+          .from('member_permission_overrides')
+          .select('is_enabled')
+          .eq('member_id', membership.id)
+          .eq('permission_key', 'can_manage_billing')
+          .single()
+
+        if (override) {
+          canManageBilling = override.is_enabled
+        } else {
+          // Fall back to role default
+          const { data: rolePermission } = await supabase
+            .from('workspace_permissions')
+            .select('is_enabled')
+            .eq('workspace_id', workspaceId)
+            .eq('role', membership.role)
+            .eq('permission_key', 'can_manage_billing')
+            .single()
+
+          canManageBilling = rolePermission?.is_enabled ?? false
+        }
+      }
+    }
+
     return NextResponse.json({
       billing,
       invoices,
-      isOwner: workspace?.owner_id === user.id,
+      isOwner,
+      canManageBilling,
     })
   } catch (error) {
     console.error('Get billing error:', error)

@@ -39,6 +39,8 @@ import {
   PencilIcon,
   Activity,
   Loader2,
+  PlayIcon,
+  PauseIcon,
 } from "lucide-react"
 import { WorkflowsProvider, useWorkflows } from "@/providers/workflows-provider"
 import { TRIGGERS, getTriggerDefinition, type TriggerType } from "@/types/workflow"
@@ -207,16 +209,22 @@ function WorkflowsPageContent() {
                         <ZapIcon className="h-4 w-4" />
                         <span>{workflow.actions?.length || 0} actions</span>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <button
+                        className="flex items-center gap-1 hover:text-foreground transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          router.push(`/sales/workflows/${workflow.id}?tab=runs`)
+                        }}
+                      >
                         <Activity className="h-4 w-4" />
-                        <span>
+                        <span className="hover:underline">
                           {loadingCounts ? (
                             <Loader2 className="h-3 w-3 animate-spin inline" />
                           ) : (
                             executionCounts[workflow.id] || 0
                           )} executions
                         </span>
-                      </div>
+                      </button>
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
                       {workflow.is_active ? "Active" : "Inactive"}
@@ -236,6 +244,19 @@ function WorkflowsPageContent() {
                       <DropdownMenuItem onClick={() => router.push(`/sales/workflows/${workflow.id}`)}>
                         <PencilIcon className="size-4 mr-2" />
                         Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleToggle(workflow.id, !workflow.is_active)}>
+                        {workflow.is_active ? (
+                          <>
+                            <PauseIcon className="size-4 mr-2" />
+                            Deactivate
+                          </>
+                        ) : (
+                          <>
+                            <PlayIcon className="size-4 mr-2" />
+                            Activate
+                          </>
+                        )}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive"

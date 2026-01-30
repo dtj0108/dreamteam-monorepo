@@ -111,6 +111,7 @@ export interface BillingResponse {
   billing: BillingState | null
   invoices: BillingInvoice[]
   isOwner: boolean
+  canManageBilling: boolean
 }
 
 /**

@@ -12,6 +12,7 @@ const VALID_PERMISSION_KEYS: PermissionKey[] = [
   // Workspace Settings
   "can_edit_workspace",
   "can_manage_integrations",
+  "can_manage_billing",
   // Content & Data
   "can_delete_content",
   "can_export_data",

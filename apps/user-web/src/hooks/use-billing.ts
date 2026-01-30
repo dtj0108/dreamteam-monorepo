@@ -14,6 +14,7 @@ interface UseBillingReturn {
   billing: BillingState | null
   invoices: BillingInvoice[]
   isOwner: boolean
+  canManageBilling: boolean
 
   // State
   loading: boolean
@@ -43,6 +44,7 @@ export function useBilling(): UseBillingReturn {
   const [billing, setBilling] = useState<BillingState | null>(null)
   const [invoices, setInvoices] = useState<BillingInvoice[]>([])
   const [isOwner, setIsOwner] = useState(false)
+  const [canManageBilling, setCanManageBilling] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -63,6 +65,7 @@ export function useBilling(): UseBillingReturn {
       setBilling(data.billing)
       setInvoices(data.invoices || [])
       setIsOwner(data.isOwner)
+      setCanManageBilling(data.canManageBilling ?? data.isOwner)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load billing')
     } finally {
@@ -161,6 +164,7 @@ export function useBilling(): UseBillingReturn {
     billing,
     invoices,
     isOwner,
+    canManageBilling,
     loading,
     error,
     refresh,

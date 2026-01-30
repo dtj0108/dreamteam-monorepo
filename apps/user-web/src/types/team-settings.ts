@@ -8,6 +8,7 @@ export type PermissionKey =
   // Workspace Settings
   | "can_edit_workspace"
   | "can_manage_integrations"
+  | "can_manage_billing"
   // Content & Data
   | "can_delete_content"
   | "can_export_data"
@@ -338,6 +339,11 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "can_manage_integrations",
         label: "Manage integrations",
         description: "Can configure third-party integrations",
+      },
+      {
+        key: "can_manage_billing",
+        label: "Manage billing",
+        description: "Can manage payment methods, subscriptions, and auto-replenish settings",
       },
     ],
   },

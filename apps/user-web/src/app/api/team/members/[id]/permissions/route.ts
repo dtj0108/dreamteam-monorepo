@@ -8,7 +8,7 @@ const VALID_PERMISSION_KEYS: PermissionKey[] = [
   // Member Management
   "can_invite", "can_remove_members", "can_change_roles", "can_manage_product_access",
   // Workspace Settings
-  "can_edit_workspace", "can_manage_integrations",
+  "can_edit_workspace", "can_manage_integrations", "can_manage_billing",
   // Content & Data
   "can_delete_content", "can_export_data", "can_import_data",
   // Finance

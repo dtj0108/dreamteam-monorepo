@@ -47,11 +47,15 @@ interface ActionConfig {
   custom_phone?: string
   message?: string
   record?: boolean
-  // For update_status
+  // For update_status (UI uses 'status', executor used 'new_status')
+  status?: string
   new_status?: string
-  // For add_note
+  // For add_note (UI uses 'note', executor used 'note_content')
+  note?: string
   note_content?: string
-  // For create_task
+  // For create_task (UI uses 'title'/'description', also support task_title/task_description)
+  title?: string
+  description?: string
   task_title?: string
   task_description?: string
   due_days?: number
@@ -59,13 +63,15 @@ interface ActionConfig {
   // For assign_user
   assignment_type?: 'round_robin' | 'specific' | 'least_leads'
   assigned_user_id?: string
-  // For send_notification
+  // For send_notification (UI uses 'title'/'message', executor used notification_*)
   notification_title?: string
   notification_message?: string
   // For wait
   wait_duration?: number
   wait_unit?: 'minutes' | 'hours' | 'days'
-  // For send_email
+  // For send_email (UI uses 'subject'/'body', executor used email_*)
+  subject?: string
+  body?: string
   email_to?: 'contact_email' | 'custom'
   custom_email?: string
   email_subject?: string
@@ -91,6 +97,9 @@ interface ActionConfig {
   outcome?: 'won' | 'lost'
   close_reason?: string
   auto_set_close_date?: boolean
+  // For add_tag / remove_tag
+  tags?: Array<{ id: string; name: string; color?: string }>
+  remove_all?: boolean
 }
 
 export interface ExecutionResult {
@@ -402,7 +411,9 @@ export async function executeWorkflowAction(
       }
 
       case 'update_status': {
-        if (!config.new_status) {
+        // UI saves as 'status', also check 'new_status' for backwards compatibility
+        const newStatus = config.status || config.new_status
+        if (!newStatus) {
           return {
             success: false,
             actionType: action.type,
@@ -416,7 +427,7 @@ export async function executeWorkflowAction(
         if (context.leadId) {
           const { error } = await supabase
             .from('leads')
-            .update({ status: config.new_status, updated_at: new Date().toISOString() })
+            .update({ status: newStatus, updated_at: new Date().toISOString() })
             .eq('id', context.leadId)
             .eq('user_id', context.userId)
 
@@ -434,7 +445,7 @@ export async function executeWorkflowAction(
             success: true,
             actionType: action.type,
             actionId: action.id,
-            data: { leadId: context.leadId, newStatus: config.new_status },
+            data: { leadId: context.leadId, newStatus },
             executedAt,
           }
         }
@@ -443,7 +454,7 @@ export async function executeWorkflowAction(
         if (context.dealId) {
           const { error } = await supabase
             .from('deals')
-            .update({ status: config.new_status, updated_at: new Date().toISOString() })
+            .update({ status: newStatus, updated_at: new Date().toISOString() })
             .eq('id', context.dealId)
             .eq('profile_id', context.userId)
 
@@ -461,7 +472,7 @@ export async function executeWorkflowAction(
             success: true,
             actionType: action.type,
             actionId: action.id,
-            data: { dealId: context.dealId, newStatus: config.new_status },
+            data: { dealId: context.dealId, newStatus },
             executedAt,
           }
         }
@@ -476,7 +487,8 @@ export async function executeWorkflowAction(
       }
 
       case 'add_note': {
-        const noteContent = replaceTemplateVariables(config.note_content || '', context)
+        // UI saves as 'note', also check 'note_content' for backwards compatibility
+        const noteContent = replaceTemplateVariables(config.note || config.note_content || '', context)
 
         if (!noteContent) {
           return {
@@ -488,54 +500,65 @@ export async function executeWorkflowAction(
           }
         }
 
-        // Add note to lead_tasks as a note-type task (or activities if that's the pattern)
-        // Looking at the data model, notes are typically stored in activities or lead_tasks
-        if (context.leadId) {
-          const { data, error } = await supabase
-            .from('lead_tasks')
-            .insert({
-              lead_id: context.leadId,
-              user_id: context.userId,
-              title: 'Workflow Note',
-              description: noteContent,
-              type: 'note',
-              status: 'completed',
-              completed_at: new Date().toISOString(),
-            })
+        // Activities require a contact_id - get from context or find one from the lead
+        let contactId = context.contactId
+        if (!contactId && context.leadId) {
+          const { data: contacts } = await supabase
+            .from('contacts')
             .select('id')
-            .single()
+            .eq('lead_id', context.leadId)
+            .limit(1)
+          contactId = contacts?.[0]?.id
+        }
 
-          if (error) {
-            return {
-              success: false,
-              actionType: action.type,
-              actionId: action.id,
-              error: `Failed to add note: ${error.message}`,
-              executedAt,
-            }
-          }
-
+        if (!contactId) {
           return {
-            success: true,
+            success: false,
             actionType: action.type,
             actionId: action.id,
-            data: { noteId: data.id, leadId: context.leadId },
+            error: 'No contact found to add note to',
+            executedAt,
+          }
+        }
+
+        // Insert into activities table (notes appear in Notes & Summaries section)
+        const { data, error } = await supabase
+          .from('activities')
+          .insert({
+            profile_id: context.userId,
+            type: 'note',
+            subject: 'Workflow Note',
+            description: noteContent,
+            contact_id: contactId,
+            is_completed: true,
+            completed_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single()
+
+        if (error) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: `Failed to add note: ${error.message}`,
             executedAt,
           }
         }
 
         return {
-          success: false,
+          success: true,
           actionType: action.type,
           actionId: action.id,
-          error: 'No lead to add note to',
+          data: { activityId: data.id, contactId },
           executedAt,
         }
       }
 
       case 'create_task': {
-        const taskTitle = replaceTemplateVariables(config.task_title || '', context)
-        const taskDescription = replaceTemplateVariables(config.task_description || '', context)
+        // UI saves as 'title'/'description', also check 'task_title'/'task_description' for backwards compatibility
+        const taskTitle = replaceTemplateVariables(config.title || config.task_title || '', context)
+        const taskDescription = replaceTemplateVariables(config.description || config.task_description || '', context)
 
         if (!taskTitle) {
           return {
@@ -563,9 +586,7 @@ export async function executeWorkflowAction(
               user_id: context.userId,
               title: taskTitle,
               description: taskDescription || null,
-              type: 'task',
-              status: 'pending',
-              priority: config.priority || 'medium',
+              is_completed: false,
               due_date: dueDate,
             })
             .select('id')
@@ -655,8 +676,9 @@ export async function executeWorkflowAction(
       case 'send_notification': {
         // For now, we'll log the notification - in the future this could
         // integrate with a real notification system or push notifications
-        const title = replaceTemplateVariables(config.notification_title || '', context)
-        const message = replaceTemplateVariables(config.notification_message || '', context)
+        // UI saves as 'title'/'message', also check notification_* for backwards compatibility
+        const title = replaceTemplateVariables(config.title || config.notification_title || '', context)
+        const message = replaceTemplateVariables(config.message || config.notification_message || '', context)
 
         if (!title || !message) {
           return {
@@ -711,8 +733,9 @@ export async function executeWorkflowAction(
           }
         }
 
-        const emailSubject = replaceTemplateVariables(config.email_subject || '', context)
-        const emailBody = replaceTemplateVariables(config.email_body || '', context)
+        // UI saves as 'subject'/'body', also check email_* for backwards compatibility
+        const emailSubject = replaceTemplateVariables(config.subject || config.email_subject || '', context)
+        const emailBody = replaceTemplateVariables(config.body || config.email_body || '', context)
 
         if (!emailSubject || !emailBody) {
           return {
@@ -1221,6 +1244,133 @@ export async function executeWorkflowAction(
           actionType: action.type,
           actionId: action.id,
           data: { opportunityId, outcome: config.outcome },
+          executedAt,
+        }
+      }
+
+      case 'add_tag': {
+        if (!context.leadId) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No lead to add tags to',
+            executedAt,
+          }
+        }
+
+        const tags = config.tags
+        if (!tags || tags.length === 0) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No tags specified',
+            executedAt,
+          }
+        }
+
+        // Insert tag assignments (ignore duplicates with upsert)
+        const assignments = tags.map(tag => ({
+          lead_id: context.leadId,
+          tag_id: tag.id,
+        }))
+
+        const { error } = await supabase
+          .from('lead_tag_assignments')
+          .upsert(assignments, { onConflict: 'lead_id,tag_id', ignoreDuplicates: true })
+
+        if (error) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: `Failed to add tags: ${error.message}`,
+            executedAt,
+          }
+        }
+
+        return {
+          success: true,
+          actionType: action.type,
+          actionId: action.id,
+          data: { leadId: context.leadId, tagsAdded: tags.map(t => t.name) },
+          executedAt,
+        }
+      }
+
+      case 'remove_tag': {
+        if (!context.leadId) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No lead to remove tags from',
+            executedAt,
+          }
+        }
+
+        // Check if removing all tags
+        if (config.remove_all) {
+          const { error } = await supabase
+            .from('lead_tag_assignments')
+            .delete()
+            .eq('lead_id', context.leadId)
+
+          if (error) {
+            return {
+              success: false,
+              actionType: action.type,
+              actionId: action.id,
+              error: `Failed to remove tags: ${error.message}`,
+              executedAt,
+            }
+          }
+
+          return {
+            success: true,
+            actionType: action.type,
+            actionId: action.id,
+            data: { leadId: context.leadId, removedAll: true },
+            executedAt,
+          }
+        }
+
+        // Remove specific tags
+        const tags = config.tags
+        if (!tags || tags.length === 0) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No tags specified to remove',
+            executedAt,
+          }
+        }
+
+        const tagIds = tags.map(t => t.id)
+
+        const { error } = await supabase
+          .from('lead_tag_assignments')
+          .delete()
+          .eq('lead_id', context.leadId)
+          .in('tag_id', tagIds)
+
+        if (error) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: `Failed to remove tags: ${error.message}`,
+            executedAt,
+          }
+        }
+
+        return {
+          success: true,
+          actionType: action.type,
+          actionId: action.id,
+          data: { leadId: context.leadId, tagsRemoved: tags.map(t => t.name) },
           executedAt,
         }
       }
