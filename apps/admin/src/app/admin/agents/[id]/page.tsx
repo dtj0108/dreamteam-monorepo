@@ -303,6 +303,8 @@ export default function AgentBuilderPage() {
 
   // Team tab state
   const [delegations, setDelegations] = useState<{ to_agent_id: string; condition: string; context_template: string }[]>([])
+  const [tierRequired, setTierRequired] = useState<string>('')
+  const [productLine, setProductLine] = useState<string>('')
 
   // Schedules tab state
   const [schedules, setSchedules] = useState<AgentSchedule[]>([])
@@ -370,6 +372,10 @@ export default function AgentBuilderPage() {
           context_template: d.context_template || ''
         }))
       )
+
+      // Set billing tier
+      setTierRequired(data.agent.tier_required || '')
+      setProductLine(data.agent.product_line || '')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load agent')
     } finally {
@@ -633,6 +639,30 @@ export default function AgentBuilderPage() {
       await fetchAgent()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save delegations')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Save billing tier
+  async function saveBillingTier() {
+    setSaving(true)
+    setError(null)
+
+    try {
+      const res = await fetch(`/api/admin/agents/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier_required: tierRequired || null,
+          product_line: productLine || null
+        })
+      })
+
+      if (!res.ok) throw new Error('Failed to save billing tier')
+      await fetchAgent()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save billing tier')
     } finally {
       setSaving(false)
     }
@@ -2028,12 +2058,134 @@ export default function AgentBuilderPage() {
             </TabsContent>
 
             {/* Team Tab */}
-            <TabsContent value="team">
+            <TabsContent value="team" className="space-y-6">
+              {/* Billing Tier Card */}
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Agent Delegations</CardTitle>
+                      <CardTitle className="flex items-center gap-2">
+                        <Building className="h-5 w-5" />
+                        Billing Tier Access
+                      </CardTitle>
+                      <CardDescription>
+                        Each tier gets exclusive access to its own set of agents
+                      </CardDescription>
+                    </div>
+                    <Button onClick={saveBillingTier} disabled={saving}>
+                      {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                      Save Tier
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Product Line</Label>
+                      <Select value={productLine} onValueChange={(v) => {
+                        setProductLine(v)
+                        // Auto-set tier when product line changes
+                        if (v === 'v2') setTierRequired('startup')
+                        if (v === 'v3') setTierRequired('teams')
+                        if (v === 'v4') setTierRequired('enterprise')
+                      }}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select product line" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="v2">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">V2</Badge>
+                              <span>7 Startup agents</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="v3">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">V3</Badge>
+                              <span>18 Teams agents</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="v4">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">V4</Badge>
+                              <span>38 Enterprise agents</span>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Product line determines which tier can access
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Exclusive Tier Access</Label>
+                      <Select value={tierRequired} onValueChange={setTierRequired}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select tier" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="startup">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Startup</Badge>
+                              <span className="text-xs text-muted-foreground">Startup users only</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="teams">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Teams</Badge>
+                              <span className="text-xs text-muted-foreground">Teams users only</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="enterprise">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Enterprise</Badge>
+                              <span className="text-xs text-muted-foreground">Enterprise users only</span>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Only this tier can access this agent
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Exclusive Access Visualization */}
+                  <div className="rounded-lg border bg-muted/50 p-4">
+                    <h4 className="text-sm font-medium mb-3">Exclusive Access</h4>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className={`p-3 rounded-lg border ${tierRequired === 'startup' ? 'bg-green-50 border-green-200' : 'bg-muted border-dashed'}`}>
+                        <div className="text-sm font-medium">Startup</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {tierRequired === 'startup' ? '✓ Exclusive' : '✗ No access'}
+                        </div>
+                      </div>
+                      <div className={`p-3 rounded-lg border ${tierRequired === 'teams' ? 'bg-blue-50 border-blue-200' : 'bg-muted border-dashed'}`}>
+                        <div className="text-sm font-medium">Teams</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {tierRequired === 'teams' ? '✓ Exclusive' : '✗ No access'}
+                        </div>
+                      </div>
+                      <div className={`p-3 rounded-lg border ${tierRequired === 'enterprise' ? 'bg-purple-50 border-purple-200' : 'bg-muted border-dashed'}`}>
+                        <div className="text-sm font-medium">Enterprise</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {tierRequired === 'enterprise' ? '✓ Exclusive' : '✗ No access'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Agent Delegations Card */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        Agent Delegations
+                      </CardTitle>
                       <CardDescription>Configure which agents this agent can delegate to</CardDescription>
                     </div>
                     <Button onClick={saveDelegations} disabled={saving}>

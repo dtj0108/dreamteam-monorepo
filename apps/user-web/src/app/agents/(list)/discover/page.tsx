@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useAgents } from "@/providers/agents-provider"
+import { useBillingContextOptional } from "@/providers/billing-provider"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -14,8 +15,130 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Bot, MessageSquare, CheckCircle2, Calendar, ArrowRight } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Search, Bot, MessageSquare, CheckCircle2, Calendar, ArrowRight, Check } from "lucide-react"
 import type { AgentWithHireStatus } from "@/lib/types/agents"
+import type { AgentTier } from "@/types/billing"
+import { cn } from "@/lib/utils"
+
+// Agent tier data for tier cards
+const agentTiers = [
+  {
+    id: "startup" as const,
+    name: "Lean Startup",
+    price: 3000,
+    priceDisplay: "$3K",
+    agentCount: 7,
+    tagline: "You + a few killers in one room",
+  },
+  {
+    id: "teams" as const,
+    name: "Department Teams",
+    price: 5000,
+    priceDisplay: "$5K",
+    agentCount: 18,
+    tagline: "Now you've got specialists",
+  },
+  {
+    id: "enterprise" as const,
+    name: "Enterprise Dream Team",
+    price: 10000,
+    priceDisplay: "$10K",
+    agentCount: 38,
+    tagline: "This is unfair",
+  },
+]
+
+const tierOrder: Record<AgentTier, number> = {
+  none: 0,
+  startup: 1,
+  teams: 2,
+  enterprise: 3,
+}
+
+function TierCard({
+  tier,
+  currentTier,
+  onUpgrade,
+  isLoading,
+}: {
+  tier: typeof agentTiers[number]
+  currentTier: AgentTier
+  onUpgrade: (tierId: "startup" | "teams" | "enterprise") => void
+  isLoading: boolean
+}) {
+  const isCurrentPlan = tier.id === currentTier
+  const canUpgrade = tierOrder[tier.id] > tierOrder[currentTier]
+  const isLowerTier = tierOrder[tier.id] < tierOrder[currentTier]
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border bg-card p-6 transition-all",
+        isCurrentPlan && "ring-2 ring-foreground/20 border-foreground/20"
+      )}
+    >
+      <div className="text-center">
+        <h3 className="font-semibold text-lg">{tier.name}</h3>
+        <div className="mt-2">
+          <span className="text-3xl font-bold">{tier.priceDisplay}</span>
+          <span className="text-muted-foreground">/mo</span>
+        </div>
+        <p className="text-sm text-muted-foreground mt-1">
+          {tier.agentCount} agents
+        </p>
+        <p className="text-xs italic text-muted-foreground mt-2">
+          {tier.tagline}
+        </p>
+      </div>
+
+      <div className="mt-6">
+        {isCurrentPlan ? (
+          <Button variant="outline" className="w-full" disabled>
+            <Check className="size-4 mr-2" />
+            Your Plan
+          </Button>
+        ) : canUpgrade ? (
+          <Button
+            className="w-full"
+            onClick={() => onUpgrade(tier.id)}
+            disabled={isLoading}
+          >
+            {isLoading ? "Loading..." : "Upgrade"}
+          </Button>
+        ) : isLowerTier ? (
+          <Button variant="ghost" className="w-full" disabled>
+            Current plan is higher
+          </Button>
+        ) : (
+          <Button
+            className="w-full"
+            onClick={() => onUpgrade(tier.id)}
+            disabled={isLoading}
+          >
+            {isLoading ? "Loading..." : "Get Started"}
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TierCardSkeleton() {
+  return (
+    <div className="rounded-xl border bg-card p-6">
+      <div className="text-center space-y-2">
+        <Skeleton className="h-5 w-32 mx-auto" />
+        <Skeleton className="h-8 w-20 mx-auto" />
+        <Skeleton className="h-4 w-24 mx-auto" />
+        <Skeleton className="h-3 w-40 mx-auto" />
+      </div>
+      <div className="mt-6">
+        <Skeleton className="h-9 w-full" />
+      </div>
+    </div>
+  )
+}
 
 function AgentCard({
   agent,
@@ -117,6 +240,7 @@ export default function AgentsDiscoverPage() {
   const router = useRouter()
   const {
     agents,
+    myAgents,
     executions,
     schedules,
     isLoading,
@@ -127,8 +251,52 @@ export default function AgentsDiscoverPage() {
     setSelectedAgentForHire,
   } = useAgents()
 
+  const billingContext = useBillingContextOptional()
+  const billing = billingContext?.billing ?? null
+  const billingLoading = billingContext?.loading ?? false
+  const createCheckoutSession = billingContext?.createCheckoutSession
+  const agentCount = billingContext?.agentCount ?? 0
+
   const [searchQuery, setSearchQuery] = useState("")
   const [isHiring, setIsHiring] = useState(false)
+  const [isUpgrading, setIsUpgrading] = useState(false)
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
+  const [selectedTier, setSelectedTier] = useState<typeof agentTiers[number] | null>(null)
+  const [confirmChecked, setConfirmChecked] = useState(false)
+
+  const currentTier: AgentTier = billing?.agent_tier || "none"
+  const hiredCount = myAgents.length
+
+  // Open upgrade confirmation modal
+  const openUpgradeModal = (tierId: "startup" | "teams" | "enterprise") => {
+    const tier = agentTiers.find(t => t.id === tierId)
+    setSelectedTier(tier || null)
+    setConfirmChecked(false)
+    setUpgradeModalOpen(true)
+  }
+
+  // Confirm and process upgrade
+  const confirmUpgrade = async () => {
+    if (!selectedTier || !createCheckoutSession) return
+    setIsUpgrading(true)
+    try {
+      const result = await createCheckoutSession({
+        type: "agent_tier",
+        tier: selectedTier.id,
+      })
+
+      // Handle immediate upgrade (user already had a subscription)
+      if (result?.upgraded) {
+        setUpgradeModalOpen(false)
+        // Page will re-render with updated billing from refresh() in hook
+      }
+      // Checkout redirect happens automatically via window.location.href
+    } catch (error) {
+      console.error("Failed to upgrade:", error)
+    } finally {
+      setIsUpgrading(false)
+    }
+  }
 
   // Filter agents based on search
   const filteredAgents = useMemo(() => {
@@ -176,6 +344,12 @@ export default function AgentsDiscoverPage() {
     setShowHireAgent(true)
   }
 
+  // Get tier name for display
+  const getTierName = (tier: AgentTier) => {
+    const tierInfo = agentTiers.find((t) => t.id === tier)
+    return tierInfo?.name || "No plan"
+  }
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="p-6 max-w-6xl mx-auto">
@@ -185,9 +359,41 @@ export default function AgentsDiscoverPage() {
             <Bot className="size-6" />
             Discover Agents
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Browse and hire AI agents to help with your work
-          </p>
+          <div className="text-muted-foreground mt-1">
+            {billingLoading ? (
+              <Skeleton className="h-4 w-48 inline-block" />
+            ) : currentTier === "none" ? (
+              "No agent plan yet"
+            ) : (
+              <>
+                Your plan: <span className="font-medium">{getTierName(currentTier)}</span>{" "}
+                ({hiredCount} of {agentCount} agents)
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Tier Cards */}
+        <div className="mb-8">
+          {billingLoading ? (
+            <div className="grid gap-4 md:grid-cols-3">
+              <TierCardSkeleton />
+              <TierCardSkeleton />
+              <TierCardSkeleton />
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-3">
+              {agentTiers.map((tier) => (
+                <TierCard
+                  key={tier.id}
+                  tier={tier}
+                  currentTier={currentTier}
+                  onUpgrade={openUpgradeModal}
+                  isLoading={isUpgrading}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Search */}
@@ -261,6 +467,38 @@ export default function AgentsDiscoverPage() {
             </Button>
             <Button onClick={handleHire} disabled={isHiring}>
               {isHiring ? "Hiring..." : "Hire Agent"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upgrade Confirmation Dialog */}
+      <Dialog open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upgrade to {selectedTier?.name}</DialogTitle>
+            <DialogDescription>
+              Would you like to upgrade your package?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-lg font-semibold mb-4">
+              You will be charged {selectedTier?.priceDisplay}/month
+            </p>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <Checkbox
+                checked={confirmChecked}
+                onCheckedChange={(checked) => setConfirmChecked(!!checked)}
+              />
+              <span className="text-sm">I confirm this purchase</span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUpgradeModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmUpgrade} disabled={!confirmChecked || isUpgrading}>
+              {isUpgrading ? "Processing..." : "Yes, Upgrade"}
             </Button>
           </DialogFooter>
         </DialogContent>

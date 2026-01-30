@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { stripe } from '@/lib/stripe'
+import { autoDeployTeamForPlan } from '@dreamteam/database'
 
 // Type definitions for billing data
 export type SubscriptionStatus =
@@ -407,14 +408,196 @@ export function hasActiveAgents(billing: WorkspaceBilling | null): boolean {
 }
 
 /**
- * Get the number of agents for a tier
+ * Get the number of agents for a tier (EXCLUSIVE - each tier's own agents)
+ * - startup: 7 V2 agents
+ * - teams: 18 V3 agents
+ * - enterprise: 38 V4 agents
  */
 export function getAgentCount(tier: AgentTier): number {
   const counts: Record<AgentTier, number> = {
     none: 0,
-    startup: 7,
-    teams: 18,
-    enterprise: 38,
+    startup: 7,   // V2 agents
+    teams: 18,    // V3 agents
+    enterprise: 38, // V4 agents
   }
   return counts[tier]
+}
+
+/**
+ * Update an existing agent tier subscription to a new tier with proration
+ */
+export async function updateAgentTierSubscription(
+  workspaceId: string,
+  subscriptionId: string,
+  newTier: AgentTier,
+  newPriceId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createAdminClient()
+
+  try {
+    // Get current subscription to find the item ID
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+    const itemId = subscription.items.data[0]?.id
+
+    if (!itemId) {
+      return { success: false, error: 'Subscription item not found' }
+    }
+
+    // Update the subscription with proration
+    const updatedSubResponse = await stripe.subscriptions.update(subscriptionId, {
+      items: [{
+        id: itemId,
+        price: newPriceId,
+      }],
+      proration_behavior: 'create_prorations',
+      metadata: {
+        workspace_id: workspaceId,
+        type: 'agent_tier',
+        agent_tier: newTier,
+      },
+    })
+    // Access properties from the response
+    const updatedSub = updatedSubResponse as unknown as {
+      status: string
+      current_period_end: number
+    }
+
+    // Update database with new tier
+    await supabase
+      .from('workspace_billing')
+      .update({
+        agent_tier: newTier,
+        agent_status: updatedSub.status as SubscriptionStatus,
+        agent_period_end: new Date(updatedSub.current_period_end * 1000).toISOString(),
+      })
+      .eq('workspace_id', workspaceId)
+
+    // Deploy new team for upgraded tier
+    // This ensures the workspace gets the new tier's agents (e.g., V3 agents for Teams tier)
+    const deployResult = await autoDeployTeamForPlan(workspaceId, newTier)
+    if (!deployResult.deployed) {
+      console.warn(`[updateAgentTierSubscription] Auto-deploy failed for ${workspaceId}:`, deployResult.error)
+      // Don't fail the upgrade - billing is updated, deployment can be retried
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error updating subscription:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update subscription'
+    }
+  }
+}
+
+// ==========================================
+// Agent Tier Access Helpers
+// ==========================================
+
+/**
+ * Agent tier required for an agent (matches ai_agents.tier_required column)
+ */
+export type AgentTierRequired = 'startup' | 'teams' | 'enterprise'
+
+/**
+ * Get the numeric level for a tier (for comparison)
+ * Higher number = more access
+ */
+export function getTierLevel(tier: AgentTier): number {
+  const levels: Record<AgentTier, number> = {
+    none: 0,
+    startup: 1,
+    teams: 2,
+    enterprise: 3,
+  }
+  return levels[tier]
+}
+
+/**
+ * Get the numeric level for a required tier
+ */
+export function getRequiredTierLevel(tierRequired: AgentTierRequired): number {
+  const levels: Record<AgentTierRequired, number> = {
+    startup: 1,
+    teams: 2,
+    enterprise: 3,
+  }
+  return levels[tierRequired]
+}
+
+/**
+ * Check if a user's agent tier can access an agent with a specific tier requirement
+ *
+ * EXCLUSIVE Access Model - each tier gets its OWN set of agents:
+ * - startup tier → only startup agents (V2)
+ * - teams tier → only teams agents (V3)
+ * - enterprise tier → only enterprise agents (V4)
+ * - none tier → no agents
+ */
+export function canAccessAgent(
+  userTier: AgentTier,
+  agentTierRequired: AgentTierRequired
+): boolean {
+  if (userTier === 'none') return false
+  // Exclusive access: tier must match exactly
+  return userTier === agentTierRequired
+}
+
+/**
+ * Get the product line for a tier (EXCLUSIVE model)
+ * - startup tier gets v2 agents only
+ * - teams tier gets v3 agents only
+ * - enterprise tier gets v4 agents only
+ */
+export function getProductLineForTier(tier: AgentTier): 'v2' | 'v3' | 'v4' | null {
+  switch (tier) {
+    case 'startup':
+      return 'v2'
+    case 'teams':
+      return 'v3'
+    case 'enterprise':
+      return 'v4'
+    case 'none':
+      return null
+  }
+}
+
+/**
+ * Check if a user can access agents from a specific product line (EXCLUSIVE)
+ */
+export function canAccessProductLine(
+  userTier: AgentTier,
+  productLine: 'v2' | 'v3' | 'v4'
+): boolean {
+  if (userTier === 'none') return false
+  // Exclusive: each tier only accesses its own product line
+  if (userTier === 'startup' && productLine === 'v2') return true
+  if (userTier === 'teams' && productLine === 'v3') return true
+  if (userTier === 'enterprise' && productLine === 'v4') return true
+  return false
+}
+
+/**
+ * Get display name for an agent tier
+ */
+export function getAgentTierDisplayName(tier: AgentTier): string {
+  const names: Record<AgentTier, string> = {
+    none: 'No Agents',
+    startup: 'Lean Startup',
+    teams: 'Teams',
+    enterprise: 'Enterprise',
+  }
+  return names[tier]
+}
+
+/**
+ * Get the product line display name
+ */
+export function getProductLineDisplayName(productLine: 'v2' | 'v3' | 'v4'): string {
+  const names: Record<'v2' | 'v3' | 'v4', string> = {
+    v2: 'DreamTeam V2',
+    v3: 'DreamTeam V3',
+    v4: 'DreamTeam V4',
+  }
+  return names[productLine]
 }

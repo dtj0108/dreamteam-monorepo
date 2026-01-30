@@ -7,6 +7,7 @@ export const teamMembersSchema = z.object({
   // Query params
   includeWorkload: z.boolean().optional().default(true).describe("Include current task workload for each member"),
   projectId: z.string().optional().describe("Filter to members of a specific project"),
+  excludeAgents: z.boolean().optional().default(true).describe("Exclude AI agent profiles from results (default: true for capacity planning)"),
 })
 
 export function createTeamMembersTool(context: ToolContext) {
@@ -15,7 +16,7 @@ export function createTeamMembersTool(context: ToolContext) {
     inputSchema: teamMembersSchema,
     execute: async (params: z.infer<typeof teamMembersSchema>): Promise<TeamMembersResult> => {
       const { supabase, workspaceId } = context
-      const { includeWorkload = true, projectId } = params
+      const { includeWorkload = true, projectId, excludeAgents = true } = params
 
       if (!workspaceId) {
         throw new Error("Workspace ID is required for team member operations")
@@ -30,7 +31,7 @@ export function createTeamMembersTool(context: ToolContext) {
           display_name,
           status,
           joined_at,
-          profile:profiles!inner(id, name, role, avatar_url, email)
+          profile:profiles!inner(id, name, role, avatar_url, email, is_agent)
         `)
         .eq("workspace_id", workspaceId)
 
@@ -51,6 +52,7 @@ export function createTeamMembersTool(context: ToolContext) {
           role: string | null
           avatar_url: string | null
           email: string | null
+          is_agent: boolean | null
         }
       }
 
@@ -76,6 +78,7 @@ export function createTeamMembersTool(context: ToolContext) {
         avatarUrl: string | null
         status: string | null
         joinedAt: string
+        isAgent: boolean
         workload: {
           totalOpenTasks: number
           inProgressCount: number
@@ -115,6 +118,12 @@ export function createTeamMembersTool(context: ToolContext) {
           ...rawMember,
           profile,
         } as MemberData
+
+        // Skip AI agents when excludeAgents is true (for capacity planning)
+        if (excludeAgents && member.profile?.is_agent) {
+          continue
+        }
+
         // Skip if filtering by project and member is not in project
         if (projectMemberIds && !projectMemberIds.includes(member.profile_id)) {
           continue
@@ -149,6 +158,7 @@ export function createTeamMembersTool(context: ToolContext) {
           avatarUrl: member.profile?.avatar_url || null,
           status: member.status,
           joinedAt: member.joined_at,
+          isAgent: member.profile?.is_agent || false,
           workload,
         })
       }
@@ -174,6 +184,30 @@ export function createTeamMembersTool(context: ToolContext) {
         }
       })
 
+      // Calculate data quality warnings for capacity planning
+      const warnings: string[] = []
+
+      if (includeWorkload && totalMembers > 0) {
+        // Check for members with no tasks (might indicate stale data)
+        const zeroTaskMembers = membersWithWorkload.filter(
+          (m) => m.workload?.totalOpenTasks === 0 && !m.isAgent
+        )
+        if (zeroTaskMembers.length > totalMembers * 0.5) {
+          warnings.push(
+            `${zeroTaskMembers.length} of ${totalMembers} members have 0 tasks assigned - verify data is current`
+          )
+        }
+
+        // Check if any agents were filtered out (informational)
+        const totalRawMembers = (members || []).length
+        const agentsFiltered = totalRawMembers - totalMembers
+        if (excludeAgents && agentsFiltered > 0) {
+          warnings.push(
+            `${agentsFiltered} AI agent profile(s) excluded from capacity analysis`
+          )
+        }
+      }
+
       return {
         members: membersWithWorkload,
         summary: {
@@ -181,6 +215,7 @@ export function createTeamMembersTool(context: ToolContext) {
           byRole: roleBreakdown,
           byWorkloadLevel: includeWorkload ? workloadLevels : undefined,
         },
+        warnings: warnings.length > 0 ? warnings : undefined,
       }
     },
   })

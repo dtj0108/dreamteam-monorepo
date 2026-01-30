@@ -216,7 +216,7 @@ export async function PATCH(
     'name', 'description', 'user_description', 'department_id', 'avatar_url',
     'provider', 'model', 'provider_config',
     'system_prompt', 'permission_mode', 'max_turns', 'is_enabled',
-    'is_head', 'config', 'plan_id'
+    'is_head', 'config', 'plan_id', 'tier_required', 'product_line'
   ]
   const updates: Record<string, unknown> = {}
 

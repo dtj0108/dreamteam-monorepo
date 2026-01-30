@@ -48,10 +48,19 @@ BEGIN
   END IF;
 
   -- Get sender's display name
+  -- First try auth.users for regular users
   SELECT COALESCE(raw_user_meta_data->>'full_name', raw_user_meta_data->>'name', email)
   INTO v_sender_name
   FROM auth.users
   WHERE id = NEW.sender_id;
+
+  -- If not found in auth.users (e.g., agent-sent messages), try profiles table
+  IF v_sender_name IS NULL THEN
+    SELECT COALESCE(full_name, display_name)
+    INTO v_sender_name
+    FROM profiles
+    WHERE id = NEW.sender_id;
+  END IF;
 
   -- Determine notification type and build payload
   IF NEW.channel_id IS NOT NULL THEN

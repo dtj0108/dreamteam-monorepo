@@ -48,6 +48,8 @@ export interface MCPTestResult {
 // ============================================
 
 export type AIProvider = 'anthropic' | 'xai'
+export type BillingTier = 'startup' | 'teams' | 'enterprise'
+export type ProductLine = 'v2' | 'v3' | 'v4'
 export type AgentModel =
   | 'sonnet' | 'opus' | 'haiku'  // Anthropic
   | 'grok-4-fast' | 'grok-3' | 'grok-3-mini' | 'grok-2'  // xAI
@@ -73,6 +75,8 @@ export interface Agent {
   workspace_id: string | null
   config: Record<string, unknown>
   plan_id: string | null
+  tier_required: BillingTier | null
+  product_line: ProductLine | null
   current_version: number
   published_version: number | null
   created_at: string
@@ -462,6 +466,8 @@ export interface UpdateAgentRequest {
   is_enabled?: boolean
   is_head?: boolean
   plan_id?: string | null
+  tier_required?: BillingTier | null
+  product_line?: ProductLine | null
 }
 
 export interface UpdateAgentToolsRequest {
@@ -799,4 +805,32 @@ export const EXECUTION_STATUS_COLORS: Record<ScheduleExecutionStatus, string> = 
   completed: 'green',
   failed: 'red',
   cancelled: 'gray'
+}
+
+// ============================================
+// BILLING TIER TYPES
+// ============================================
+
+export const BILLING_TIER_LABELS: Record<BillingTier, string> = {
+  startup: 'Startup',
+  teams: 'Teams',
+  enterprise: 'Enterprise'
+}
+
+export const BILLING_TIER_DESCRIPTIONS: Record<BillingTier, string> = {
+  startup: 'Exclusive to Startup tier users (V2 agents)',
+  teams: 'Exclusive to Teams tier users (V3 agents)',
+  enterprise: 'Exclusive to Enterprise tier users (V4 agents)'
+}
+
+export const PRODUCT_LINE_LABELS: Record<ProductLine, string> = {
+  v2: 'V2 (Startup)',
+  v3: 'V3 (Teams)',
+  v4: 'V4 (Enterprise)'
+}
+
+export const PRODUCT_LINE_TO_TIER: Record<ProductLine, BillingTier> = {
+  v2: 'startup',
+  v3: 'teams',
+  v4: 'enterprise'
 }

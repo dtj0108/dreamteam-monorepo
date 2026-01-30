@@ -5,6 +5,15 @@ import { useBilling } from '@/hooks/use-billing'
 import type { BillingState, BillingInvoice } from '@/types/billing'
 
 /**
+ * Checkout result type
+ */
+interface CheckoutResult {
+  upgraded?: boolean
+  newTier?: string
+  redirected?: boolean
+}
+
+/**
  * Billing context type
  */
 interface BillingContextType {
@@ -23,7 +32,7 @@ interface BillingContextType {
     type: 'workspace_plan' | 'agent_tier'
     plan?: 'monthly' | 'annual'
     tier?: 'startup' | 'teams' | 'enterprise'
-  }) => Promise<void>
+  }) => Promise<CheckoutResult>
   openPortal: () => Promise<void>
 
   // Computed helpers for feature gating

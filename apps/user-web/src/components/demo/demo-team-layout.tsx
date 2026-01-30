@@ -11,7 +11,6 @@ import {
   ChevronDown,
   Plus,
   Lock,
-  Sparkles,
 } from "lucide-react"
 
 import { useDemoTeam, useDemoData } from "@/providers"
@@ -200,21 +199,6 @@ function DemoTeamSidebar() {
           </Collapsible>
         </SidebarGroup>
 
-        {/* AI Agents Section */}
-        <SidebarGroup>
-          <SidebarGroupLabel className="flex items-center gap-2">
-            <Sparkles className="size-3.5 text-orange-500" />
-            <span>Agents</span>
-            <Badge variant="outline" className="ml-auto text-[10px] bg-gradient-to-r from-orange-500/10 to-amber-500/10 text-orange-600 border-orange-200">
-              Soon
-            </Badge>
-          </SidebarGroupLabel>
-          <div className="px-2 py-2">
-            <p className="text-xs text-muted-foreground">
-              AI agents that help your team work smarter.
-            </p>
-          </div>
-        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>

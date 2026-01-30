@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminClient } from '@dreamteam/database/server'
 import { sendVerificationCode } from '@/lib/twilio'
 import { stripe } from '@/lib/stripe'
-import { updateBillingFromSubscription } from '@/lib/billing-queries'
+import { updateBillingFromSubscription, ensureWorkspaceBilling } from '@/lib/billing-queries'
 
 export async function POST(request: NextRequest) {
   try {
@@ -178,6 +178,10 @@ export async function POST(request: NextRequest) {
           { workspace_id: workspace.id, name: 'general', description: 'General discussions', created_by: authData.user.id },
           { workspace_id: workspace.id, name: 'random', description: 'Off-topic conversations', created_by: authData.user.id },
         ])
+
+        // Ensure billing record exists for new workspace (with default free tier)
+        // This is idempotent - safe to call even if Stripe checkout will create one later
+        await ensureWorkspaceBilling(workspace.id)
 
         // If there's a Stripe session from guest checkout, link subscription to this workspace
         if (sessionId && workspace.id) {

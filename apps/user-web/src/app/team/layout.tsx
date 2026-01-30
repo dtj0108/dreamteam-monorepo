@@ -4,22 +4,18 @@ import { DashboardLayout } from "@/components/dashboard-layout"
 import { ProductGate } from "@/components/product-gate"
 import { TeamProvider, useTeam } from "@/providers/team-provider"
 import { MeetingProvider } from "@/providers/meeting-provider"
-import { CreateChannelDialog, StartDMDialog, TeamSidebar, CreateAgentDialog } from "@/components/team"
+import { CreateChannelDialog, StartDMDialog, TeamSidebar } from "@/components/team"
 
 function TeamLayoutContent({ children }: { children: React.ReactNode }) {
   const {
     channels,
     directMessages,
-    agents,
     showCreateChannel,
     setShowCreateChannel,
     showStartDM,
     setShowStartDM,
-    showCreateAgent,
-    setShowCreateAgent,
     createChannel,
     startDM,
-    createAgent,
     workspaceId,
     userId,
   } = useTeam()
@@ -30,11 +26,9 @@ function TeamLayoutContent({ children }: { children: React.ReactNode }) {
       <TeamSidebar
         channels={channels}
         directMessages={directMessages}
-        agents={agents}
         workspaceId={workspaceId}
         onCreateChannel={() => setShowCreateChannel(true)}
         onStartDM={() => setShowStartDM(true)}
-        onCreateAgent={() => setShowCreateAgent(true)}
       />
 
       {/* Main Content Area */}
@@ -59,14 +53,6 @@ function TeamLayoutContent({ children }: { children: React.ReactNode }) {
         workspaceId={workspaceId}
         currentUserId={userId}
         onStartDM={startDM}
-      />
-
-      {/* Create Agent Dialog */}
-      <CreateAgentDialog
-        open={showCreateAgent}
-        onOpenChange={setShowCreateAgent}
-        workspaceId={workspaceId}
-        onCreateAgent={createAgent}
       />
     </div>
   )

@@ -14,7 +14,6 @@ import {
   Plus,
   ChevronDown,
   ChevronRight,
-  Sparkles,
   UserPlus,
   Settings,
   FileIcon,
@@ -46,42 +45,27 @@ export interface DirectMessage {
   lastMessage?: string
 }
 
-export interface Agent {
-  id: string
-  name: string
-  description?: string | null
-  avatar_url?: string | null
-  unreadCount?: number
-}
-
 interface TeamSidebarProps {
   channels: Channel[]
   directMessages: DirectMessage[]
-  agents?: Agent[]
   activeChannelId?: string
   activeDmId?: string
-  activeAgentId?: string
   workspaceId?: string
   onCreateChannel?: () => void
   onStartDM?: () => void
-  onCreateAgent?: () => void
 }
 
 export function TeamSidebar({
   channels,
   directMessages,
-  agents = [],
   activeChannelId,
   activeDmId,
-  activeAgentId,
   workspaceId,
   onCreateChannel,
   onStartDM,
-  onCreateAgent,
 }: TeamSidebarProps) {
   const [channelsOpen, setChannelsOpen] = useLocalStorage("team-channels-open", true)
   const [dmsOpen, setDmsOpen] = useLocalStorage("team-dms-open", true)
-  const [agentsOpen, setAgentsOpen] = useLocalStorage("team-agents-open", true)
   const pathname = usePathname()
 
   return (
@@ -236,95 +220,6 @@ export function TeamSidebar({
                 )}
               </div>
             </CollapsibleContent>
-          </Collapsible>
-
-          {/* Agents Section */}
-          <Collapsible open={agentsOpen} onOpenChange={setAgentsOpen} className="mt-4" suppressHydrationWarning>
-            <div className="flex items-center justify-between px-2 py-1.5">
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors">
-                  {agentsOpen ? (
-                    <ChevronDown className="size-3.5" />
-                  ) : (
-                    <ChevronRight className="size-3.5" />
-                  )}
-                  ✨ Agents
-                </button>
-              </CollapsibleTrigger>
-              <Link href="/team/agents/shop">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                >
-                  <Plus className="size-4" />
-                </Button>
-              </Link>
-            </div>
-            
-            <CollapsibleContent>
-              <div className="space-y-0.5">
-                {agents.map((agent) => {
-                  const isActive = activeAgentId === agent.id || pathname === `/team/agents/${agent.id}`
-                  
-                  return (
-                    <Link
-                      key={agent.id}
-                      href={`/team/agents/${agent.id}`}
-                      className={cn(
-                        "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors",
-                        isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      <div className="size-6 rounded-md bg-muted flex items-center justify-center text-base">
-                        {agent.avatar_url || <Sparkles className="size-3 text-muted-foreground" />}
-                      </div>
-                      <span className="truncate flex-1">{agent.name}</span>
-                      {agent.unreadCount && agent.unreadCount > 0 && (
-                        <span
-                          className={cn(
-                            "text-xs px-1.5 py-0.5 rounded-full",
-                            isActive
-                              ? "bg-primary-foreground/20 text-primary-foreground"
-                              : "bg-primary text-primary-foreground"
-                          )}
-                        >
-                          {agent.unreadCount}
-                        </span>
-                      )}
-                    </Link>
-                  )
-                })}
-                
-                {agents.length === 0 && (
-                  <Link
-                    href="/team/agents/shop"
-                    className="w-full flex items-center gap-2 px-2 py-3 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  >
-                    <Plus className="size-4" />
-                    <span>Hire your first agent</span>
-                  </Link>
-                )}
-              </div>
-            </CollapsibleContent>
-
-            {/* Configurations link - always visible when agents exist */}
-            {agents.length > 0 && (
-              <Link
-                href="/team/agents/configurations"
-                className={cn(
-                  "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors mt-1",
-                  pathname?.startsWith("/team/agents/configurations")
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Settings className="size-4" />
-                <span>Configurations</span>
-              </Link>
-            )}
           </Collapsible>
 
           {/* Files Link */}

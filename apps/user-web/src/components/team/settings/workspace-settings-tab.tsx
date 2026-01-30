@@ -20,6 +20,7 @@ import {
 } from "@dreamteam/ui/alert-dialog"
 import { Building2, Loader2, Trash2 } from "lucide-react"
 import type { WorkspaceSettings } from "@/types/team-settings"
+import { TimezoneSelect } from "./timezone-select"
 
 interface WorkspaceSettingsTabProps {
   workspaceId: string
@@ -32,6 +33,7 @@ export function WorkspaceSettingsTab({ workspaceId, isOwner }: WorkspaceSettings
   const [saving, setSaving] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [timezone, setTimezone] = useState("UTC")
   const [hasChanges, setHasChanges] = useState(false)
 
   useEffect(() => {
@@ -42,9 +44,10 @@ export function WorkspaceSettingsTab({ workspaceId, isOwner }: WorkspaceSettings
     if (workspace) {
       const nameChanged = name !== workspace.name
       const descChanged = description !== (workspace.description || "")
-      setHasChanges(nameChanged || descChanged)
+      const tzChanged = timezone !== (workspace.timezone || "UTC")
+      setHasChanges(nameChanged || descChanged || tzChanged)
     }
-  }, [name, description, workspace])
+  }, [name, description, timezone, workspace])
 
   async function fetchWorkspace() {
     try {
@@ -54,6 +57,7 @@ export function WorkspaceSettingsTab({ workspaceId, isOwner }: WorkspaceSettings
         setWorkspace(data)
         setName(data.name || "")
         setDescription(data.description || "")
+        setTimezone(data.timezone || "UTC")
       }
     } catch (error) {
       console.error("Failed to fetch workspace:", error)
@@ -70,7 +74,7 @@ export function WorkspaceSettingsTab({ workspaceId, isOwner }: WorkspaceSettings
       const res = await fetch("/api/team/workspace", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, name, description }),
+        body: JSON.stringify({ workspaceId, name, description, timezone }),
       })
 
       if (res.ok) {
@@ -89,6 +93,7 @@ export function WorkspaceSettingsTab({ workspaceId, isOwner }: WorkspaceSettings
     if (workspace) {
       setName(workspace.name || "")
       setDescription(workspace.description || "")
+      setTimezone(workspace.timezone || "UTC")
     }
   }
 
@@ -152,6 +157,19 @@ export function WorkspaceSettingsTab({ workspaceId, isOwner }: WorkspaceSettings
             />
             <p className="text-xs text-muted-foreground">
               A brief description of what this workspace is for
+            </p>
+          </div>
+
+          {/* Timezone */}
+          <div className="space-y-2">
+            <Label htmlFor="workspace-timezone">Timezone</Label>
+            <TimezoneSelect
+              value={timezone}
+              onValueChange={setTimezone}
+              disabled={!isOwner}
+            />
+            <p className="text-xs text-muted-foreground">
+              Used for agent execution schedules and time displays
             </p>
           </div>
 

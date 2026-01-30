@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     // Get workspace
     const { data: workspace, error } = await supabase
       .from("workspaces")
-      .select("id, name, slug, description, avatar_url, owner_id, created_at, business_context")
+      .select("id, name, slug, description, avatar_url, owner_id, created_at, business_context, timezone")
       .eq("id", workspaceId)
       .single()
 
@@ -64,7 +64,7 @@ export async function PATCH(request: NextRequest) {
     const supabase = createAdminClient()
 
     const body = await request.json()
-    const { workspaceId, name, description, businessContext } = body
+    const { workspaceId, name, description, businessContext, timezone } = body
 
     if (!workspaceId) {
       return NextResponse.json({ error: "Workspace ID required" }, { status: 400 })
@@ -121,6 +121,7 @@ export async function PATCH(request: NextRequest) {
     if (name !== undefined) updateData.name = name
     if (description !== undefined) updateData.description = description
     if (businessContext !== undefined) updateData.business_context = businessContext
+    if (timezone !== undefined) updateData.timezone = timezone
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: "No fields to update" }, { status: 400 })
@@ -131,7 +132,7 @@ export async function PATCH(request: NextRequest) {
       .from("workspaces")
       .update(updateData)
       .eq("id", workspaceId)
-      .select("id, name, slug, description, avatar_url, owner_id, created_at, business_context")
+      .select("id, name, slug, description, avatar_url, owner_id, created_at, business_context, timezone")
       .single()
 
     if (error) {
