@@ -20,6 +20,7 @@ import { getModel, getApiKeyEnvVar } from "./lib/ai-providers.js"
 import { createAdminClient } from "./lib/supabase.js"
 import { applyRulesToPrompt, type AgentRule } from "./lib/agent-rules.js"
 import { detectHallucination, formatHallucinationResult, type HallucinationCheckResult } from "./lib/hallucination-detection.js"
+import { formatTimeContext } from "./lib/time-context.js"
 
 // Output config schema for controlling response style
 const outputConfigSchema = z.object({
@@ -38,35 +39,6 @@ const requestSchema = z.object({
 })
 
 type OutputConfig = z.infer<typeof outputConfigSchema>
-
-/**
- * Format time context for agent execution.
- * Provides unambiguous datetime information for the LLM.
- */
-function formatTimeContext(timezone: string = 'UTC'): string {
-  const now = new Date();
-
-  // ISO format for precision
-  const isoTime = now.toISOString();
-
-  // Human-readable format in the schedule's timezone
-  const localFormatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZoneName: 'short',
-  });
-  const localTime = localFormatter.format(now);
-
-  return `## Current Time
-- Date/Time: ${localTime}
-- ISO: ${isoTime}
-- Timezone: ${timezone}`;
-}
 
 /**
  * Build output instructions based on output_config.

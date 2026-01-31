@@ -12,6 +12,7 @@
 
 import { generateText, stepCountIs } from "ai"
 import crypto from "crypto"
+import { createAdminClient } from "./supabase.js"
 import type {
   DeployedTeamConfig,
   DeployedAgent,
@@ -20,6 +21,7 @@ import type {
 import { getAgentBySlug } from "./team-config.js"
 import { getDelegationRule, type DelegationInput } from "./delegation-tool.js"
 import { applyRulesToPrompt, type AgentRule } from "./agent-rules.js"
+import { formatTimeContext } from "./time-context.js"
 import {
   getAgentChannel,
   postToAgentChannel,
@@ -63,11 +65,13 @@ export interface DelegationOptions {
  * - Team-level mind files
  * - Agent rules
  * - Agent skills
+ * - Current time context
  */
 function buildDelegatedAgentPrompt(
   agent: DeployedAgent,
   teamMind: DeployedMind[],
-  workspaceId: string
+  workspaceId: string,
+  timezone: string = 'UTC'
 ): string {
   let systemPrompt = agent.system_prompt
 
@@ -115,7 +119,7 @@ ${mindContent}`
 ${skillsContent}`
   }
 
-  // Add delegation context with workspace_id instruction
+  // Add delegation context with workspace_id instruction and time context
   systemPrompt = `${systemPrompt}
 
 ---
@@ -123,6 +127,8 @@ ${skillsContent}`
 # Delegation Context
 
 You are responding to a delegated task from the team's head agent. Focus on your specialty and provide a thorough, helpful response. The head agent will incorporate your response into the conversation with the user.
+
+${formatTimeContext(timezone)}
 
 ## Current Context
 - Workspace ID: ${workspaceId}
@@ -204,8 +210,25 @@ export async function handleDelegation(
 
   console.log(`[Delegation] Found target agent: ${targetAgent.name}`)
 
-  // Build system prompt with mind, rules, skills
-  const systemPrompt = buildDelegatedAgentPrompt(targetAgent, config.team_mind, workspaceId)
+  // Fetch workspace timezone for time context
+  let workspaceTimezone = 'UTC'
+  try {
+    const supabase = createAdminClient()
+    const { data: workspaceData } = await supabase
+      .from("workspaces")
+      .select("timezone")
+      .eq("id", workspaceId)
+      .single()
+    
+    if (workspaceData?.timezone) {
+      workspaceTimezone = workspaceData.timezone
+    }
+  } catch (error) {
+    console.log("[Delegation] Failed to load workspace timezone, using UTC:", error)
+  }
+
+  // Build system prompt with mind, rules, skills, and time context
+  const systemPrompt = buildDelegatedAgentPrompt(targetAgent, config.team_mind, workspaceId, workspaceTimezone)
 
   // Build message with context template
   const message = buildDelegatedMessage(input, config, headAgentSlug)
