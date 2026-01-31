@@ -27,6 +27,7 @@ import {
 } from "./lib/agent-session.js"
 import { applyRulesToPrompt, type AgentRule } from "./lib/agent-rules.js"
 import { buildBusinessContextInstructions, parseBusinessContext } from "./lib/business-context.js"
+import { formatTimeContext } from "./lib/time-context.js"
 import type {
   ServerMessage,
   TextMessage,
@@ -552,9 +553,28 @@ CONTEXT: <relevant context from the conversation>
 After outputting a delegation block, WAIT for the specialist's response before continuing. The specialist's response will be provided to you, and you should incorporate it into your response to the user.`
       }
 
+      // Fetch workspace timezone for time context
+      let workspaceTimezone = 'UTC'
+      try {
+        const { data: workspaceData } = await supabase
+          .from("workspaces")
+          .select("timezone")
+          .eq("id", workspaceId)
+          .single()
+        
+        if (workspaceData?.timezone) {
+          workspaceTimezone = workspaceData.timezone
+        }
+      } catch (error) {
+        console.log("[Agent Chat] Failed to load workspace timezone, using UTC:", error)
+      }
+
       // Inject user/workspace context so agent knows who it's talking to
       // This prevents agents from asking "what's your workspace ID?" when they already have it
-      const contextSection = `## Current Context
+      // Also includes current time context so agents don't hallucinate dates
+      const contextSection = `${formatTimeContext(workspaceTimezone)}
+
+## Current Context
 - Workspace ID: ${workspaceId}
 - User ID: ${session.id}${session.name ? `\n- User Name: ${session.name}` : ''}${session.email ? `\n- User Email: ${session.email}` : ''}
 

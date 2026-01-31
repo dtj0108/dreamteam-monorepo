@@ -20,6 +20,7 @@ import { createAdminClient } from "./lib/supabase.js"
 import { loadDeployedTeamConfig } from "./lib/team-config.js"
 import { getAgentProfile } from "./lib/agent-profile.js"
 import { applyRulesToPrompt, type AgentRule } from "./lib/agent-rules.js"
+import { formatTimeContext } from "./lib/time-context.js"
 import { createMCPClient, type MCPClientInstance } from "./lib/mcp-client.js"
 import { getModel, getApiKeyEnvVar } from "./lib/ai-providers.js"
 import type { DeployedAgent, DeployedMind } from "./types/team.js"
@@ -47,7 +48,8 @@ interface WebhookPayload {
 function buildSpecialistPrompt(
   agent: DeployedAgent,
   teamMind: DeployedMind[],
-  workspaceId: string
+  workspaceId: string,
+  timezone: string = 'UTC'
 ): string {
   let systemPrompt = agent.system_prompt
 
@@ -95,7 +97,7 @@ ${mindContent}`
 ${skillsContent}`
   }
 
-  // Add delegation context with workspace_id instruction
+  // Add delegation context with workspace_id instruction and time context
   systemPrompt = `${systemPrompt}
 
 ---
@@ -103,6 +105,8 @@ ${skillsContent}`
 # Delegation Context
 
 You are responding to a delegated task from the team's head agent. Focus on your specialty and provide a thorough, helpful response. The head agent will incorporate your response into the conversation with the user.
+
+${formatTimeContext(timezone)}
 
 ## Current Context
 - Workspace ID: ${workspaceId}
@@ -119,9 +123,10 @@ async function runSpecialistQuery(
   agent: DeployedAgent,
   message: string,
   workspaceId: string,
-  teamMind: DeployedMind[]
+  teamMind: DeployedMind[],
+  timezone: string = 'UTC'
 ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
-  const systemPrompt = buildSpecialistPrompt(agent, teamMind, workspaceId)
+  const systemPrompt = buildSpecialistPrompt(agent, teamMind, workspaceId, timezone)
   const toolNames = agent.tools?.map((t) => t.name) || []
   const provider = agent.provider || "anthropic"
 
@@ -250,12 +255,29 @@ export async function agentChannelMessageHandler(
       `[Agent Channel Handler] Running specialist: ${specialist.name}`
     )
 
+    // Fetch workspace timezone for time context
+    let workspaceTimezone = 'UTC'
+    try {
+      const { data: workspaceData } = await supabase
+        .from("workspaces")
+        .select("timezone")
+        .eq("id", channel.workspace_id)
+        .single()
+      
+      if (workspaceData?.timezone) {
+        workspaceTimezone = workspaceData.timezone
+      }
+    } catch (error) {
+      console.log("[Agent Channel Handler] Failed to load workspace timezone, using UTC:", error)
+    }
+
     // Run the specialist query
     const result = await runSpecialistQuery(
       specialist,
       record.content,
       channel.workspace_id,
-      config.team_mind
+      config.team_mind,
+      workspaceTimezone
     )
 
     console.log(
