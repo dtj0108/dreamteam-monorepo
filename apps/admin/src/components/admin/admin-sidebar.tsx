@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Users,
   Building2,
@@ -23,11 +23,12 @@ import {
   CreditCard,
   Cpu,
   FlaskConical,
-  Brain
+  Brain,
+  MessageCircleQuestion,
+  Clock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 
 const navItems = [
@@ -38,6 +39,7 @@ const navItems = [
   { href: '/admin/api-keys', label: 'API Keys', icon: Key },
   { href: '/admin/model-providers', label: 'Model Providers', icon: Cpu },
   { href: '/admin/testing', label: 'Testing', icon: FlaskConical },
+  { href: '/admin/time-travel', label: 'Time Travel', icon: Clock },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: ScrollText },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ]
@@ -138,6 +140,14 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
           <p className="text-sm font-medium truncate">{user.name || user.email}</p>
           <p className="text-xs text-muted-foreground truncate">{user.email}</p>
         </div>
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-3"
+          onClick={() => router.push('/admin/support')}
+        >
+          <MessageCircleQuestion className="h-4 w-4" />
+          Support & Bugs
+        </Button>
         <Button
           variant="ghost"
           className="w-full justify-start gap-3"

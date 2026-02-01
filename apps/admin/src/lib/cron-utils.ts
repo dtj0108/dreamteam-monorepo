@@ -174,3 +174,79 @@ export function isValidCron(cronExpression: string): boolean {
     return false
   }
 }
+
+/**
+ * Get all run times for a cron expression within a time range.
+ * Useful for batch simulation of scheduled tasks.
+ * 
+ * @param cronExpression - Standard 5-field cron expression
+ * @param timezone - IANA timezone string
+ * @param startTime - Start of the time range (inclusive)
+ * @param endTime - End of the time range (inclusive)
+ * @param maxRuns - Maximum number of runs to return (default 100, for safety)
+ * @returns Array of Date objects representing each run time
+ */
+export function getAllRunsInRange(
+  cronExpression: string,
+  timezone: string = 'UTC',
+  startTime: Date,
+  endTime: Date,
+  maxRuns: number = 100
+): Date[] {
+  const runs: Date[] = []
+  
+  // Validate inputs
+  if (startTime >= endTime) {
+    return runs
+  }
+
+  // Start searching from just before startTime to catch runs at exactly startTime
+  let searchFrom = new Date(startTime.getTime() - 60000) // 1 minute before
+  
+  while (runs.length < maxRuns) {
+    const nextRun = getNextRunTime(cronExpression, timezone, searchFrom)
+    
+    // If next run is beyond our end time, we're done
+    if (nextRun > endTime) {
+      break
+    }
+    
+    // Only include if it's within or after our start time
+    if (nextRun >= startTime) {
+      runs.push(nextRun)
+    }
+    
+    // Search from this run for the next one
+    searchFrom = nextRun
+  }
+  
+  return runs
+}
+
+/**
+ * Preview upcoming runs for a cron expression.
+ * Convenience function for UI previews.
+ * 
+ * @param cronExpression - Standard 5-field cron expression
+ * @param timezone - IANA timezone string
+ * @param count - Number of upcoming runs to return
+ * @param fromTime - Starting point for preview (default: now)
+ * @returns Array of Date objects representing upcoming run times
+ */
+export function getUpcomingRuns(
+  cronExpression: string,
+  timezone: string = 'UTC',
+  count: number = 5,
+  fromTime: Date = new Date()
+): Date[] {
+  const runs: Date[] = []
+  let searchFrom = fromTime
+  
+  for (let i = 0; i < count; i++) {
+    const nextRun = getNextRunTime(cronExpression, timezone, searchFrom)
+    runs.push(nextRun)
+    searchFrom = nextRun
+  }
+  
+  return runs
+}

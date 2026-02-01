@@ -8,9 +8,11 @@ RETURNS boolean AS $$
 DECLARE
   lock_id bigint;
   acquired boolean;
+  uuid_hex text;
 BEGIN
-  -- Convert UUID to bigint lock ID (using first 8 bytes)
-  lock_id := ('x' || substr(schedule_id::text, 1, 16))::bit(64)::bigint;
+  -- Convert UUID to bigint lock ID (using first 16 hex chars, removing hyphens)
+  uuid_hex := replace(schedule_id::text, '-', '');
+  lock_id := ('x' || substr(uuid_hex, 1, 16))::bit(64)::bigint;
   
   -- Try to acquire lock
   SELECT pg_try_advisory_lock(lock_id) INTO acquired;
@@ -29,8 +31,10 @@ CREATE OR REPLACE FUNCTION release_schedule_lock(schedule_id uuid)
 RETURNS void AS $$
 DECLARE
   lock_id bigint;
+  uuid_hex text;
 BEGIN
-  lock_id := ('x' || substr(schedule_id::text, 1, 16))::bit(64)::bigint;
+  uuid_hex := replace(schedule_id::text, '-', '');
+  lock_id := ('x' || substr(uuid_hex, 1, 16))::bit(64)::bigint;
   PERFORM pg_advisory_unlock(lock_id);
 END;
 $$ LANGUAGE plpgsql;
@@ -84,8 +88,10 @@ RETURNS boolean AS $$
 DECLARE
   lock_id bigint;
   is_held boolean;
+  uuid_hex text;
 BEGIN
-  lock_id := ('x' || substr(schedule_id::text, 1, 16))::bit(64)::bigint;
+  uuid_hex := replace(schedule_id::text, '-', '');
+  lock_id := ('x' || substr(uuid_hex, 1, 16))::bit(64)::bigint;
   
   -- Check if lock is held by any session
   SELECT EXISTS (
