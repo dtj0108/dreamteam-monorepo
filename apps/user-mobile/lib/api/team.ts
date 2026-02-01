@@ -161,70 +161,165 @@ export async function getChannels(
 }
 
 export async function getChannel(id: string): Promise<ChannelResponse> {
-  console.log("[Team API] getChannel via Supabase", id);
+  console.log("[Team API] getChannel via Web API", id);
+
+  // Use the web API endpoint (same pattern as getChannelMessages)
+  // This avoids RLS issues with direct Supabase queries
+  const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+  if (API_URL) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const url = `${API_URL}/api/team/channels/${id}`;
+      console.log("[Team API] Fetching channel from web API:", url);
+
+      const response = await fetch(url, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: session ? `Bearer ${session.access_token}` : "",
+        },
+      });
+
+      if (response.ok) {
+        const channel = await response.json();
+        console.log("[Team API] getChannel via Web API - channel name:", channel.name);
+
+        // Transform members from the nested channel_members data
+        const members: WorkspaceMember[] = (channel.channel_members || []).map((cm: any) => {
+          const profile = cm.profiles || {};
+          const profileName = profile.name || profile.display_name || "";
+          return {
+            id: profile.id,
+            workspace_id: channel.workspace_id,
+            user_id: profile.id,
+            role: "member" as const,
+            display_name: profileName,
+            title: null,
+            timezone: null,
+            joined_at: cm.joined_at,
+            invited_by: null,
+            user: {
+              id: profile.id,
+              name: profileName || profile.email || "",
+              email: profile.email || "",
+              phone: null,
+              avatar_url: profile.avatar_url,
+            },
+          };
+        });
+
+        const result: ChannelResponse = {
+          channel: {
+            id: channel.id,
+            workspace_id: channel.workspace_id,
+            name: channel.name,
+            description: channel.description,
+            topic: null,
+            type: channel.is_private ? "private" : "public",
+            is_archived: channel.is_archived,
+            is_default: false,
+            member_count: members.length,
+            created_by: channel.created_by,
+            created_at: channel.created_at,
+            updated_at: channel.updated_at,
+          } as ChannelWithMembership,
+          members,
+        };
+
+        console.log("[Team API] getChannel response:", result.channel.name);
+        return result;
+      } else {
+        console.error("[Team API] getChannel Web API error:", response.status, await response.text());
+      }
+    } catch (error) {
+      console.error("[Team API] getChannel Web API fetch error:", error);
+    }
+  }
+
+  // Fallback to direct Supabase - query via channel_members for RLS compatibility
+  // The user has RLS access to their own channel_members rows, so we join from there
+  console.log("[Team API] getChannel falling back to Supabase via channel_members");
   try {
     const userId = await getCurrentUserId();
 
-    // Get channel with membership info
-    const { data: channel, error: channelError } = await supabase
-      .from("channels")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (channelError) throw channelError;
-
-    // Get user's membership for this channel
-    const { data: membership } = await supabase
+    // Query through channel_members which the user has RLS access to
+    const { data: memberData, error: memberError } = await supabase
       .from("channel_members")
-      .select("notifications, last_read_at, joined_at")
+      .select(`
+        channel:channels(
+          id, workspace_id, name, description,
+          is_private, is_archived, created_by, created_at, updated_at
+        )
+      `)
       .eq("channel_id", id)
       .eq("profile_id", userId)
       .single();
 
-    // Get channel members
+    if (memberError) throw memberError;
+    if (!memberData?.channel) throw new Error(`Channel not found or not a member: ${id}`);
+
+    // Type assertion needed because Supabase join types can be inferred as arrays
+    const channel = memberData.channel as unknown as {
+      id: string;
+      workspace_id: string;
+      name: string;
+      description: string | null;
+      is_private: boolean;
+      is_archived: boolean;
+      created_by: string;
+      created_at: string;
+      updated_at: string;
+    };
+
     const { data: membersData } = await supabase
       .from("channel_members")
-      .select(`
-        joined_at,
-        profile:profiles(*)
-      `)
+      .select(`joined_at, profile:profiles(*)`)
       .eq("channel_id", id);
 
-    // Transform members to WorkspaceMember format
     const members = (membersData || [])
       .filter((item: any) => item.profile)
-      .map((item: any) => ({
-        id: item.profile.id,
-        workspace_id: channel.workspace_id,
-        user_id: item.profile.id,
-        role: "member" as const,
-        display_name: item.profile.display_name,
-        title: null,
-        timezone: null,
-        joined_at: item.joined_at,
-        invited_by: null,
-        user: {
+      .map((item: any) => {
+        const profileName = item.profile.name || item.profile.display_name || "";
+        return {
           id: item.profile.id,
-          name: item.profile.display_name || item.profile.email || "",
-          email: item.profile.email || "",
-          phone: null,
-          avatar_url: item.profile.avatar_url,
-        },
-      })) as WorkspaceMember[];
+          workspace_id: channel.workspace_id,
+          user_id: item.profile.id,
+          role: "member" as const,
+          display_name: profileName,
+          title: null,
+          timezone: null,
+          joined_at: item.joined_at,
+          invited_by: null,
+          user: {
+            id: item.profile.id,
+            name: profileName || item.profile.email || "",
+            email: item.profile.email || "",
+            phone: null,
+            avatar_url: item.profile.avatar_url,
+          },
+        };
+      }) as WorkspaceMember[];
 
-    const result: ChannelResponse = {
+    return {
       channel: {
-        ...channel,
-        membership: membership || undefined,
+        id: channel.id,
+        workspace_id: channel.workspace_id,
+        name: channel.name,
+        description: channel.description,
+        topic: null,
+        type: channel.is_private ? "private" : "public",
+        is_archived: channel.is_archived,
+        is_default: false,
+        member_count: members.length,
+        created_by: channel.created_by,
+        created_at: channel.created_at,
+        updated_at: channel.updated_at,
       } as ChannelWithMembership,
       members,
     };
-
-    console.log("[Team API] getChannel response:", result);
-    return result;
   } catch (error) {
-    console.error("[Team API] getChannel ERROR:", error);
+    console.error("[Team API] getChannel Supabase ERROR:", error);
     throw error;
   }
 }
@@ -1058,7 +1153,8 @@ export async function getDMConversations(): Promise<DMConversationsResponse> {
           id,
           name,
           email,
-          avatar_url
+          avatar_url,
+          is_agent
         )
       `)
       .in("conversation_id", conversationIds);
@@ -1113,6 +1209,7 @@ export async function getDMConversations(): Promise<DMConversationsResponse> {
                 email: otherProfile.email || "",
                 phone: null,
                 avatar_url: otherProfile.avatar_url,
+                is_agent: otherProfile.is_agent || false,
               },
             }
           : undefined,
@@ -1167,6 +1264,9 @@ export async function getDMConversation(
       (p: any) => p.profile_id === userId
     ) as any;
 
+    // Use profile.name (the actual field) - profiles table has "name", not "display_name"
+    const profileName = otherParticipant?.profile?.name || otherParticipant?.profile?.display_name || "";
+
     const result: DirectMessageConversation = {
       id: conversation.id,
       workspace_id: conversation.workspace_id,
@@ -1179,17 +1279,18 @@ export async function getDMConversation(
             workspace_id: conversation.workspace_id,
             user_id: otherParticipant.profile.id,
             role: "member",
-            display_name: otherParticipant.profile.display_name,
+            display_name: profileName,
             title: null,
             timezone: null,
             joined_at: conversation.created_at,
             invited_by: null,
             user: {
               id: otherParticipant.profile.id,
-              name: otherParticipant.profile.display_name || otherParticipant.profile.email || "",
+              name: profileName || otherParticipant.profile.email || "",
               email: otherParticipant.profile.email || "",
               phone: null,
               avatar_url: otherParticipant.profile.avatar_url,
+              is_agent: otherParticipant.profile.is_agent || false,
             },
           }
         : undefined,

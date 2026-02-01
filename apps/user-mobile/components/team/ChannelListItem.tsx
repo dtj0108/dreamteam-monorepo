@@ -21,9 +21,17 @@ export function ChannelListItem({ channel, onPress }: ChannelListItemProps) {
     >
       {/* Channel Icon */}
       {isPrivate ? (
-        <Ionicons name="lock-closed" size={18} color="#64748b" />
+        <Ionicons
+          name="lock-closed"
+          size={18}
+          color={hasUnread ? "#0f172a" : "#64748b"}
+        />
       ) : (
-        <Text className="text-lg text-gray-500">#</Text>
+        <Text
+          className={`text-lg ${hasUnread ? "font-bold text-slate-900" : "text-gray-500"}`}
+        >
+          #
+        </Text>
       )}
 
       {/* Channel Name */}

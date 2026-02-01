@@ -6,6 +6,7 @@ import {
   ACTIVITY_TYPE_COLORS,
   ACTIVITY_TYPE_ICONS,
   getActivityTypeLabel,
+  Communication,
 } from "../../lib/types/sales";
 
 interface ActivityItemProps {
@@ -42,6 +43,10 @@ export function ActivityItem({
   const color = ACTIVITY_TYPE_COLORS[activity.type];
   const iconName = ACTIVITY_TYPE_ICONS[activity.type] as keyof typeof FontAwesome.glyphMap;
   const typeLabel = getActivityTypeLabel(activity.type);
+
+  // Check if this is a communication item
+  const isCommunication = activity._isCommunication;
+  const commData = activity._communicationData;
 
   return (
     <Pressable
@@ -81,8 +86,14 @@ export function ActivityItem({
       <View className="ml-3 flex-1 pb-4">
         {/* Header row */}
         <View className="mt-3 flex-row items-center justify-between">
-          <View className="flex-row items-center">
-            <Text className="font-medium text-foreground">
+          <View className="flex-row items-center flex-1">
+            {/* Direction indicator for communications */}
+            {isCommunication && commData && (
+              <Text className="mr-1 text-sm" style={{ color }}>
+                {commData.direction === "inbound" ? "↙" : "↗"}
+              </Text>
+            )}
+            <Text className="font-medium text-foreground flex-shrink" numberOfLines={1}>
               {activity.subject || typeLabel}
             </Text>
             {/* Activity type badge */}
@@ -95,23 +106,56 @@ export function ActivityItem({
               </Text>
             </View>
           </View>
-          <Text className="text-xs text-muted-foreground">
+          <Text className="text-xs text-muted-foreground ml-2">
             {getRelativeTime(activity.created_at)}
           </Text>
         </View>
 
-        {/* Description */}
+        {/* Description / SMS body */}
         {activity.description && (
           <Text
             className="mt-1 text-sm text-muted-foreground"
-            numberOfLines={2}
+            numberOfLines={activity.type === "sms" ? 3 : 2}
           >
             {activity.description}
           </Text>
         )}
 
-        {/* Contact association */}
-        {activity.contact && (
+        {/* Communication-specific details */}
+        {isCommunication && commData && (
+          <View className="mt-1.5 flex-row items-center flex-wrap">
+            {/* Phone number */}
+            {commData.to_number && (
+              <View className="flex-row items-center mr-3">
+                <FontAwesome name="phone" size={10} color="#9ca3af" />
+                <Text className="ml-1.5 text-xs text-muted-foreground">
+                  {commData.direction === "inbound" ? commData.from_number : commData.to_number}
+                </Text>
+              </View>
+            )}
+            {/* Call duration */}
+            {commData.type === "call" && commData.duration !== undefined && commData.duration > 0 && (
+              <View className="flex-row items-center mr-3">
+                <FontAwesome name="clock-o" size={10} color="#9ca3af" />
+                <Text className="ml-1.5 text-xs text-muted-foreground">
+                  {formatCallDuration(commData.duration)}
+                </Text>
+              </View>
+            )}
+            {/* Call status (if not completed successfully) */}
+            {commData.type === "call" && commData.status && !["completed", "sent", "delivered", "received"].includes(commData.status) && (
+              <View className="flex-row items-center">
+                <FontAwesome name="exclamation-circle" size={10} color="#f59e0b" />
+                <Text className="ml-1.5 text-xs text-amber-600 capitalize">
+                  {commData.status.replace("-", " ")}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Contact association (for non-communication activities) */}
+        {!isCommunication && activity.contact && (
           <View className="mt-1.5 flex-row items-center">
             <FontAwesome name="user" size={10} color="#9ca3af" />
             <Text className="ml-1.5 text-xs text-muted-foreground">
@@ -152,4 +196,15 @@ export function ActivityItem({
       </View>
     </Pressable>
   );
+}
+
+/**
+ * Format call duration in seconds to a human-readable string
+ */
+function formatCallDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins === 0) return `${secs}s`;
+  if (secs === 0) return `${mins}m`;
+  return `${mins}m ${secs}s`;
 }

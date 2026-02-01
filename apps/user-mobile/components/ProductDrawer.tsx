@@ -18,6 +18,7 @@ import { Colors } from "@/constants/Colors";
 import { Product, PRODUCTS, useCurrentProduct } from "@/providers/product-provider";
 import { useWorkspace } from "@/providers/workspace-provider";
 import { useAuth } from "@/providers/auth-provider";
+import { useTeamUnreadCount } from "@/lib/hooks/useTeamUnreadCount";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.88;
@@ -35,6 +36,7 @@ export function ProductDrawer({ visible, onClose }: ProductDrawerProps) {
   const isOnHub = pathname.startsWith("/hub");
   const { currentWorkspace } = useWorkspace();
   const { user } = useAuth();
+  const teamUnreadCount = useTeamUnreadCount();
 
   const userName = user?.user_metadata?.name || "User";
   const initials = userName
@@ -176,16 +178,16 @@ export function ProductDrawer({ visible, onClose }: ProductDrawerProps) {
 
             {/* Hub Card - only show when not on Hub */}
             {!isOnHub && (
-              <View className="mx-4 mb-4 rounded-2xl bg-white shadow-sm">
+              <View className="mx-4 mb-2">
                 <Pressable
                   onPress={handleHub}
-                  className="flex-row items-center rounded-2xl p-4 active:bg-muted/50"
+                  className="flex-row items-center rounded-xl px-4 py-3 active:bg-muted/50"
                 >
-                  <View className="h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-                    <Text className="text-2xl">🏠</Text>
+                  <View className="h-11 w-11 items-center justify-center rounded-xl bg-muted">
+                    <Text className="text-xl">🏠</Text>
                   </View>
-                  <View className="ml-4 flex-1">
-                    <Text className="text-lg font-semibold text-foreground">
+                  <View className="ml-3 flex-1">
+                    <Text className="text-base font-semibold text-foreground">
                       Hub
                     </Text>
                     <Text className="text-sm text-muted-foreground">
@@ -207,56 +209,50 @@ export function ProductDrawer({ visible, onClose }: ProductDrawerProps) {
               className="flex-1 px-4"
               showsVerticalScrollIndicator={false}
             >
-              <View className="rounded-2xl bg-white shadow-sm">
-                {PRODUCTS.filter((p) => p.id !== "hub").map((product, index, arr) => (
-                  <View key={product.id}>
-                    <ProductRow
-                      product={product}
-                      isSelected={currentProduct?.id === product.id}
-                      onSelect={() => handleSelectProduct(product)}
-                    />
-                    {index < arr.length - 1 && (
-                      <View className="mx-4 h-px bg-border" />
-                    )}
-                  </View>
+              <View className="gap-1">
+                {PRODUCTS.filter((p) => p.id !== "hub").map((product) => (
+                  <ProductRow
+                    key={product.id}
+                    product={product}
+                    isSelected={currentProduct?.id === product.id}
+                    onSelect={() => handleSelectProduct(product)}
+                    badgeCount={product.id === "team" ? teamUnreadCount : undefined}
+                  />
                 ))}
               </View>
             </ScrollView>
 
             {/* Bottom Section */}
-            <View className="mx-4 mt-4 rounded-2xl bg-white shadow-sm">
+            <View className="mx-4 mt-4 gap-1">
               {/* Workspace */}
               {currentWorkspace && (
-                <>
-                  <Pressable
-                    onPress={handleWorkspaces}
-                    className="flex-row items-center p-4 active:bg-muted/50"
-                  >
-                    <View className="h-11 w-11 items-center justify-center rounded-xl bg-muted">
-                      <Text className="text-xl">🙋</Text>
-                    </View>
-                    <View className="ml-3 flex-1">
-                      <Text className="text-sm text-muted-foreground">Workspace</Text>
-                      <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
-                        {currentWorkspace.name}
-                      </Text>
-                    </View>
-                    <FontAwesome
-                      name="chevron-right"
-                      size={12}
-                      color={Colors.mutedForeground}
-                    />
-                  </Pressable>
-                  <View className="mx-4 h-px bg-border" />
-                </>
+                <Pressable
+                  onPress={handleWorkspaces}
+                  className="flex-row items-center rounded-xl px-4 py-3 active:bg-muted/50"
+                >
+                  <View className="h-11 w-11 items-center justify-center rounded-xl bg-muted">
+                    <Text className="text-xl">🙋</Text>
+                  </View>
+                  <View className="ml-3 flex-1">
+                    <Text className="text-sm text-muted-foreground">Workspace</Text>
+                    <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
+                      {currentWorkspace.name}
+                    </Text>
+                  </View>
+                  <FontAwesome
+                    name="chevron-right"
+                    size={12}
+                    color={Colors.mutedForeground}
+                  />
+                </Pressable>
               )}
 
               {/* Profile/Settings */}
               <Pressable
                 onPress={handleSettings}
-                className="flex-row items-center p-4 active:bg-muted/50"
+                className="flex-row items-center rounded-xl px-4 py-3 active:bg-muted/50"
               >
-                <View className="h-11 w-11 items-center justify-center rounded-xl bg-gray-700">
+                <View className="h-11 w-11 items-center justify-center rounded-xl bg-gray-800">
                   <Text className="text-sm font-bold text-white">{initials}</Text>
                 </View>
                 <View className="ml-3 flex-1">
@@ -281,27 +277,40 @@ interface ProductRowProps {
   product: Product;
   isSelected: boolean;
   onSelect: () => void;
+  badgeCount?: number;
 }
 
-function ProductRow({ product, isSelected, onSelect }: ProductRowProps) {
+function ProductRow({ product, isSelected, onSelect, badgeCount }: ProductRowProps) {
+  const showBadge = badgeCount !== undefined && badgeCount > 0;
+
   return (
     <Pressable
       onPress={onSelect}
-      className={`flex-row items-center p-4 ${
-        isSelected ? "bg-gray-100" : "active:bg-muted/50"
+      className={`flex-row items-center rounded-xl px-4 py-3 ${
+        isSelected ? "bg-muted" : "active:bg-muted/50"
       }`}
     >
-      <View
-        className={`h-12 w-12 items-center justify-center rounded-xl ${
-          isSelected ? "bg-gray-700" : "bg-muted"
-        }`}
-      >
-        <Text className="text-xl">{product.emoji}</Text>
+      <View className="relative">
+        <View
+          className={`h-11 w-11 items-center justify-center rounded-xl ${
+            isSelected ? "bg-gray-800" : "bg-muted"
+          }`}
+        >
+          <Text className="text-xl">{product.emoji}</Text>
+        </View>
+        {/* Unread badge on icon */}
+        {showBadge && (
+          <View className="absolute -right-1 -top-1 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5">
+            <Text className="text-xs font-bold text-white">
+              {badgeCount > 99 ? "99+" : badgeCount}
+            </Text>
+          </View>
+        )}
       </View>
 
       <View className="ml-3 flex-1">
         <Text
-          className="text-base font-semibold text-foreground"
+          className={`text-base font-semibold text-foreground ${showBadge ? "font-bold" : ""}`}
           numberOfLines={1}
         >
           {product.name}
@@ -312,7 +321,7 @@ function ProductRow({ product, isSelected, onSelect }: ProductRowProps) {
       </View>
 
       {isSelected && (
-        <View className="h-6 w-6 items-center justify-center rounded-full bg-gray-700">
+        <View className="h-6 w-6 items-center justify-center rounded-full bg-gray-800">
           <FontAwesome name="check" size={12} color="#fff" />
         </View>
       )}

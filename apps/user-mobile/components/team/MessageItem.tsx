@@ -8,60 +8,132 @@ import { ReactionBar } from "./ReactionBar";
 import { PDFViewer } from "./PDFViewer";
 import { ImageViewer } from "./ImageViewer";
 
-// Simple markdown parser for message content
-function parseMarkdown(text: string): React.ReactNode[] {
-  const parts: React.ReactNode[] = [];
-  let remaining = text;
+// Parse inline markdown using sequential replacement approach
+// This handles: **bold**, *italic*, _italic_, `code`, ~~strikethrough~~, @mentions
+function parseInlineMarkdown(text: string, keyPrefix: string): React.ReactNode[] {
+  const result: React.ReactNode[] = [];
   let key = 0;
 
-  // Pattern order matters - check longer patterns first
-  const patterns = [
-    { regex: /\*\*(.+?)\*\*/g, style: styles.bold },          // **bold**
-    { regex: /\*(.+?)\*/g, style: styles.italic },            // *italic*
-    { regex: /_(.+?)_/g, style: styles.italic },              // _italic_
-    { regex: /`(.+?)`/g, style: styles.code },                // `code`
-    { regex: /~~(.+?)~~/g, style: styles.strikethrough },     // ~~strikethrough~~
+  // Patterns to match, in order of priority (longer/more specific first)
+  // Each pattern: [regex, style, captureGroup]
+  const patterns: Array<{ regex: RegExp; style: object | null; isCode?: boolean; isMention?: boolean }> = [
+    { regex: /\*\*(.+?)\*\*/g, style: styles.bold },           // **bold**
+    { regex: /~~(.+?)~~/g, style: styles.strikethrough },      // ~~strikethrough~~
+    { regex: /`([^`]+)`/g, style: styles.code, isCode: true }, // `code`
+    { regex: /\*([^*]+)\*/g, style: styles.italic },           // *italic*
+    { regex: /\b_([^_]+)_\b/g, style: styles.italic },         // _italic_ (word boundaries)
+    { regex: /@(\w+)/g, style: styles.mention, isMention: true }, // @mention
   ];
 
-  // Combined regex to find any markdown or @mentions
-  const combinedRegex = /(\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_|`[^`]+`|~~[^~]+~~|@\w+)/g;
+  // Build a combined pattern that captures all markdown
+  const combinedPattern = /(\*\*[^*]+\*\*|~~[^~]+~~|`[^`]+`|\*[^*]+\*|\b_[^_]+_\b|@\w+)/g;
 
-  const matches = text.split(combinedRegex);
+  let lastIndex = 0;
+  let match;
 
-  for (const part of matches) {
-    if (!part) continue;
-
-    // Check for @mention first
-    if (part.startsWith("@") && /^@\w+$/.test(part)) {
-      parts.push(
-        <Text key={key++} style={styles.mention}>
-          {part}
+  while ((match = combinedPattern.exec(text)) !== null) {
+    // Add text before the match
+    if (match.index > lastIndex) {
+      result.push(
+        <Text key={`${keyPrefix}-${key++}`}>
+          {text.slice(lastIndex, match.index)}
         </Text>
       );
-      continue;
     }
 
-    let matched = false;
-    for (const { regex, style } of patterns) {
+    const matchedText = match[0];
+    let processed = false;
+
+    // Try each pattern to see which one matched
+    for (const { regex, style, isCode, isMention } of patterns) {
       regex.lastIndex = 0;
-      const match = regex.exec(part);
-      if (match && match[0] === part) {
-        parts.push(
-          <Text key={key++} style={style}>
-            {match[1]}
+      const patternMatch = regex.exec(matchedText);
+      if (patternMatch && patternMatch[0] === matchedText) {
+        const content = isMention ? matchedText : patternMatch[1];
+        result.push(
+          <Text key={`${keyPrefix}-${key++}`} style={style}>
+            {content}
           </Text>
         );
-        matched = true;
+        processed = true;
         break;
       }
     }
 
-    if (!matched) {
-      parts.push(<Text key={key++}>{part}</Text>);
+    // Fallback: just render as plain text
+    if (!processed) {
+      result.push(
+        <Text key={`${keyPrefix}-${key++}`}>{matchedText}</Text>
+      );
+    }
+
+    lastIndex = match.index + matchedText.length;
+  }
+
+  // Add remaining text after last match
+  if (lastIndex < text.length) {
+    result.push(
+      <Text key={`${keyPrefix}-${key++}`}>{text.slice(lastIndex)}</Text>
+    );
+  }
+
+  // If no matches, return the original text
+  if (result.length === 0) {
+    result.push(<Text key={`${keyPrefix}-0`}>{text}</Text>);
+  }
+
+  return result;
+}
+
+// Full markdown parser that handles block elements (headings) and inline styles
+function parseMarkdown(text: string): React.ReactNode[] {
+  const result: React.ReactNode[] = [];
+
+  // Split by line breaks to handle block-level elements
+  const lines = text.split('\n');
+  let key = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Check for headings (### Heading)
+    const h3Match = line.match(/^###\s+(.+)$/);
+    const h2Match = line.match(/^##\s+(.+)$/);
+    const h1Match = line.match(/^#\s+(.+)$/);
+
+    if (h3Match) {
+      result.push(
+        <Text key={key++} style={styles.h3}>
+          {parseInlineMarkdown(h3Match[1], `h3-${key}`)}
+        </Text>
+      );
+    } else if (h2Match) {
+      result.push(
+        <Text key={key++} style={styles.h2}>
+          {parseInlineMarkdown(h2Match[1], `h2-${key}`)}
+        </Text>
+      );
+    } else if (h1Match) {
+      result.push(
+        <Text key={key++} style={styles.h1}>
+          {parseInlineMarkdown(h1Match[1], `h1-${key}`)}
+        </Text>
+      );
+    } else if (line.trim() === '') {
+      // Empty line = paragraph break
+      result.push(<Text key={key++}>{'\n'}</Text>);
+    } else {
+      // Regular line with inline markdown
+      result.push(
+        <Text key={key++}>
+          {parseInlineMarkdown(line, `line-${key}`)}
+          {i < lines.length - 1 ? '\n' : ''}
+        </Text>
+      );
     }
   }
 
-  return parts;
+  return result;
 }
 
 const styles = StyleSheet.create({
@@ -80,6 +152,24 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     borderRadius: 4,
     paddingHorizontal: 2,
+  },
+  h1: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  h2: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 6,
+    marginBottom: 3,
+  },
+  h3: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: 4,
+    marginBottom: 2,
   },
 });
 

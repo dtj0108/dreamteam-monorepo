@@ -19,6 +19,7 @@ import {
   createLeadActivity,
   LeadsQueryParams,
 } from "../api/leads";
+import { getLeadCommunications } from "../api/communications";
 import {
   Lead,
   LeadWithRelations,
@@ -33,6 +34,7 @@ import {
   UpdateLeadOpportunityInput,
   MoveLeadStageInput,
   Activity,
+  Communication,
 } from "../types/sales";
 
 // Query keys
@@ -45,6 +47,7 @@ export const leadKeys = {
   tasks: (leadId: string) => [...leadKeys.detail(leadId), "tasks"] as const,
   opportunities: (leadId: string) => [...leadKeys.detail(leadId), "opportunities"] as const,
   activities: (leadId: string) => [...leadKeys.detail(leadId), "activities"] as const,
+  communications: (leadId: string) => [...leadKeys.detail(leadId), "communications"] as const,
 };
 
 // Leads queries
@@ -256,5 +259,14 @@ export function useCreateLeadActivity() {
       queryClient.invalidateQueries({ queryKey: leadKeys.activities(leadId) });
       queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
     },
+  });
+}
+
+// Lead Communications (Twilio calls, SMS)
+export function useLeadCommunications(leadId: string) {
+  return useQuery<Communication[]>({
+    queryKey: leadKeys.communications(leadId),
+    queryFn: () => getLeadCommunications(leadId),
+    enabled: !!leadId,
   });
 }

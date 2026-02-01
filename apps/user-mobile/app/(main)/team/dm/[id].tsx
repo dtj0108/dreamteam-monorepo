@@ -77,6 +77,9 @@ export default function DMViewScreen() {
 
   const participant = dm?.participant;
 
+  // Check if participant is an AI agent using the is_agent field
+  const isAgent = participant?.user?.is_agent || false;
+
   // Flatten paginated messages
   const messages =
     messagesData?.pages.flatMap((page) => page.messages).reverse() || [];
@@ -199,18 +202,17 @@ export default function DMViewScreen() {
                   ) : (
                     <View className="h-10 w-10 items-center justify-center rounded-lg bg-muted">
                       <Text className="text-lg font-semibold text-muted-foreground">
-                        {(participant.user.name || "U").charAt(0).toUpperCase()}
+                        {getMemberDisplayName(participant).charAt(0).toUpperCase()}
                       </Text>
                     </View>
                   )}
-                  {participant.presence && (
-                    <View className="absolute -bottom-0.5 -right-0.5">
-                      <PresenceIndicator
-                        status={participant.presence.status}
-                        size="sm"
-                      />
-                    </View>
-                  )}
+                  {/* Show presence indicator - always online for agents */}
+                  <View className="absolute -bottom-0.5 -right-0.5">
+                    <PresenceIndicator
+                      status={isAgent ? "online" : participant.presence?.status || "offline"}
+                      size="sm"
+                    />
+                  </View>
                 </View>
 
                 {/* User Info */}
@@ -219,14 +221,17 @@ export default function DMViewScreen() {
                     {getMemberDisplayName(participant)}
                   </Text>
                   <Text className="text-sm text-muted-foreground">
-                    {participant.presence?.status_message ||
-                      (participant.presence?.status === "online"
-                        ? "Online"
-                        : participant.presence?.status === "away"
-                        ? "Away"
-                        : participant.presence?.status === "dnd"
-                        ? "Do Not Disturb"
-                        : "Offline")}
+                    {/* Agents always show as online */}
+                    {isAgent
+                      ? "Always online"
+                      : participant.presence?.status_message ||
+                        (participant.presence?.status === "online"
+                          ? "Online"
+                          : participant.presence?.status === "away"
+                          ? "Away"
+                          : participant.presence?.status === "dnd"
+                          ? "Do Not Disturb"
+                          : "Offline")}
                   </Text>
                 </View>
 

@@ -47,9 +47,6 @@ export default function SettingsScreen() {
               </View>
             )}
           </View>
-          <Pressable className="rounded-full p-2 active:bg-muted">
-            <FontAwesome name="pencil" size={16} color={Colors.mutedForeground} />
-          </Pressable>
         </View>
       </View>
 
@@ -60,71 +57,10 @@ export default function SettingsScreen() {
         </Text>
         <View className="rounded-2xl bg-white shadow-sm">
           <SettingsRow
-            icon="user"
-            label="Edit Profile"
-            showChevron
-          />
-          <Divider />
-          <SettingsRow
             icon="bell"
             label="Notifications"
             showChevron
             onPress={() => router.push("/(main)/more/notifications")}
-          />
-          <Divider />
-          <SettingsRow
-            icon="lock"
-            label="Privacy & Security"
-            showChevron
-          />
-        </View>
-      </View>
-
-      {/* Preferences Section */}
-      <View className="mx-4 mt-6">
-        <Text className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Preferences
-        </Text>
-        <View className="rounded-2xl bg-white shadow-sm">
-          <SettingsRow
-            icon="moon-o"
-            label="Appearance"
-            value="System"
-            showChevron
-          />
-          <Divider />
-          <SettingsRow
-            icon="globe"
-            label="Language"
-            value="English"
-            showChevron
-          />
-        </View>
-      </View>
-
-      {/* Support Section */}
-      <View className="mx-4 mt-6">
-        <Text className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Support
-        </Text>
-        <View className="rounded-2xl bg-white shadow-sm">
-          <SettingsRow
-            icon="question-circle"
-            label="Help Center"
-            showChevron
-          />
-          <Divider />
-          <SettingsRow
-            icon="comment"
-            label="Send Feedback"
-            showChevron
-          />
-          <Divider />
-          <SettingsRow
-            icon="info-circle"
-            label="About"
-            value="v1.0.6"
-            showChevron
           />
         </View>
       </View>
@@ -138,6 +74,9 @@ export default function SettingsScreen() {
           <FontAwesome name="sign-out" size={18} color={Colors.destructive} />
           <Text className="ml-2 font-semibold text-destructive">Sign Out</Text>
         </Pressable>
+        <Text className="mt-3 px-2 text-center text-xs text-muted-foreground">
+          To delete your account, please visit dreamteam.ai/account from a web browser.
+        </Text>
       </View>
 
       {/* Footer */}
@@ -179,8 +118,4 @@ function SettingsRow({ icon, label, value, showChevron, onPress }: SettingsRowPr
       )}
     </Pressable>
   );
-}
-
-function Divider() {
-  return <View className="ml-14 h-px bg-border" />;
 }

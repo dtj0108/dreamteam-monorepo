@@ -17,6 +17,7 @@ interface ProductCardProps {
   cardWidth: number;
   isFullWidth?: boolean;
   animationDelay?: number; // Additional delay before animation starts (for splash sync)
+  badgeCount?: number; // Optional badge to show unread count
 }
 
 export function ProductCard({
@@ -26,7 +27,9 @@ export function ProductCard({
   cardWidth,
   isFullWidth = false,
   animationDelay,
+  badgeCount,
 }: ProductCardProps) {
+  const showBadge = badgeCount !== undefined && badgeCount > 0;
   // Entrance animation
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.9)).current;
@@ -150,6 +153,14 @@ export function ProductCard({
             {CardContent}
           </View>
         )}
+        {/* Unread badge */}
+        {showBadge && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {badgeCount > 99 ? "99+" : badgeCount}
+            </Text>
+          </View>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -180,5 +191,22 @@ const styles = StyleSheet.create({
   },
   fullWidthCard: {
     borderRadius: 24,
+  },
+  badge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#ef4444",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  badgeText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "bold",
   },
 });

@@ -10,9 +10,10 @@ import {
   Text,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PageCard } from "@/components/knowledge/PageCard";
+import { ProductSwitcher } from "@/components/ProductSwitcher";
 import { Colors } from "@/constants/Colors";
 import { usePages } from "@/lib/hooks/useKnowledge";
 
@@ -20,8 +21,6 @@ type FilterMode = "all" | "favorites";
 
 export default function KnowledgeIndexScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
 
   const {
@@ -53,6 +52,13 @@ export default function KnowledgeIndexScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      {/* Header */}
+      <SafeAreaView edges={["top"]} className="bg-background">
+        <View className="px-4 py-2">
+          <ProductSwitcher />
+        </View>
+      </SafeAreaView>
+
       {/* Filter Bar */}
       <View className="flex-row items-center gap-2 px-4 pt-2">
         <View className="flex-1 flex-row rounded-lg bg-muted p-1">
@@ -165,7 +171,7 @@ export default function KnowledgeIndexScreen() {
         onPress={handleCreatePage}
         className="absolute bottom-6 right-6 h-14 w-14 items-center justify-center rounded-full bg-primary shadow-lg active:opacity-80"
         style={{
-          bottom: insets.bottom + 24,
+          bottom: 40,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.2,

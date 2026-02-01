@@ -4,12 +4,14 @@ import { Contact, getContactFullName } from "../../lib/types/sales";
 
 interface LeadActionBarProps {
   contact: Contact | null;
+  totalContacts?: number;
 }
 
-export function LeadActionBar({ contact }: LeadActionBarProps) {
+export function LeadActionBar({ contact, totalContacts = 0 }: LeadActionBarProps) {
   const hasPhone = !!contact?.phone;
   const hasEmail = !!contact?.email;
   const contactName = contact ? getContactFullName(contact) : null;
+  const additionalContacts = totalContacts > 1 ? totalContacts - 1 : 0;
 
   const handleCall = () => {
     if (contact?.phone) {
@@ -34,6 +36,9 @@ export function LeadActionBar({ contact }: LeadActionBarProps) {
       {contactName && (
         <Text className="mb-2 text-center text-xs text-muted-foreground">
           {contactName}
+          {additionalContacts > 0 && (
+            <Text className="text-muted-foreground"> (+{additionalContacts} more)</Text>
+          )}
         </Text>
       )}
       <View className="flex-row justify-center gap-3">

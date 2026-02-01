@@ -139,6 +139,7 @@ export function QuickLogMenu({ onLogActivity, onCustomLog }: QuickLogMenuProps) 
       meeting: "Document a meeting",
       note: "Add a quick note",
       task: "Create a follow-up task",
+      sms: "Record an SMS message", // SMS is auto-logged from Twilio, but include for type safety
     };
     return subtitles[type];
   };

@@ -86,10 +86,10 @@ export default function LeadsScreen() {
 
       {/* Stats */}
       <View className="flex-row gap-2 px-4 py-2">
-        <StatsCard label="Total" value={stats.total} icon="building" iconColor="#0ea5e9" />
-        <StatsCard label="New" value={stats.newCount} icon="star" iconColor="#6b7280" />
-        <StatsCard label="Qualified" value={stats.qualifiedCount} icon="check" iconColor="#22c55e" />
-        <StatsCard label="Contacts" value={stats.contactCount} icon="user" iconColor="#8b5cf6" />
+        <StatsCard label="Total" value={stats.total} icon="building" iconColor="#0ea5e9" isLoading={isLoading} />
+        <StatsCard label="New" value={stats.newCount} icon="star" iconColor="#6b7280" isLoading={isLoading} />
+        <StatsCard label="Qualified" value={stats.qualifiedCount} icon="check" iconColor="#22c55e" isLoading={isLoading} />
+        <StatsCard label="Contacts" value={stats.contactCount} icon="user" iconColor="#8b5cf6" isLoading={isLoading} />
       </View>
 
       {/* Search */}

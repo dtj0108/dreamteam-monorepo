@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -19,11 +19,14 @@ import {
   useDeleteLeadTask,
   useDeleteLeadOpportunity,
   useCreateLeadActivity,
+  useLeadCommunications,
 } from "../../../../lib/hooks/useLeads";
 import {
   LeadTask,
   LeadOpportunity,
   ActivityType,
+  Activity,
+  Communication,
   getContactFullName,
   formatCurrency,
   getOpportunityStageLabel,
@@ -34,18 +37,90 @@ import { ActivityTimeline } from "../../../../components/sales/ActivityTimeline"
 import { QuickLogMenu } from "../../../../components/sales/QuickLogMenu";
 import { LeadActionBar } from "../../../../components/sales/LeadActionBar";
 
+/**
+ * Helper function to format call duration as "Xm Ys" string
+ */
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins === 0) return `${secs}s`;
+  if (secs === 0) return `${mins}m`;
+  return `${mins}m ${secs}s`;
+}
+
+/**
+ * Transform a Communication record into an Activity-like object for the timeline
+ */
+function communicationToTimelineItem(comm: Communication): Activity {
+  const isCall = comm.type === "call";
+  const isSms = comm.type === "sms";
+  const isInbound = comm.direction === "inbound";
+
+  // Determine the subject line based on type and direction
+  let subject: string;
+  if (isCall) {
+    subject = isInbound ? "Incoming call" : "Outgoing call";
+  } else if (isSms) {
+    subject = isInbound ? "Received SMS" : "Sent SMS";
+  } else {
+    subject = isInbound ? "Incoming message" : "Outgoing message";
+  }
+
+  // Build description from body or duration
+  let description: string | undefined;
+  if (isSms && comm.body) {
+    description = comm.body;
+  } else if (isCall && comm.duration) {
+    description = `Duration: ${formatDuration(comm.duration)}`;
+  }
+
+  return {
+    id: comm.id,
+    profile_id: comm.user_id,
+    contact_id: comm.contact_id,
+    lead_id: comm.lead_id,
+    type: isSms ? "sms" : "call",
+    subject,
+    description,
+    is_completed: true,
+    created_at: comm.created_at,
+    updated_at: comm.updated_at,
+    // Extension fields for communication-specific data
+    _isCommunication: true,
+    _communicationData: comm,
+  };
+}
+
 export default function LeadDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<"activity" | "details">("activity");
 
   const { data: lead, isLoading, error, refetch } = useLead(id);
+  const { data: communications, refetch: refetchCommunications } = useLeadCommunications(id);
   const primaryContact = lead?.contacts?.[0] || null;
   const deleteLeadMutation = useDeleteLead();
   const updateTaskMutation = useUpdateLeadTask();
   const deleteTaskMutation = useDeleteLeadTask();
   const deleteOpportunityMutation = useDeleteLeadOpportunity();
   const createActivityMutation = useCreateLeadActivity();
+
+  // Merge activities and communications into a single timeline, sorted by date (newest first)
+  const timelineItems = useMemo(() => {
+    const activities = lead?.activities || [];
+    const commActivities = (communications || []).map(communicationToTimelineItem);
+
+    // Combine and sort by created_at descending (newest first)
+    const combined = [...activities, ...commActivities];
+    combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return combined;
+  }, [lead?.activities, communications]);
+
+  // Refresh both activities and communications
+  const handleRefresh = () => {
+    refetch();
+    refetchCommunications();
+  };
 
   const handleBack = () => {
     router.back();
@@ -209,37 +284,40 @@ export default function LeadDetailScreen() {
 
       {/* Lead header with tabs */}
       <View className="border-b border-muted px-4 py-4">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-1">
-            <Text className="text-xl font-bold text-foreground">{lead.name}</Text>
-            <View className="mt-1 flex-row items-center gap-2">
-              {lead.industry && (
-                <Text className="text-sm text-muted-foreground">
-                  {lead.industry}
-                </Text>
-              )}
-              <StatusBadge status={lead.status} stage={lead.stage} />
-            </View>
-          </View>
-          <View className="flex-row items-center gap-2">
-            <Pressable
-              className={`rounded-full px-3 py-1 ${activeTab === "activity" ? "bg-foreground" : "bg-muted"}`}
-              onPress={() => setActiveTab("activity")}
-            >
-              <Text className={`text-sm font-medium ${activeTab === "activity" ? "text-white" : "text-muted-foreground"}`}>
-                Activity
-              </Text>
-            </Pressable>
-            <Pressable
-              className={`rounded-full px-3 py-1 ${activeTab === "details" ? "bg-foreground" : "bg-muted"}`}
-              onPress={() => setActiveTab("details")}
-            >
-              <Text className={`text-sm font-medium ${activeTab === "details" ? "text-white" : "text-muted-foreground"}`}>
-                Details
-              </Text>
-            </Pressable>
-          </View>
+        {/* Company name - prominent */}
+        <Text className="text-xl font-bold text-foreground">{lead.name}</Text>
+
+        {/* Industry + Location row */}
+        <View className="mt-1 flex-row items-center flex-wrap">
+          {lead.industry && (
+            <Text className="text-sm text-muted-foreground">{lead.industry}</Text>
+          )}
+          {lead.industry && (lead.city || lead.state) && (
+            <Text className="mx-1 text-sm text-muted-foreground">•</Text>
+          )}
+          {(lead.city || lead.state) && (
+            <Text className="text-sm text-muted-foreground">
+              {[lead.city, lead.state].filter(Boolean).join(", ")}
+            </Text>
+          )}
         </View>
+
+        {/* Status + Stage badges row */}
+        <View className="mt-2 flex-row items-center gap-2">
+          <StatusBadge status={lead.status} />
+          {lead.stage && (
+            <View
+              className="rounded-full px-2 py-0.5"
+              style={{ backgroundColor: lead.stage.color + "20" }}
+            >
+              <Text className="text-xs font-medium" style={{ color: lead.stage.color }}>
+                {lead.stage.name}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Website link */}
         {lead.website && (
           <Pressable
             className="mt-2 flex-row items-center"
@@ -249,18 +327,38 @@ export default function LeadDetailScreen() {
             <Text className="ml-2 text-sm text-primary">{lead.website}</Text>
           </Pressable>
         )}
+
+        {/* Tabs row - separate */}
+        <View className="mt-3 flex-row items-center gap-2">
+          <Pressable
+            className={`rounded-full px-3 py-1 ${activeTab === "activity" ? "bg-foreground" : "bg-muted"}`}
+            onPress={() => setActiveTab("activity")}
+          >
+            <Text className={`text-sm font-medium ${activeTab === "activity" ? "text-white" : "text-muted-foreground"}`}>
+              Activity
+            </Text>
+          </Pressable>
+          <Pressable
+            className={`rounded-full px-3 py-1 ${activeTab === "details" ? "bg-foreground" : "bg-muted"}`}
+            onPress={() => setActiveTab("details")}
+          >
+            <Text className={`text-sm font-medium ${activeTab === "details" ? "text-white" : "text-muted-foreground"}`}>
+              Details
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Action Bar - Call, Text, Email */}
-      <LeadActionBar contact={primaryContact} />
+      <LeadActionBar contact={primaryContact} totalContacts={lead.contacts?.length || 0} />
 
       {/* Tab Content */}
       {activeTab === "activity" ? (
         <View className="flex-1">
           <ActivityTimeline
-            activities={lead.activities || []}
+            activities={timelineItems}
             onLogActivity={handleCustomLogActivity}
-            onRefresh={() => refetch()}
+            onRefresh={handleRefresh}
           />
         </View>
       ) : (
@@ -302,6 +400,65 @@ function DetailsTab({
 }) {
   return (
     <View className="px-4 py-4">
+      {/* Lead Overview section */}
+      <View className="mb-6">
+        <Text className="mb-2 text-lg font-semibold text-foreground">Lead Overview</Text>
+        <View className="rounded-xl bg-muted p-4">
+          {/* Company Name */}
+          <View className="mb-3 flex-row justify-between">
+            <Text className="text-sm text-muted-foreground">Company</Text>
+            <Text className="text-sm font-medium text-foreground">{lead.name}</Text>
+          </View>
+
+          {/* Industry */}
+          <View className="mb-3 flex-row justify-between">
+            <Text className="text-sm text-muted-foreground">Industry</Text>
+            <Text className="text-sm text-foreground">{lead.industry || "Not set"}</Text>
+          </View>
+
+          {/* Status */}
+          <View className="mb-3 flex-row items-center justify-between">
+            <Text className="text-sm text-muted-foreground">Status</Text>
+            <StatusBadge status={lead.status} />
+          </View>
+
+          {/* Pipeline Stage (if exists) */}
+          {lead.stage && (
+            <View className="mb-3 flex-row items-center justify-between">
+              <Text className="text-sm text-muted-foreground">Stage</Text>
+              <View
+                className="rounded-full px-2 py-0.5"
+                style={{ backgroundColor: lead.stage.color + "20" }}
+              >
+                <Text className="text-xs font-medium" style={{ color: lead.stage.color }}>
+                  {lead.stage.name}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Website */}
+          <View className="mb-3 flex-row justify-between">
+            <Text className="text-sm text-muted-foreground">Website</Text>
+            {lead.website ? (
+              <Pressable onPress={() => Linking.openURL(lead.website!)}>
+                <Text className="text-sm text-primary">{lead.website}</Text>
+              </Pressable>
+            ) : (
+              <Text className="text-sm text-muted-foreground">Not set</Text>
+            )}
+          </View>
+
+          {/* Created Date */}
+          <View className="flex-row justify-between">
+            <Text className="text-sm text-muted-foreground">Created</Text>
+            <Text className="text-sm text-foreground">
+              {new Date(lead.created_at).toLocaleDateString()}
+            </Text>
+          </View>
+        </View>
+      </View>
+
       {/* About section */}
       <View className="mb-6">
         <Text className="mb-2 text-lg font-semibold text-foreground">About</Text>

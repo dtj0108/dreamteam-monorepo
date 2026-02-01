@@ -3,6 +3,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "./supabase";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL!;
+
+// #region agent log
+fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:module-load',message:'API_URL env check',data:{API_URL:process.env.EXPO_PUBLIC_API_URL,allExpoPublicEnvKeys:Object.keys(process.env).filter(k=>k.startsWith('EXPO_PUBLIC_'))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A-D'})}).catch(()=>{});
+// #endregion
 const WORKSPACE_ID_KEY = "currentWorkspaceId";
 
 export class ApiError extends Error {
@@ -23,6 +27,10 @@ export async function apiClient<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  // #region agent log
+  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:apiClient-entry',message:'apiClient called',data:{endpoint,API_URL,API_URL_type:typeof API_URL,envVarDirect:process.env.EXPO_PUBLIC_API_URL},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A-C'})}).catch(()=>{});
+  // #endregion
+  
   // Get current session (Supabase handles token refresh automatically)
   const {
     data: { session },
@@ -30,6 +38,10 @@ export async function apiClient<T = unknown>(
 
   // Get workspace ID from storage
   const workspaceId = await AsyncStorage.getItem(WORKSPACE_ID_KEY);
+
+  // #region agent log
+  fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:apiClient-before-url',message:'About to construct URL',data:{API_URL,endpoint,fullUrl:`${API_URL}${endpoint}`,workspaceId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A-B'})}).catch(()=>{});
+  // #endregion
 
   // Build URL with workspaceId query parameter
   const url = new URL(`${API_URL}${endpoint}`);

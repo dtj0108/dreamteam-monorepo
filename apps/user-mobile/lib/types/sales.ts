@@ -9,8 +9,8 @@ export type LeadStatus =
   | "won"
   | "lost";
 
-// Activity type for timeline
-export type ActivityType = "call" | "email" | "meeting" | "note" | "task";
+// Activity type for timeline (includes "sms" for Twilio communications)
+export type ActivityType = "call" | "email" | "meeting" | "note" | "task" | "sms";
 
 // Opportunity stage
 export type OpportunityStage =
@@ -112,6 +112,9 @@ export interface Activity {
   updated_at: string;
   // Joined relations
   contact?: Pick<Contact, "id" | "first_name" | "last_name">;
+  // Extended fields for communications displayed in timeline
+  _isCommunication?: boolean;
+  _communicationData?: Communication;
 }
 
 // Lead Pipeline
@@ -244,6 +247,7 @@ export const ACTIVITY_TYPE_COLORS: Record<ActivityType, string> = {
   meeting: "#8b5cf6",
   note: "#6b7280",
   task: "#f59e0b",
+  sms: "#06b6d4", // cyan-500 for SMS
 };
 
 // Activity type icons (FontAwesome icon names)
@@ -253,6 +257,7 @@ export const ACTIVITY_TYPE_ICONS: Record<ActivityType, string> = {
   meeting: "calendar",
   note: "file-text-o",
   task: "check-square-o",
+  sms: "comment",
 };
 
 // Helper functions
@@ -302,6 +307,7 @@ export const getActivityTypeLabel = (type: ActivityType): string => {
     meeting: "Meeting",
     note: "Note",
     task: "Task",
+    sms: "SMS",
   };
   return labels[type];
 };
@@ -313,6 +319,7 @@ export const ACTIVITY_TYPE_EMOJIS: Record<ActivityType, string> = {
   meeting: "📅",
   note: "📝",
   task: "✅",
+  sms: "💬",
 };
 
 // Activity input type
@@ -471,4 +478,64 @@ export interface TopPerformer {
 export interface SalesDateRange {
   startDate: string;
   endDate: string;
+}
+
+// ============================================
+// Communication Types (Twilio calls, SMS)
+// ============================================
+
+export type CommunicationType = "call" | "sms" | "email";
+export type CommunicationDirection = "inbound" | "outbound";
+export type CommunicationStatus =
+  | "queued"
+  | "ringing"
+  | "in-progress"
+  | "completed"
+  | "busy"
+  | "failed"
+  | "no-answer"
+  | "canceled"
+  | "sent"
+  | "delivered"
+  | "undelivered"
+  | "received";
+
+export interface CallRecording {
+  id: string;
+  communication_id: string;
+  recording_sid: string;
+  recording_url: string;
+  duration: number;
+  created_at: string;
+}
+
+export interface Communication {
+  id: string;
+  user_id: string;
+  lead_id?: string;
+  contact_id?: string;
+  type: CommunicationType;
+  direction: CommunicationDirection;
+  status: CommunicationStatus;
+  from_number?: string;
+  to_number?: string;
+  call_sid?: string;
+  duration?: number;
+  body?: string;
+  subject?: string;
+  notes?: string;
+  started_at?: string;
+  ended_at?: string;
+  created_at: string;
+  updated_at: string;
+  // Joined relations
+  recordings?: CallRecording[];
+}
+
+export interface CommunicationsQueryParams {
+  leadId?: string;
+  contactId?: string;
+  type?: CommunicationType;
+  limit?: number;
+  offset?: number;
 }

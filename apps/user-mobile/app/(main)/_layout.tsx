@@ -27,7 +27,7 @@ export default function MainLayout() {
       <Stack.Screen name="team" options={{ headerShown: false }} />
       <Stack.Screen name="projects" options={{ headerShown: false }} />
       <Stack.Screen name="agents" options={{ headerShown: false }} />
-      <Stack.Screen name="more" />
+      <Stack.Screen name="more" options={{ headerShown: false }} />
     </Stack>
   );
 }

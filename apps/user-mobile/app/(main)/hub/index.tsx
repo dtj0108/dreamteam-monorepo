@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HubHeader } from "@/components/hub/HubHeader";
 import { ProductCard } from "@/components/hub/ProductCard";
 import { PRODUCTS } from "@/providers/product-provider";
+import { useTeamUnreadCount } from "@/lib/hooks/useTeamUnreadCount";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_GAP = 16;
@@ -14,6 +15,7 @@ const CARD_WIDTH = (SCREEN_WIDTH - HORIZONTAL_PADDING * 2 - CARD_GAP) / 2;
 export default function HubScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const teamUnreadCount = useTeamUnreadCount();
 
   const handleProductPress = (route: string) => {
     router.push(route as any);
@@ -51,6 +53,7 @@ export default function HubScreen() {
               cardWidth={CARD_WIDTH}
               onPress={() => handleProductPress(product.route)}
               animationDelay={0}
+              badgeCount={product.id === "team" ? teamUnreadCount : undefined}
             />
           ))}
         </View>

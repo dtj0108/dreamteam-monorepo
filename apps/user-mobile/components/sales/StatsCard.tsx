@@ -6,6 +6,7 @@ interface StatsCardProps {
   value: string | number;
   icon?: string;
   iconColor?: string;
+  isLoading?: boolean;
   trend?: {
     value: number;
     isPositive: boolean;
@@ -17,6 +18,7 @@ export function StatsCard({
   value,
   icon,
   iconColor = "#6b7280",
+  isLoading = false,
   trend,
 }: StatsCardProps) {
   return (
@@ -27,8 +29,12 @@ export function StatsCard({
           <FontAwesome name={icon as any} size={12} color={iconColor} />
         )}
       </View>
-      <Text className="text-xl font-bold text-foreground">{value}</Text>
-      {trend && (
+      {isLoading ? (
+        <View className="h-7 w-12 rounded bg-muted-foreground/20" />
+      ) : (
+        <Text className="text-xl font-bold text-foreground">{value}</Text>
+      )}
+      {trend && !isLoading && (
         <View className="mt-1 flex-row items-center">
           <FontAwesome
             name={trend.isPositive ? "arrow-up" : "arrow-down"}

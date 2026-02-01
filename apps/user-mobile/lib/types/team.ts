@@ -144,6 +144,7 @@ export interface WorkspaceMember {
     email: string;
     phone: string | null;
     avatar_url: string | null;
+    is_agent?: boolean;
   };
   presence?: UserPresence;
 }

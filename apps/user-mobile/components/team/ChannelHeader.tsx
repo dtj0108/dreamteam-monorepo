@@ -45,9 +45,9 @@ export function ChannelHeader({
           </View>
 
           {/* Channel Name + Member Count */}
-          <View>
-            <Text className="text-base font-semibold text-foreground">
-              {channel.name}
+          <View className="flex-1">
+            <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
+              {channel.name || (channel as any).channel_name || "Unnamed Channel"}
             </Text>
             <Text className="text-sm text-muted-foreground">
               {memberCount} member{memberCount !== 1 ? "s" : ""}

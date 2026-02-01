@@ -1,21 +1,28 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
+import { Animated, Pressable, Text, View, StyleSheet, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import LottieView from "lottie-react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { Logo } from "@/components/Logo";
 
-const logoImage = require("../../dreamteamlogo.png");
+const FEATURES = [
+  { icon: "flash-outline" as const, text: "AI agents that handle your tasks" },
+  { icon: "time-outline" as const, text: "Available around the clock" },
+  { icon: "shield-checkmark-outline" as const, text: "Secure & private by design" },
+];
 
 export default function WelcomeScreen() {
   const router = useRouter();
 
   // Animation values
   const logoOpacity = useRef(new Animated.Value(0)).current;
-  const logoScale = useRef(new Animated.Value(0.9)).current;
-  const logoRotation = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.8)).current;
   const taglineOpacity = useRef(new Animated.Value(0)).current;
+  const featuresOpacity = useRef(new Animated.Value(0)).current;
+  const featuresTranslateY = useRef(new Animated.Value(20)).current;
   const bottomOpacity = useRef(new Animated.Value(0)).current;
   const bottomTranslateY = useRef(new Animated.Value(30)).current;
 
@@ -25,7 +32,7 @@ export default function WelcomeScreen() {
       Animated.parallel([
         Animated.timing(logoOpacity, {
           toValue: 1,
-          duration: 500,
+          duration: 600,
           useNativeDriver: true,
         }),
         Animated.spring(logoScale, {
@@ -41,7 +48,20 @@ export default function WelcomeScreen() {
         duration: 400,
         useNativeDriver: true,
       }),
-      // 3. Bottom section slides up + fades in
+      // 3. Features slide up + fade in
+      Animated.parallel([
+        Animated.timing(featuresOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(featuresTranslateY, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]),
+      // 4. Bottom section slides up + fades in
       Animated.parallel([
         Animated.timing(bottomOpacity, {
           toValue: 1,
@@ -57,18 +77,6 @@ export default function WelcomeScreen() {
     ]);
 
     animationSequence.start();
-
-    // Continuous slow rotation for logo
-    const spinAnimation = Animated.loop(
-      Animated.timing(logoRotation, {
-        toValue: 1,
-        duration: 20000,
-        useNativeDriver: true,
-      })
-    );
-    spinAnimation.start();
-
-    return () => spinAnimation.stop();
   }, []);
 
   const handleContinue = () => {
@@ -77,14 +85,14 @@ export default function WelcomeScreen() {
 
   return (
     <LinearGradient
-      colors={["#ffffff", "#f0f9ff", "#e0f2fe"]}
-      locations={[0, 0.5, 1]}
+      colors={["#ffffff", "#f0f9ff", "#e0f2fe", "#bae6fd"]}
+      locations={[0, 0.3, 0.7, 1]}
       style={{ flex: 1 }}
     >
       <SafeAreaView className="flex-1">
-        {/* Centered content */}
+        {/* Hero section */}
         <View className="flex-1 items-center justify-center px-8">
-          {/* Logo with animation */}
+          {/* Logo with Lottie animation */}
           <Animated.View
             style={{
               opacity: logoOpacity,
@@ -92,32 +100,46 @@ export default function WelcomeScreen() {
             }}
             className="items-center"
           >
-            <Animated.Image
-              source={logoImage}
-              style={{
-                width: 120,
-                height: 120,
-                transform: [
-                  {
-                    rotate: logoRotation.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ["0deg", "360deg"],
-                    }),
-                  },
-                ],
-              }}
-              resizeMode="contain"
-            />
-            <View className="mt-4">
+            <View style={styles.lottieContainer}>
+              <LottieView
+                source={require("../../ai-sphere-animation.json")}
+                autoPlay
+                loop
+                style={styles.lottie}
+              />
+            </View>
+            <View className="mt-6">
               <Logo size="lg" />
             </View>
           </Animated.View>
 
           {/* Tagline */}
-          <Animated.View style={{ opacity: taglineOpacity }}>
-            <Text className="mt-4 text-center text-lg text-muted-foreground">
-              the AI that works for you, 24/7
+          <Animated.View style={{ opacity: taglineOpacity }} className="mt-3">
+            <Text className="text-center text-xl font-medium text-gray-600">
+              Your AI-powered business command center
             </Text>
+          </Animated.View>
+
+          {/* Feature highlights */}
+          <Animated.View
+            style={{
+              opacity: featuresOpacity,
+              transform: [{ translateY: featuresTranslateY }],
+            }}
+            className="mt-10 items-center"
+          >
+            <View style={styles.featuresContainer}>
+              {FEATURES.map((feature, index) => (
+                <View key={index} className="mb-4 flex-row items-center">
+                  <View className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                    <Ionicons name={feature.icon} size={20} color="#0ea5e9" />
+                  </View>
+                  <Text style={styles.featureText} className="text-base text-gray-700">
+                    {feature.text}
+                  </Text>
+                </View>
+              ))}
+            </View>
           </Animated.View>
         </View>
 
@@ -129,22 +151,70 @@ export default function WelcomeScreen() {
           }}
           className="px-6 pb-8"
         >
-          {/* Terms text */}
-          <Text className="mb-4 text-center text-xs text-muted-foreground">
-            By continuing, you agree to our Terms of Service and Privacy Policy.
-          </Text>
-
           {/* Continue button */}
           <Pressable
             onPress={handleContinue}
-            className="rounded-full bg-primary py-4 active:opacity-90"
+            style={styles.continueButton}
+            className="active:opacity-90"
           >
-            <Text className="text-center text-base font-semibold text-white">
-              Continue
+            <Text className="text-center text-lg font-semibold text-white">
+              Get Started
             </Text>
+            <Ionicons name="arrow-forward" size={20} color="white" style={{ marginLeft: 8 }} />
           </Pressable>
+
+          {/* Terms text */}
+          <Text className="mt-4 text-center text-xs text-gray-500">
+            By continuing, you agree to our{" "}
+            <Text 
+              className="text-primary underline"
+              onPress={() => Linking.openURL("https://dreamteam.ai/terms")}
+            >
+              Terms of Service
+            </Text>
+            {" "}and{" "}
+            <Text 
+              className="text-primary underline"
+              onPress={() => Linking.openURL("https://dreamteam.ai/privacy")}
+            >
+              Privacy Policy
+            </Text>
+          </Text>
         </Animated.View>
       </SafeAreaView>
     </LinearGradient>
   );
 }
+
+const styles = StyleSheet.create({
+  lottieContainer: {
+    width: 220,
+    height: 220,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lottie: {
+    width: 240,
+    height: 240,
+  },
+  featuresContainer: {
+    alignItems: "flex-start",
+  },
+  featureText: {
+    width: 220,
+  },
+  continueButton: {
+    backgroundColor: "#0ea5e9",
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 9999,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0ea5e9",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+});

@@ -75,6 +75,7 @@ export function ActivityTimeline({
   const activityTypes: FilterType[] = [
     "all",
     "call",
+    "sms",
     "email",
     "meeting",
     "note",
