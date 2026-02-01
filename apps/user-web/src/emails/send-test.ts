@@ -28,7 +28,7 @@ async function sendTestEmail() {
   const aiSphereBase64 = fs.readFileSync(imagePath).toString('base64');
 
   // Render the React component
-  const html = await render(AgentsIntroEmail({ name: 'Drew', workspaceName: 'Acme Corp' }));
+  const html = await render(AgentsIntroEmail());
 
   try {
     const { data, error } = await resend.emails.send({
