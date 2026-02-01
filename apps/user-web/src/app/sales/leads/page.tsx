@@ -69,6 +69,7 @@ export default function LeadsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [deletingLead, setDeletingLead] = React.useState<ExtendedLeadRow | null>(null)
   const [mounted, setMounted] = React.useState(false)
+  const [customizationLoaded, setCustomizationLoaded] = React.useState(false)
   const [addingToStageId, setAddingToStageId] = React.useState<string | undefined>()
   const [importModalOpen, setImportModalOpen] = React.useState(false)
 
@@ -152,13 +153,7 @@ export default function LeadsPage() {
         if (pipelinesRes.ok) {
           const data: LeadPipeline[] = await pipelinesRes.json()
           setPipelines(data)
-          // Auto-select default pipeline
-          const defaultPipeline = data.find((p) => p.is_default)
-          if (defaultPipeline) {
-            setFilters(prev => ({ ...prev, pipelineId: defaultPipeline.id }))
-          } else if (data.length > 0) {
-            setFilters(prev => ({ ...prev, pipelineId: data[0].id }))
-          }
+          // Default to "All Pipelines" (pipelineId: null) - no auto-selection
         }
         if (tagsRes.ok) {
           const data = await tagsRes.json()
@@ -170,6 +165,8 @@ export default function LeadsPage() {
         }
       } catch (error) {
         console.error("Error fetching customization data:", error)
+      } finally {
+        setCustomizationLoaded(true)
       }
     }
     fetchCustomization()
@@ -196,7 +193,7 @@ export default function LeadsPage() {
   }, [])
 
   const fetchLeads = React.useCallback(async () => {
-    if (workspaceLoading) return
+    if (workspaceLoading || !customizationLoaded) return
 
     try {
       const params = new URLSearchParams()
@@ -246,25 +243,7 @@ export default function LeadsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [workspaceLoading, filters, currentWorkspace?.id, fetchFilterOptions])
-
-  // Initial fetch for filter options (unfiltered)
-  React.useEffect(() => {
-    if (workspaceLoading) return
-
-    async function fetchInitialOptions() {
-      try {
-        const res = await fetch("/api/leads")
-        if (res.ok) {
-          const data = await res.json()
-          fetchFilterOptions(data)
-        }
-      } catch (error) {
-        console.error("Error fetching initial filter options:", error)
-      }
-    }
-    fetchInitialOptions()
-  }, [workspaceLoading, fetchFilterOptions])
+  }, [workspaceLoading, customizationLoaded, filters, currentWorkspace?.id, fetchFilterOptions])
 
   React.useEffect(() => {
     fetchLeads()

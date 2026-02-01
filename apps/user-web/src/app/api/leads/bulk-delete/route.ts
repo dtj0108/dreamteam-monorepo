@@ -37,13 +37,12 @@ export async function POST(request: Request) {
 
     const supabase = createAdminClient()
 
-    // Delete leads (only those belonging to user's workspace)
+    // Delete leads (only those belonging to the workspace)
     // Contacts will be cascade deleted via foreign key
     const { error, count } = await supabase
       .from("leads")
       .delete()
       .in("id", body.lead_ids)
-      .eq("user_id", session.id)
       .eq("workspace_id", workspaceId)
 
     if (error) {

@@ -125,7 +125,6 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("leads")
       .select(selectQuery)
-      .eq("user_id", session.id)
       .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
 

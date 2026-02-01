@@ -323,6 +323,28 @@ export async function GET(request: NextRequest) {
           continue
         }
 
+        // Deduplication check: skip if a recent execution already exists for this schedule
+        // This prevents duplicate executions if the cron is triggered multiple times
+        const { data: recentExec } = await supabase
+          .from('agent_schedule_executions')
+          .select('id, status')
+          .eq('schedule_id', schedule.id)
+          .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+          .in('status', ['pending', 'pending_approval', 'running'])
+          .limit(1)
+          .maybeSingle()
+
+        if (recentExec) {
+          console.log(`[Cron] Skipping schedule ${schedule.id} - recent execution ${recentExec.id} exists (status: ${recentExec.status})`)
+          results.push({
+            schedule_id: schedule.id,
+            schedule_name: schedule.name,
+            status: 'skipped',
+            error: `Recent execution already exists (${recentExec.status})`
+          })
+          continue
+        }
+
         // Create execution record
         const executionStatus = schedule.requires_approval ? 'pending_approval' : 'running'
 

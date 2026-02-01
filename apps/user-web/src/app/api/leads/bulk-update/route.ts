@@ -61,12 +61,11 @@ export async function POST(request: Request) {
       updateData.assigned_to = body.updates.assigned_to
     }
 
-    // Update leads (only those belonging to user's workspace)
+    // Update leads (only those belonging to the workspace)
     const { error, count } = await supabase
       .from("leads")
       .update(updateData)
       .in("id", body.lead_ids)
-      .eq("user_id", session.id)
       .eq("workspace_id", workspaceId)
 
     if (error) {

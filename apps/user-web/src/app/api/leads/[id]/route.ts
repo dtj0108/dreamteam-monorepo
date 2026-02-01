@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 import { getSession } from "@/lib/session"
-import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
+import { getCurrentWorkspaceId, validateWorkspaceAccess } from "@/lib/workspace-auth"
 import { triggerLeadStatusChanged } from "@/lib/workflow-trigger-service"
 
 export async function GET(
@@ -14,7 +14,20 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const workspaceId = await getCurrentWorkspaceId(session.id)
+    // Check query param first (mobile), then fallback to cookie (web)
+    const queryWorkspaceId = request.nextUrl.searchParams.get('workspaceId')
+    let workspaceId = queryWorkspaceId
+
+    if (!workspaceId) {
+      workspaceId = await getCurrentWorkspaceId(session.id)
+    } else {
+      // Validate user has access to the requested workspace
+      const { isValid } = await validateWorkspaceAccess(workspaceId, session.id)
+      if (!isValid) {
+        return NextResponse.json({ error: "Workspace access denied" }, { status: 403 })
+      }
+    }
+
     if (!workspaceId) {
       return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
     }
@@ -30,7 +43,6 @@ export async function GET(
         stage:lead_pipeline_stages(id, name, color, position, pipeline_id)
       `)
       .eq("id", id)
-      .eq("user_id", session.id)
       .eq("workspace_id", workspaceId)
       .single()
 
@@ -124,7 +136,6 @@ export async function PATCH(
       .from("leads")
       .select("status")
       .eq("id", id)
-      .eq("user_id", session.id)
       .eq("workspace_id", workspaceId)
       .single()
 
@@ -146,7 +157,6 @@ export async function PATCH(
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
-      .eq("user_id", session.id)
       .eq("workspace_id", workspaceId)
       .select()
       .single()
@@ -192,7 +202,6 @@ export async function DELETE(
       .from("leads")
       .delete()
       .eq("id", id)
-      .eq("user_id", session.id)
       .eq("workspace_id", workspaceId)
 
     if (error) {
