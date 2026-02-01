@@ -129,8 +129,8 @@ function VerifyForm() {
         throw new Error(data.error || "Invalid code")
       }
 
-      // Redirect to dashboard on success
-      router.push("/")
+      // Redirect to onboarding on success (will redirect to / if already completed)
+      router.push("/onboarding")
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to verify code")

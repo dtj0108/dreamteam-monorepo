@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Loader2, Trash2, Upload, Building2, Shield, Crown, UserIcon, Bell, CreditCard } from "lucide-react"
+import { Loader2, Trash2, Upload, Building2, Shield, Crown, UserIcon, Bell, CreditCard, RotateCcw } from "lucide-react"
 import type { IndustryType } from "@/lib/types"
 import { INDUSTRY_TYPE_LABELS, INDUSTRY_TYPE_DESCRIPTIONS } from "@/lib/types"
 import {
@@ -144,6 +144,9 @@ function AccountPageContent() {
 
   // Delete state
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // Redo onboarding state
+  const [redoLoading, setRedoLoading] = useState(false)
 
   // Fetch team data
   const fetchTeamData = useCallback(async () => {
@@ -344,6 +347,29 @@ function AccountPageContent() {
       alert("An error occurred while deleting your account")
     } finally {
       setDeleteLoading(false)
+    }
+  }
+
+  const handleRedoOnboarding = async () => {
+    setRedoLoading(true)
+    try {
+      const response = await fetch("/api/account/onboarding", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ onboardingCompleted: false }),
+        credentials: "include",
+      })
+      if (response.ok) {
+        window.location.href = "/onboarding"
+      } else {
+        const data = await response.json()
+        alert(data.error || "Failed to reset onboarding status")
+      }
+    } catch (error) {
+      console.error("Redo onboarding error:", error)
+      alert("An error occurred while resetting onboarding")
+    } finally {
+      setRedoLoading(false)
     }
   }
 
@@ -625,6 +651,28 @@ function AccountPageContent() {
                 </Button>
               </div>
             </form>
+
+            {/* Onboarding Preferences Section */}
+            <div className="mt-8">
+              <SectionHeader
+                title="Onboarding Preferences"
+                description="Review and update your initial setup preferences"
+              />
+              <div className="mt-6">
+                <p className="text-sm text-muted-foreground mb-4">
+                  Restart the onboarding wizard to update your preferences, industry settings, and initial configuration.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={handleRedoOnboarding}
+                  disabled={redoLoading}
+                >
+                  {redoLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Redo Onboarding
+                </Button>
+              </div>
+            </div>
 
             {/* Danger Zone */}
             <div className="mt-12 p-6 border border-destructive/50 rounded-lg">

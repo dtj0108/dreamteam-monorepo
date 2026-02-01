@@ -28,6 +28,7 @@ const publicRoutes = [
   '/api/agent-chat',        // Proxied to Railway (handles own auth)
   '/api/plans',             // Public pricing plans endpoint
   '/api/cron',              // Cron endpoints (handle own auth via CRON_SECRET)
+  '/api/support',           // Support form (handles own auth, returns JSON 401)
   '/pricing',
   '/about',
   '/products',

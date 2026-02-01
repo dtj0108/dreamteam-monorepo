@@ -53,12 +53,11 @@ export async function POST(request: Request) {
 
     const supabase = createAdminClient()
 
-    // Verify all leads belong to this user/workspace
+    // Verify all leads belong to this workspace
     const { data: validLeads, error: verifyError } = await supabase
       .from("leads")
       .select("id")
       .in("id", body.lead_ids)
-      .eq("user_id", session.id)
       .eq("workspace_id", workspaceId)
 
     if (verifyError) {

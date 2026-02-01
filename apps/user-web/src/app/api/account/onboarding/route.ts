@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createAdminClient } from '@dreamteam/database/server'
+import { createAdminClient, createServerSupabaseClient } from '@dreamteam/database/server'
 
 export type OnboardingGoal = 'finance' | 'team' | 'sales'
 
@@ -249,20 +249,19 @@ export async function POST(request: Request) {
 // PUT - Save onboarding wizard completion
 export async function PUT(request: Request) {
   try {
-    const cookieStore = await cookies()
-    const sessionCookie = cookieStore.get('fb_session')
+    const supabase = await createServerSupabaseClient()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-    if (!sessionCookie) {
+    if (userError || !user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    const session = JSON.parse(Buffer.from(sessionCookie.value, 'base64').toString())
-    const profileId = session.id
+    const profileId = user.id
 
     const body = await request.json()
-    const { onboardingCompleted, goal, companyName, industryType } = body
+    const { onboardingCompleted, goal, companyName, industryType, teamSize } = body
 
-    const supabase = createAdminClient()
+    const adminSupabase = createAdminClient()
 
     // Build update object with only provided fields
     const updateData: Record<string, unknown> = {}
@@ -283,7 +282,11 @@ export async function PUT(request: Request) {
       updateData.industry_type = industryType
     }
 
-    const { error } = await supabase
+    if (teamSize !== undefined) {
+      updateData.team_size = teamSize
+    }
+
+    const { error } = await adminSupabase
       .from('profiles')
       .update(updateData)
       .eq('id', profileId)

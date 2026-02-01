@@ -4,6 +4,7 @@ import { RouteProvider, ThemeProvider, UserProvider, WorkspaceProvider, CallProv
 import { KeyboardShortcutsProvider } from "@/providers/keyboard-shortcuts-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CallOverlay } from "@/components/calls";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const inter = Inter({
@@ -63,6 +64,7 @@ export default function RootLayout({
                     <CallProvider>
                       {children}
                       <CallOverlay />
+                      <Toaster richColors position="bottom-right" />
                     </CallProvider>
                   </WorkspaceProvider>
                 </UserProvider>
