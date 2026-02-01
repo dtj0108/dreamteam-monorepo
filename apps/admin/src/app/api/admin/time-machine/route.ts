@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
 
     // Categorize schedules based on their due status
     const now = new Date()
-    const categorized = (schedules || []).map((schedule: Schedule) => {
+    const categorized = (schedules || []).map((schedule) => {
       const nextRun = schedule.next_run_at ? new Date(schedule.next_run_at) : null
       
       let status: 'due' | 'overdue' | 'pending' | 'no_schedule' = 'pending'
@@ -100,8 +100,12 @@ export async function GET(request: NextRequest) {
         wouldBeDueAt = true
       }
 
+      // Supabase returns agent as an array, extract the first item
+      const agent = Array.isArray(schedule.agent) ? schedule.agent[0] : schedule.agent
+
       return {
         ...schedule,
+        agent,
         status,
         would_be_due_at_simulated_time: wouldBeDueAt,
         time_until_due_ms: nextRun ? nextRun.getTime() - now.getTime() : null,
