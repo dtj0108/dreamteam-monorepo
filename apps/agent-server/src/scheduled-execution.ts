@@ -36,6 +36,7 @@ const requestSchema = z.object({
   taskPrompt: z.string(),
   workspaceId: z.string().uuid().optional(),
   outputConfig: outputConfigSchema,
+  simulatedTime: z.string().optional(), // ISO datetime for Time Travel testing
 })
 
 type OutputConfig = z.infer<typeof outputConfigSchema>
@@ -250,9 +251,12 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
       return res.status(400).json({ error: `Invalid request: ${parsed.error.message}` })
     }
 
-    const { executionId, agentId, taskPrompt, workspaceId, outputConfig } = parsed.data
+    const { executionId, agentId, taskPrompt, workspaceId, outputConfig, simulatedTime } = parsed.data
     console.log(`[Scheduled Execution] Processing execution ${executionId} for agent ${agentId}`)
     console.log(`[Scheduled Execution] workspaceId: ${workspaceId || 'NOT PROVIDED - MCP tools will not be available'}`)
+    if (simulatedTime) {
+      console.log(`[Scheduled Execution] SIMULATED TIME: ${simulatedTime} (Time Travel testing mode)`)
+    }
 
     const supabase = createAdminClient()
 
@@ -314,7 +318,7 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
         ? toolNames.join(', ')
         : 'None available'
 
-      const contextSection = `${formatTimeContext(scheduleTimezone)}
+      const contextSection = `${formatTimeContext(scheduleTimezone, simulatedTime)}
 
 ## Execution Context
 - Workspace ID: ${workspaceId}
@@ -331,7 +335,7 @@ ${toolNames.length > 0
       finalTaskPrompt = contextSection + taskPrompt
     } else {
       // No workspaceId means no MCP tools can be created
-      const noToolsWarning = `${formatTimeContext(scheduleTimezone)}
+      const noToolsWarning = `${formatTimeContext(scheduleTimezone, simulatedTime)}
 
 ## IMPORTANT: No Workspace Context
 
@@ -373,6 +377,20 @@ ${outputInstructions}`
     const wasHallucination = result.hallucinationCheck?.isLikelyHallucination || false
     const hallucinationConfidence = result.hallucinationCheck?.confidence || null
 
+    // Check for zero-token execution (potential issue)
+    const hasZeroTokens = result.inputTokens === 0 && result.outputTokens === 0
+    const hadToolsButNoToolCalls = toolNames.length > 0 && result.toolCalls.length === 0
+    let zeroTokenWarning: string | undefined
+    
+    if (hasZeroTokens) {
+      zeroTokenWarning = `Execution used 0 tokens - this may indicate the AI call failed or was not made`
+      console.warn(`[Scheduled Execution] ⚠️ Execution ${executionId} completed with 0 tokens - potential execution failure`)
+    } else if (hadToolsButNoToolCalls && !result.mcpClientError) {
+      // Agent had tools available but didn't use any (and no MCP error)
+      zeroTokenWarning = `Agent had ${toolNames.length} tools available but made 0 tool calls - data may be fabricated`
+      console.warn(`[Scheduled Execution] ⚠️ Execution ${executionId}: Agent had tools but didn't use them`)
+    }
+
     // Update execution with success
     await supabase
       .from("agent_schedule_executions")
@@ -383,6 +401,8 @@ ${outputInstructions}`
           message: result.content,
           hallucination_warning: wasHallucination ? result.hallucinationCheck?.summary : undefined,
           hallucination_indicators: wasHallucination ? result.hallucinationCheck?.indicators : undefined,
+          mcp_client_error: result.mcpClientError || undefined,
+          zero_token_warning: zeroTokenWarning,
         },
         tool_calls: result.toolCalls,
         tokens_input: result.inputTokens,
@@ -391,12 +411,17 @@ ${outputInstructions}`
       })
       .eq("id", executionId)
 
+    // Log warning if MCP client failed
+    if (result.mcpClientError) {
+      console.warn(`[Scheduled Execution] ⚠️ Execution ${executionId} completed but MCP client failed: ${result.mcpClientError}`)
+    }
+
     // Log additional warning for hallucination
     if (wasHallucination) {
       console.warn(`[Scheduled Execution] ⚠️ Execution ${executionId} completed but HALLUCINATION DETECTED (${hallucinationConfidence} confidence)`)
     }
 
-    console.log(`[Scheduled Execution] Completed in ${duration}ms, success=${result.success}, hallucination=${wasHallucination}`)
+    console.log(`[Scheduled Execution] Completed in ${duration}ms, success=${result.success}, hallucination=${wasHallucination}, zeroTokens=${hasZeroTokens}`)
 
     return res.json({
       success: result.success,
@@ -471,6 +496,7 @@ async function executeWithVercelAI(options: {
   outputTokens: number
   toolCalls: any[]
   hallucinationCheck: HallucinationCheckResult | null
+  mcpClientError: string | null
 }> {
   const { provider, model, systemPrompt, taskPrompt, toolNames, workspaceId } = options
 
@@ -494,6 +520,7 @@ async function executeWithVercelAI(options: {
 
   // Use pooled MCP client
   let aiTools: Record<string, any> = {}
+  let mcpClientError: string | null = null
 
   try {
     if (toolNames.length > 0 && workspaceId) {
@@ -503,8 +530,11 @@ async function executeWithVercelAI(options: {
         aiTools = tools
         console.log(`[Scheduled Execution] MCP client ${isNew ? 'created' : 'reused'} with ${Object.keys(aiTools).length} tools`)
       } catch (mcpError) {
+        const errorMsg = mcpError instanceof Error ? mcpError.message : String(mcpError)
         console.error("[Scheduled Execution] Failed to get MCP client from pool:", mcpError)
-        // Continue without tools
+        mcpClientError = `MCP client failed: ${errorMsg}`
+        // IMPORTANT: Agent has tools but we couldn't get MCP client - this will likely cause hallucination
+        console.warn(`[Scheduled Execution] ⚠️ Agent has ${toolNames.length} tools assigned but MCP client failed - execution will proceed WITHOUT tools`)
       }
     } else {
       // Log why MCP client was not created
@@ -512,6 +542,7 @@ async function executeWithVercelAI(options: {
         console.log(`[Scheduled Execution] No tools assigned to agent - MCP client not created`)
       } else if (!workspaceId) {
         console.log(`[Scheduled Execution] No workspaceId provided - MCP client not created (agent has ${toolNames.length} tools but cannot use them)`)
+        mcpClientError = `No workspace context - agent has ${toolNames.length} tools but cannot use them`
       }
     }
 
@@ -580,6 +611,7 @@ async function executeWithVercelAI(options: {
       outputTokens: result.usage?.outputTokens || 0,
       toolCalls: toolCallRecords,
       hallucinationCheck,
+      mcpClientError,
     }
   } finally {
     // Client is returned to pool, no need to close here

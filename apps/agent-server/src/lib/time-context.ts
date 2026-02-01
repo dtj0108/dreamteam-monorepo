@@ -11,10 +11,17 @@
  * Provides unambiguous datetime information for the LLM.
  * 
  * @param timezone - IANA timezone string (e.g., 'America/New_York')
+ * @param simulatedTime - Optional simulated time for testing (overrides current time)
  * @returns Formatted time context string for inclusion in system prompts
  */
-export function formatTimeContext(timezone: string = 'UTC'): string {
-  const now = new Date();
+export function formatTimeContext(
+  timezone: string = 'UTC',
+  simulatedTime?: Date | string
+): string {
+  // Use simulated time if provided, otherwise use current time
+  const now = simulatedTime 
+    ? (typeof simulatedTime === 'string' ? new Date(simulatedTime) : simulatedTime)
+    : new Date();
 
   // ISO format for precision
   const isoTime = now.toISOString();
@@ -32,8 +39,13 @@ export function formatTimeContext(timezone: string = 'UTC'): string {
   });
   const localTime = localFormatter.format(now);
 
+  // Add simulated time warning if applicable
+  const simulatedWarning = simulatedTime 
+    ? '\n- **SIMULATED TIME** (for testing purposes)'
+    : '';
+
   return `## Current Time
 - Date/Time: ${localTime}
 - ISO: ${isoTime}
-- Timezone: ${timezone}`;
+- Timezone: ${timezone}${simulatedWarning}`;
 }
