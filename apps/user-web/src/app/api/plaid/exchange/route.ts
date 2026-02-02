@@ -191,6 +191,7 @@ export async function POST(request: Request) {
           plaid_current_balance: plaidAccount.balances.current,
           plaid_limit: plaidAccount.balances.limit,
           is_plaid_linked: true,
+          is_active: true,
           plaid_last_balance_update: new Date().toISOString(),
         })
         .select()
