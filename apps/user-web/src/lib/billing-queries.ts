@@ -1078,10 +1078,12 @@ export async function createAgentTierSubscription(
     }
 
     // Subscription is active - update database
-    // Access properties directly from subscription object
-    const periodEnd = subscription.current_period_end
-      ? new Date(subscription.current_period_end * 1000).toISOString()
-      : null
+    // Access properties from the response with validation (same pattern as updateAgentTierSubscription)
+    const periodEndTs = (subscription as unknown as { current_period_end?: number }).current_period_end
+    let periodEnd: string | null = null
+    if (typeof periodEndTs === 'number' && periodEndTs > 0 && Number.isFinite(periodEndTs)) {
+      periodEnd = new Date(periodEndTs * 1000).toISOString()
+    }
 
     await supabase
       .from('workspace_billing')
