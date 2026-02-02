@@ -113,6 +113,22 @@ export function AccountForm({ account, onSuccess }: AccountFormProps) {
             />
           </div>
 
+          {account && (
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="is_active" className="font-medium">Active Account</Label>
+                <p className="text-sm text-muted-foreground">
+                  Include this account in totals and reports
+                </p>
+              </div>
+              <Switch
+                id="is_active"
+                checked={formData.is_active ?? true}
+                onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+              />
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="type">Account Type</Label>
             <Select
@@ -206,22 +222,6 @@ export function AccountForm({ account, onSuccess }: AccountFormProps) {
               />
             </div>
           </div>
-
-          {account && (
-            <div className="flex items-center justify-between rounded-lg border p-4">
-              <div className="space-y-0.5">
-                <Label htmlFor="is_active">Active Account</Label>
-                <p className="text-sm text-muted-foreground">
-                  Include this account in totals and reports
-                </p>
-              </div>
-              <Switch
-                id="is_active"
-                checked={formData.is_active ?? true}
-                onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-              />
-            </div>
-          )}
 
           <div className="flex gap-3 justify-end">
             <Button 
