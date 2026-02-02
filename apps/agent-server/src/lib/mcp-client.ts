@@ -84,7 +84,7 @@ export async function createMCPClient(config: MCPClientConfig): Promise<MCPClien
     args: [mcpServerPath],
     env: {
       ...process.env,
-      SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+      SUPABASE_URL: process.env.SUPABASE_URL || "",
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
       WORKSPACE_ID: config.workspaceId,
       USER_ID: config.userId,

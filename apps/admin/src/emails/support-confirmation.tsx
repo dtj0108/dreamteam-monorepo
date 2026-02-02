@@ -14,7 +14,7 @@ import {
 type Urgency = 'low' | 'medium' | 'high';
 
 interface SupportConfirmationEmailProps {
-  type: 'bug' | 'support';
+  type: 'bug' | 'support' | 'feature';
   userName: string;
   subject: string;
   urgency: Urgency;
@@ -44,7 +44,7 @@ export function SupportConfirmationEmail({
   subject,
   urgency,
 }: SupportConfirmationEmailProps) {
-  const typeLabel = type === 'bug' ? 'Bug Report' : 'Support Request';
+  const typeLabel = type === 'bug' ? 'Bug Report' : type === 'feature' ? 'Feature Request' : 'Support Request';
   const config = urgencyConfig[urgency];
 
   return (
@@ -87,7 +87,7 @@ export function SupportConfirmationEmail({
           <Section style={summaryCard}>
             <Text style={summaryLabel}>Type</Text>
             <Text style={summaryValue}>
-              {type === 'bug' ? '🐛' : '💬'} {typeLabel}
+              {type === 'bug' ? '🐛' : type === 'feature' ? '💡' : '💬'} {typeLabel}
             </Text>
 
             <Text style={{ ...summaryLabel, marginTop: '16px' }}>Subject</Text>

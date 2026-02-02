@@ -5,7 +5,7 @@ import { sendEmail, SupportRequestEmail, SupportConfirmationEmail } from '@/emai
 type Urgency = 'low' | 'medium' | 'high';
 
 interface SupportRequestBody {
-  type: 'bug' | 'support';
+  type: 'bug' | 'support' | 'feature';
   subject: string;
   message: string;
   source: 'user-web' | 'admin';
@@ -28,9 +28,9 @@ export async function POST(request: NextRequest) {
     // Parse and validate request body
     const body: SupportRequestBody = await request.json();
 
-    if (!body.type || !['bug', 'support'].includes(body.type)) {
+    if (!body.type || !['bug', 'support', 'feature'].includes(body.type)) {
       return NextResponse.json(
-        { error: 'Invalid request type. Must be "bug" or "support".' },
+        { error: 'Invalid request type. Must be "bug", "support", or "feature".' },
         { status: 400 }
       );
     }
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Send emails using Resend
-    const typeLabel = body.type === 'bug' ? 'Bug Report' : 'Support Request';
+    const typeLabel = body.type === 'bug' ? 'Bug Report' : body.type === 'feature' ? 'Feature Request' : 'Support Request';
     const urgencyLabel = body.urgency.charAt(0).toUpperCase() + body.urgency.slice(1);
 
     // Send internal support email

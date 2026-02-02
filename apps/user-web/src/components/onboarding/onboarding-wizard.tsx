@@ -5,7 +5,10 @@ import { AnimatePresence } from "motion/react"
 import { useOnboardingWizard } from "@/hooks/use-onboarding-wizard"
 import { OnboardingProgress } from "./onboarding-progress"
 import { WelcomeStep } from "./steps/welcome-step"
-import { GoalStep } from "./steps/goal-step"
+import { PrimaryFocusStep } from "./steps/primary-focus-step"
+import { IndustryStep } from "./steps/industry-step"
+import { DecisionStyleStep } from "./steps/decision-style-step"
+import { TeamSizeStep } from "./steps/team-size-step"
 import { CompanyStep } from "./steps/company-step"
 
 interface OnboardingWizardProps {
@@ -27,7 +30,7 @@ export function OnboardingWizard({ userName, initialCompanyName = "" }: Onboardi
 
   return (
     <div className="relative">
-      {/* Progress indicator (shown on steps 1-2) */}
+      {/* Progress indicator (shown on steps 1-5) */}
       <OnboardingProgress
         currentStep={wizard.currentStep}
         totalSteps={wizard.totalSteps}
@@ -45,28 +48,53 @@ export function OnboardingWizard({ userName, initialCompanyName = "" }: Onboardi
           )}
 
           {wizard.currentStep === 1 && (
-            <GoalStep
-              key="goal"
-              selectedGoal={wizard.goal}
-              onSelect={wizard.setGoal}
+            <PrimaryFocusStep
+              key="primary-focus"
+              selectedValue={wizard.primaryFocus}
+              onSelect={wizard.setPrimaryFocus}
               onContinue={wizard.nextStep}
               onBack={wizard.prevStep}
-              canContinue={wizard.canProceedFromGoal}
             />
           )}
 
           {wizard.currentStep === 2 && (
+            <IndustryStep
+              key="industry"
+              selectedValue={wizard.industryType}
+              onSelect={wizard.setIndustryType}
+              onContinue={wizard.nextStep}
+              onBack={wizard.prevStep}
+            />
+          )}
+
+          {wizard.currentStep === 3 && (
+            <DecisionStyleStep
+              key="decision-style"
+              selectedValue={wizard.decisionStyle}
+              onSelect={wizard.setDecisionStyle}
+              onContinue={wizard.nextStep}
+              onBack={wizard.prevStep}
+            />
+          )}
+
+          {wizard.currentStep === 4 && (
+            <TeamSizeStep
+              key="team-size"
+              selectedValue={wizard.teamSize}
+              onSelect={wizard.setTeamSize}
+              onContinue={wizard.nextStep}
+              onBack={wizard.prevStep}
+            />
+          )}
+
+          {wizard.currentStep === 5 && (
             <CompanyStep
               key="company"
               companyName={wizard.companyName}
               onCompanyNameChange={wizard.setCompanyName}
-              selectedIndustry={wizard.industryType}
-              onIndustrySelect={wizard.setIndustryType}
-              selectedTeamSize={wizard.teamSize}
-              onTeamSizeSelect={wizard.setTeamSize}
               onSubmit={handleSubmit}
               onBack={wizard.prevStep}
-              canSubmit={wizard.canProceedFromCompany}
+              canSubmit={wizard.canSubmit}
               isSubmitting={wizard.isSubmitting}
               error={wizard.error}
             />

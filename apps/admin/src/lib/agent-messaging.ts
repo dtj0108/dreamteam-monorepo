@@ -2,6 +2,7 @@
 // Ported from financebro-1/apps/finance/src/lib/agent-messaging.ts
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { sendPushToUser, type PushNotificationPayload } from './push-notifications'
 
 /**
  * Get all admin profile IDs for a workspace (owners + admins).
@@ -70,7 +71,7 @@ export function formatTaskCompletionMessage(params: {
 // ============================================================================
 
 interface SendAgentDMParams {
-  agentId: string           // agents.id (local agent ID)
+  agentId: string           // Agent's profile_id (from findLocalAgent)
   recipientProfileId: string // User's profile_id
   workspaceId: string
   content: string
@@ -88,6 +89,9 @@ interface SendAgentDMResult {
  * Send a DM message as an agent to a user (like a teammate).
  * This finds or creates a DM conversation and inserts a message
  * using the agent's profile_id as the sender.
+ *
+ * Note: agentId is now the agent's profile_id directly (from findLocalAgent),
+ * since agents are stored in the profiles table with is_agent=true.
  */
 export async function sendAgentDM(
   params: SendAgentDMParams
@@ -97,26 +101,10 @@ export async function sendAgentDM(
   console.log(`[AgentMessaging] Sending DM from agent ${agentId} to user ${recipientProfileId}`)
 
   try {
-    // 1. Get the agent's profile_id
-    const { data: agent, error: agentError } = await supabase
-      .from("agents")
-      .select("id, profile_id, name")
-      .eq("id", agentId)
-      .single()
+    // agentId IS the profile_id (from findLocalAgent which queries profiles table)
+    const agentProfileId = agentId
 
-    if (agentError || !agent) {
-      console.error("[AgentMessaging] Agent not found:", agentError)
-      return { success: false, error: `Agent not found: ${agentError?.message}` }
-    }
-
-    if (!agent.profile_id) {
-      console.error("[AgentMessaging] Agent has no profile_id:", agentId)
-      return { success: false, error: "Agent has no associated profile" }
-    }
-
-    const agentProfileId = agent.profile_id
-
-    // 2. Find existing DM conversation between agent and user
+    // 1. Find existing DM conversation between agent and user
     let conversationId: string | null = null
 
     const { data: agentConvos } = await supabase
@@ -142,7 +130,7 @@ export async function sendAgentDM(
       }
     }
 
-    // 3. If no conversation exists, create one
+    // 2. If no conversation exists, create one
     if (!conversationId) {
       const { data: newConvo, error: createError } = await supabase
         .from("dm_conversations")
@@ -172,7 +160,7 @@ export async function sendAgentDM(
       }
     }
 
-    // 4. Insert the message with sender_id = agent's profile_id
+    // 3. Insert the message with sender_id = agent's profile_id
     const { data: message, error: messageError } = await supabase
       .from("messages")
       .insert({
@@ -190,6 +178,22 @@ export async function sendAgentDM(
     }
 
     console.log(`[AgentMessaging] DM sent successfully: ${message.id}`)
+
+    // Send push notification to recipient
+    const pushPayload: PushNotificationPayload = {
+      title: 'New message',
+      body: content.length > 100 ? content.slice(0, 100) + '...' : content,
+      data: {
+        type: 'dm',
+        dmId: conversationId!,
+        messageId: message.id,
+      },
+    }
+
+    sendPushToUser(recipientProfileId, pushPayload).catch((err) => {
+      console.error('[AgentMessaging] Failed to send push notification:', err)
+    })
+
     return { success: true, messageId: message.id, conversationId: conversationId ?? undefined }
   } catch (error) {
     console.error("[AgentMessaging] Unexpected error:", error)
@@ -321,32 +325,43 @@ interface LocalAgentInfo {
 
 /**
  * Find the local workspace agent that corresponds to a global ai_agent.
- * Returns the local agent's ID, reports_to, and workspace_id.
+ * Returns the agent's profile ID, reports_to, and workspace_id.
+ *
+ * Note: Agents are stored in the `profiles` table with is_agent=true and
+ * linked_agent_id pointing to ai_agents.id. The profile's `id` IS the
+ * profile_id needed for sending DMs.
  */
 export async function findLocalAgent(
   aiAgentId: string,
   workspaceId: string | null,
   supabase: SupabaseClient
 ): Promise<LocalAgentInfo | null> {
-  // Build query - if we have a workspace ID, use it; otherwise get any matching agent
+  // Query the profiles table for agent profiles linked to this ai_agent
   let query = supabase
-    .from('agents')
-    .select('id, reports_to, workspace_id')
-    .eq('ai_agent_id', aiAgentId)
-    .limit(1)
+    .from('profiles')
+    .select('id, agent_workspace_id')
+    .eq('linked_agent_id', aiAgentId)
+    .eq('is_agent', true)
 
   if (workspaceId) {
-    query = query.eq('workspace_id', workspaceId)
+    query = query.eq('agent_workspace_id', workspaceId)
   }
 
-  const { data: agent, error } = await query.single()
+  const { data: profile, error } = await query.limit(1).single()
 
-  if (error || !agent) {
-    console.log(`[AgentMessaging] No local agent found for ai_agent_id ${aiAgentId}${workspaceId ? ` in workspace ${workspaceId}` : ''}`)
+  if (error || !profile) {
+    console.log(`[AgentMessaging] No agent profile found for ai_agent_id ${aiAgentId}${workspaceId ? ` in workspace ${workspaceId}` : ''}`)
     return null
   }
 
-  return agent as LocalAgentInfo
+  // Return the profile id as the agent id (this IS the profile_id for DMs)
+  // reports_to is not available on profiles, so we return null and let the
+  // fallback cascade handle notification recipients
+  return {
+    id: profile.id,
+    reports_to: null,
+    workspace_id: profile.agent_workspace_id
+  }
 }
 
 /**

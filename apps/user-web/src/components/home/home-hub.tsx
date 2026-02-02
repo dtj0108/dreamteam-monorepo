@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { Loader2 } from "lucide-react"
@@ -173,6 +174,22 @@ export function HomeHub() {
                 <FeatureCard {...feature} />
               </div>
             ))}
+          </div>
+
+          {/* Quick Links */}
+          <div className="flex flex-wrap gap-3 justify-center pt-2">
+            <Link
+              href="/support"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted hover:bg-muted/80 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              🐛 Support & Bugs
+            </Link>
+            <Link
+              href="/download-app"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted hover:bg-muted/80 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              📱 Download Mobile App
+            </Link>
           </div>
         </div>
       </main>

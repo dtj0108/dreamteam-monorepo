@@ -2,27 +2,30 @@
 
 import { useState, useCallback } from "react"
 
-export type OnboardingGoal = "finance" | "sales" | "team" | "projects" | "knowledge" | "agents"
-export type IndustryType = "saas" | "retail" | "service" | "general"
-export type TeamSize = "solo" | "small" | "medium" | "large"
+export type PrimaryFocus = "revenue" | "costs" | "team" | "products" | "operations" | "cashflow"
+export type IndustryType = "saas" | "ecommerce" | "services" | "healthcare" | "finance" | "other"
+export type DecisionStyle = "data" | "bottomline" | "options" | "balanced"
+export type TeamSize = "solo" | "small" | "growing" | "large"
 
 export interface OnboardingState {
   currentStep: number
-  goal: OnboardingGoal | null
-  companyName: string
+  primaryFocus: PrimaryFocus | null
   industryType: IndustryType | null
+  decisionStyle: DecisionStyle | null
   teamSize: TeamSize | null
+  companyName: string
 }
 
-const TOTAL_STEPS = 3 // Welcome (0), Goal (1), Company (2)
+const TOTAL_STEPS = 6 // Welcome (0), Primary Focus (1), Industry (2), Decision Style (3), Team Size (4), Company (5)
 
 export function useOnboardingWizard(initialCompanyName: string = "") {
   const [state, setState] = useState<OnboardingState>({
     currentStep: 0,
-    goal: null,
-    companyName: initialCompanyName,
+    primaryFocus: null,
     industryType: null,
+    decisionStyle: null,
     teamSize: null,
+    companyName: initialCompanyName,
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -41,20 +44,56 @@ export function useOnboardingWizard(initialCompanyName: string = "") {
     }))
   }, [])
 
-  const setGoal = useCallback((goal: OnboardingGoal) => {
-    setState((prev) => ({ ...prev, goal }))
+  const setPrimaryFocus = useCallback((primaryFocus: PrimaryFocus) => {
+    setState((prev) => ({ ...prev, primaryFocus }))
   }, [])
 
-  const setCompanyName = useCallback((companyName: string) => {
-    setState((prev) => ({ ...prev, companyName }))
+  const setPrimaryFocusAndAdvance = useCallback((primaryFocus: PrimaryFocus) => {
+    setState((prev) => ({
+      ...prev,
+      primaryFocus,
+      currentStep: Math.min(prev.currentStep + 1, TOTAL_STEPS - 1),
+    }))
   }, [])
 
   const setIndustryType = useCallback((industryType: IndustryType) => {
     setState((prev) => ({ ...prev, industryType }))
   }, [])
 
+  const setIndustryTypeAndAdvance = useCallback((industryType: IndustryType) => {
+    setState((prev) => ({
+      ...prev,
+      industryType,
+      currentStep: Math.min(prev.currentStep + 1, TOTAL_STEPS - 1),
+    }))
+  }, [])
+
+  const setDecisionStyle = useCallback((decisionStyle: DecisionStyle) => {
+    setState((prev) => ({ ...prev, decisionStyle }))
+  }, [])
+
+  const setDecisionStyleAndAdvance = useCallback((decisionStyle: DecisionStyle) => {
+    setState((prev) => ({
+      ...prev,
+      decisionStyle,
+      currentStep: Math.min(prev.currentStep + 1, TOTAL_STEPS - 1),
+    }))
+  }, [])
+
   const setTeamSize = useCallback((teamSize: TeamSize) => {
     setState((prev) => ({ ...prev, teamSize }))
+  }, [])
+
+  const setTeamSizeAndAdvance = useCallback((teamSize: TeamSize) => {
+    setState((prev) => ({
+      ...prev,
+      teamSize,
+      currentStep: Math.min(prev.currentStep + 1, TOTAL_STEPS - 1),
+    }))
+  }, [])
+
+  const setCompanyName = useCallback((companyName: string) => {
+    setState((prev) => ({ ...prev, companyName }))
   }, [])
 
   const submit = useCallback(async () => {
@@ -67,10 +106,11 @@ export function useOnboardingWizard(initialCompanyName: string = "") {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           onboardingCompleted: true,
-          goal: state.goal,
-          companyName: state.companyName,
+          primaryFocus: state.primaryFocus,
           industryType: state.industryType,
+          decisionStyle: state.decisionStyle,
           teamSize: state.teamSize,
+          companyName: state.companyName,
         }),
       })
 
@@ -88,22 +128,25 @@ export function useOnboardingWizard(initialCompanyName: string = "") {
     }
   }, [state])
 
-  const canProceedFromGoal = state.goal !== null
-  const canProceedFromCompany = state.companyName.trim().length > 0 && state.industryType !== null && state.teamSize !== null
+  const canSubmit = state.companyName.trim().length > 0
 
   return {
     ...state,
     totalSteps: TOTAL_STEPS,
     isSubmitting,
     error,
-    canProceedFromGoal,
-    canProceedFromCompany,
+    canSubmit,
     nextStep,
     prevStep,
-    setGoal,
-    setCompanyName,
+    setPrimaryFocus,
+    setPrimaryFocusAndAdvance,
     setIndustryType,
+    setIndustryTypeAndAdvance,
+    setDecisionStyle,
+    setDecisionStyleAndAdvance,
     setTeamSize,
+    setTeamSizeAndAdvance,
+    setCompanyName,
     submit,
   }
 }

@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { createClient } from '@/lib/supabase/client'
 
-type RequestType = 'bug' | 'support'
+type RequestType = 'bug' | 'support' | 'feature'
 type Urgency = 'low' | 'medium' | 'high'
 
 export default function SupportPage() {
@@ -85,6 +85,8 @@ export default function SupportPage() {
       toast.success(
         type === 'bug'
           ? "Bug report sent! We'll look into it."
+          : type === 'feature'
+          ? "Feature request sent! We'll review your idea."
           : "Support request sent! We'll get back to you soon."
       )
     } catch (error) {
@@ -126,11 +128,13 @@ export default function SupportPage() {
             ✅
           </div>
           <h2 className="text-2xl font-semibold mb-2">
-            {type === 'bug' ? 'Bug Report Sent!' : 'Support Request Sent!'}
+            {type === 'bug' ? 'Bug Report Sent!' : type === 'feature' ? 'Feature Request Sent!' : 'Support Request Sent!'}
           </h2>
           <p className="text-muted-foreground mb-6 max-w-md">
             {type === 'bug'
               ? "Thank you for reporting this issue. Our team will investigate and get back to you if we need more information."
+              : type === 'feature'
+              ? "Thank you for your suggestion! We love hearing ideas from our users."
               : 'Thank you for reaching out. We typically respond within 24 hours.'}
           </p>
           <div className="flex gap-3">
@@ -162,7 +166,7 @@ export default function SupportPage() {
           <RadioGroup
             value={type}
             onValueChange={(value) => setType(value as RequestType)}
-            className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            className="grid grid-cols-1 sm:grid-cols-3 gap-3"
           >
             <label
               htmlFor="type-support"
@@ -202,6 +206,25 @@ export default function SupportPage() {
                 </div>
               </div>
             </label>
+            <label
+              htmlFor="type-feature"
+              className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-colors ${
+                type === 'feature'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-input hover:bg-muted/50'
+              }`}
+            >
+              <RadioGroupItem value="feature" id="type-feature" />
+              <div className="flex items-center gap-2">
+                <span className="text-xl">💡</span>
+                <div>
+                  <span className="text-sm font-medium">Feature Request</span>
+                  <p className="text-xs text-muted-foreground">
+                    Suggest a new feature
+                  </p>
+                </div>
+              </div>
+            </label>
           </RadioGroup>
         </div>
 
@@ -213,6 +236,8 @@ export default function SupportPage() {
             placeholder={
               type === 'bug'
                 ? 'Brief description of the bug'
+                : type === 'feature'
+                ? 'What feature would you like to see?'
                 : 'What do you need help with?'
             }
             value={subject}
@@ -288,6 +313,8 @@ export default function SupportPage() {
             placeholder={
               type === 'bug'
                 ? 'Please describe the bug in detail. Include steps to reproduce, expected behavior, and what actually happened.'
+                : type === 'feature'
+                ? "Describe the feature you'd like and how it would help you..."
                 : 'Tell us more about your question or issue...'
             }
             value={message}

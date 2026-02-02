@@ -13,6 +13,7 @@ import {
   recordCheckoutSession,
   isActiveSubscription,
   updateAgentTierSubscription,
+  createAgentTierSubscription,
 } from '@/lib/billing-queries'
 import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
 
@@ -76,16 +77,6 @@ export async function POST(request: NextRequest) {
     // Get current billing state
     const billing = await getWorkspaceBilling(workspaceId)
 
-    // Validate: Agent tier requires active workspace subscription
-    if (type === 'agent_tier') {
-      if (!isActiveSubscription(billing)) {
-        return NextResponse.json(
-          { error: 'Active workspace subscription required for agent tiers' },
-          { status: 400 }
-        )
-      }
-    }
-
     // Determine price ID and session type
     let priceId: string | null = null
     let sessionType: 'workspace_plan' | 'agent_tier'
@@ -130,19 +121,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // For agent tier: Check if upgrading from existing tier
+    // For agent tier: Check if changing from existing tier
     if (type === 'agent_tier' && tier) {
-      // Check if user has an existing agent subscription to upgrade
+      // Check if user has an existing agent subscription to update
       if (billing?.stripe_agent_subscription_id && billing.agent_tier !== 'none') {
-        // Validate this is an upgrade (not a downgrade)
-        const tierOrder = { none: 0, startup: 1, teams: 2, enterprise: 3 }
-        if (tierOrder[tier] <= tierOrder[billing.agent_tier]) {
-          return NextResponse.json(
-            { error: 'Use Stripe portal for downgrades. Contact support for assistance.' },
-            { status: 400 }
-          )
-        }
-
+        // Allow both upgrades and downgrades - updateAgentTierSubscription handles proration
         // Perform direct subscription update with proration
         const result = await updateAgentTierSubscription(
           workspaceId,
@@ -159,10 +142,48 @@ export async function POST(request: NextRequest) {
         }
 
         // Return success without redirect (immediate upgrade)
+        // Include deployment status so UI can show warning if agents failed to deploy
         return NextResponse.json({
           success: true,
           upgraded: true,
           newTier: tier,
+          deploymentFailed: result.deploymentFailed,
+          deploymentError: result.deploymentError,
+        })
+      }
+
+      // NEW: Direct subscription creation for users with saved payment method
+      // (no existing subscription, but has card on file)
+      if (billing?.default_payment_method_id) {
+        console.log(`[checkout] User has saved payment method, attempting direct subscription creation`)
+
+        const result = await createAgentTierSubscription(workspaceId, tier, priceId)
+
+        if (result.requiresAction) {
+          // 3DS required - return client secret for frontend handling
+          return NextResponse.json({
+            success: false,
+            requiresAction: true,
+            clientSecret: result.clientSecret,
+          })
+        }
+
+        if (!result.success) {
+          // Payment failed - could fall through to Checkout, but better to show error
+          // so user knows their saved card failed
+          return NextResponse.json(
+            { error: result.error || 'Failed to create subscription' },
+            { status: 500 }
+          )
+        }
+
+        // Success - subscription created with saved card
+        return NextResponse.json({
+          success: true,
+          upgraded: true, // Use same response shape as upgrades
+          newTier: tier,
+          deploymentFailed: result.deploymentFailed,
+          deploymentError: result.deploymentError,
         })
       }
     }

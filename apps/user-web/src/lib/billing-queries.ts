@@ -447,7 +447,7 @@ export async function updateAgentTierSubscription(
   subscriptionId: string,
   newTier: AgentTier,
   newPriceId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; deploymentFailed?: boolean; deploymentError?: string }> {
   const supabase = createAdminClient()
 
   try {
@@ -472,10 +472,17 @@ export async function updateAgentTierSubscription(
         agent_tier: newTier,
       },
     })
-    // Access properties from the response
-    const updatedSub = updatedSubResponse as unknown as {
-      status: string
-      current_period_end: number
+    // Access properties from the response with validation
+    const periodEnd = (updatedSubResponse as unknown as { current_period_end?: number }).current_period_end
+    let agentPeriodEnd: string
+    if (typeof periodEnd === 'number' && periodEnd > 0 && Number.isFinite(periodEnd)) {
+      agentPeriodEnd = new Date(periodEnd * 1000).toISOString()
+    } else {
+      // Fallback: 30 days from now for monthly billing
+      console.warn('Invalid current_period_end from Stripe:', periodEnd, 'Using fallback date')
+      const fallbackDate = new Date()
+      fallbackDate.setDate(fallbackDate.getDate() + 30)
+      agentPeriodEnd = fallbackDate.toISOString()
     }
 
     // Update database with new tier
@@ -483,8 +490,8 @@ export async function updateAgentTierSubscription(
       .from('workspace_billing')
       .update({
         agent_tier: newTier,
-        agent_status: updatedSub.status as SubscriptionStatus,
-        agent_period_end: new Date(updatedSub.current_period_end * 1000).toISOString(),
+        agent_status: updatedSubResponse.status as SubscriptionStatus,
+        agent_period_end: agentPeriodEnd,
       })
       .eq('workspace_id', workspaceId)
 
@@ -492,8 +499,13 @@ export async function updateAgentTierSubscription(
     // This ensures the workspace gets the new tier's agents (e.g., V3 agents for Teams tier)
     const deployResult = await autoDeployTeamForPlan(workspaceId, newTier)
     if (!deployResult.deployed) {
-      console.warn(`[updateAgentTierSubscription] Auto-deploy failed for ${workspaceId}:`, deployResult.error)
-      // Don't fail the upgrade - billing is updated, deployment can be retried
+      console.error(`[updateAgentTierSubscription] Auto-deploy failed for ${workspaceId}:`, deployResult.error)
+      // Return success for billing, but include deployment failure status
+      return {
+        success: true,
+        deploymentFailed: true,
+        deploymentError: deployResult.error,
+      }
     }
 
     return { success: true }
@@ -905,4 +917,232 @@ export async function createSetupIntent(workspaceId: string): Promise<{ clientSe
   }
 
   return { clientSecret: setupIntent.client_secret }
+}
+
+// =============================================================================
+// AGENT TIER SUBSCRIPTION CREATION (Card-on-File)
+// =============================================================================
+
+export interface AgentTierSubscriptionResult {
+  success: boolean
+  subscriptionId?: string
+  error?: string
+  requiresAction?: boolean
+  clientSecret?: string
+  deploymentFailed?: boolean
+  deploymentError?: string
+}
+
+/**
+ * Create an agent tier subscription using a saved payment method
+ * This allows first-time purchases without redirecting to Stripe Checkout
+ * when the user already has a card on file.
+ *
+ * IMPORTANT: This function now checks for existing agent tier subscriptions in Stripe
+ * to prevent duplicate subscriptions when the database is out of sync.
+ */
+export async function createAgentTierSubscription(
+  workspaceId: string,
+  tier: AgentTier,
+  priceId: string
+): Promise<AgentTierSubscriptionResult> {
+  const supabase = createAdminClient()
+
+  try {
+    // Get billing record to retrieve customer and payment method
+    const billing = await getWorkspaceBilling(workspaceId)
+
+    if (!billing?.stripe_customer_id) {
+      return { success: false, error: 'No Stripe customer for workspace' }
+    }
+
+    if (!billing.default_payment_method_id) {
+      return { success: false, error: 'No payment method on file' }
+    }
+
+    // Check for existing agent tier subscription in Stripe
+    // This handles database sync issues where stripe_agent_subscription_id is null
+    // but an active subscription already exists in Stripe
+    console.log(`[createAgentTierSubscription] Checking for existing subscriptions for customer ${billing.stripe_customer_id}`)
+    const existingSubscriptions = await stripe.subscriptions.list({
+      customer: billing.stripe_customer_id,
+      status: 'active',
+      limit: 10,
+    })
+
+    const existingAgentSub = existingSubscriptions.data.find(
+      sub => sub.metadata?.type === 'agent_tier'
+    )
+
+    if (existingAgentSub) {
+      console.log(`[createAgentTierSubscription] Found existing agent subscription ${existingAgentSub.id}, updating instead of creating new`)
+
+      // Update existing subscription instead of creating new
+      const itemId = existingAgentSub.items.data[0]?.id
+      if (itemId) {
+        const updatedSubResponse = await stripe.subscriptions.update(existingAgentSub.id, {
+          items: [{ id: itemId, price: priceId }],
+          proration_behavior: 'create_prorations',
+          metadata: {
+            workspace_id: workspaceId,
+            type: 'agent_tier',
+            agent_tier: tier,
+          },
+        })
+
+        // Sync subscription ID to database (in case it was missing)
+        // Access properties from the response with validation (same pattern as updateAgentTierSubscription)
+        const periodEndTs = (updatedSubResponse as unknown as { current_period_end?: number }).current_period_end
+        let agentPeriodEnd: string | null = null
+        if (typeof periodEndTs === 'number' && periodEndTs > 0 && Number.isFinite(periodEndTs)) {
+          agentPeriodEnd = new Date(periodEndTs * 1000).toISOString()
+        }
+
+        await supabase
+          .from('workspace_billing')
+          .update({
+            stripe_agent_subscription_id: updatedSubResponse.id,
+            agent_tier: tier,
+            agent_status: updatedSubResponse.status as SubscriptionStatus,
+            agent_period_end: agentPeriodEnd,
+          })
+          .eq('workspace_id', workspaceId)
+
+        console.log(`[createAgentTierSubscription] Updated existing subscription ${updatedSubResponse.id}, synced to database`)
+
+        // Deploy agents for the new tier
+        const deployResult = await autoDeployTeamForPlan(workspaceId, tier)
+        if (!deployResult.deployed) {
+          console.error(`[createAgentTierSubscription] Auto-deploy failed for ${workspaceId}:`, deployResult.error)
+          return {
+            success: true,
+            subscriptionId: updatedSubResponse.id,
+            deploymentFailed: true,
+            deploymentError: deployResult.error,
+          }
+        }
+
+        return {
+          success: true,
+          subscriptionId: updatedSubResponse.id,
+        }
+      }
+    }
+
+    // No existing subscription found - create new one
+    console.log(`[createAgentTierSubscription] No existing subscription found, creating new for workspace ${workspaceId}, tier: ${tier}`)
+
+    // Create the subscription with the saved payment method
+    const subscription = await stripe.subscriptions.create({
+      customer: billing.stripe_customer_id,
+      items: [{ price: priceId }],
+      default_payment_method: billing.default_payment_method_id,
+      payment_behavior: 'error_if_incomplete', // Fail fast if payment fails
+      metadata: {
+        workspace_id: workspaceId,
+        type: 'agent_tier',
+        agent_tier: tier,
+      },
+      expand: ['latest_invoice.payment_intent'],
+    })
+
+    console.log(`[createAgentTierSubscription] Subscription created: ${subscription.id}, status: ${subscription.status}`)
+
+    // Check if 3DS is required
+    if (subscription.status === 'incomplete') {
+      // Access the expanded latest_invoice
+      const invoice = subscription.latest_invoice as unknown as {
+        payment_intent?: {
+          status: string
+          client_secret: string
+        }
+      }
+
+      if (invoice?.payment_intent?.status === 'requires_action') {
+        console.log(`[createAgentTierSubscription] 3DS required for subscription ${subscription.id}`)
+        return {
+          success: false,
+          subscriptionId: subscription.id,
+          requiresAction: true,
+          clientSecret: invoice.payment_intent.client_secret,
+          error: '3D Secure authentication required',
+        }
+      }
+
+      // Other incomplete status - payment failed
+      return {
+        success: false,
+        subscriptionId: subscription.id,
+        error: 'Payment failed. Please try again or use a different card.',
+      }
+    }
+
+    // Subscription is active - update database
+    // Access properties directly from subscription object
+    const periodEnd = subscription.current_period_end
+      ? new Date(subscription.current_period_end * 1000).toISOString()
+      : null
+
+    await supabase
+      .from('workspace_billing')
+      .update({
+        stripe_agent_subscription_id: subscription.id,
+        agent_tier: tier,
+        agent_status: subscription.status as SubscriptionStatus,
+        agent_period_end: periodEnd,
+      })
+      .eq('workspace_id', workspaceId)
+
+    console.log(`[createAgentTierSubscription] Database updated, deploying agents for tier: ${tier}`)
+
+    // Deploy agents for the new tier
+    const deployResult = await autoDeployTeamForPlan(workspaceId, tier)
+    if (!deployResult.deployed) {
+      console.error(`[createAgentTierSubscription] Auto-deploy failed for ${workspaceId}:`, deployResult.error)
+      return {
+        success: true,
+        subscriptionId: subscription.id,
+        deploymentFailed: true,
+        deploymentError: deployResult.error,
+      }
+    }
+
+    console.log(`[createAgentTierSubscription] Success - subscription ${subscription.id} active, agents deployed`)
+    return {
+      success: true,
+      subscriptionId: subscription.id,
+    }
+  } catch (error: unknown) {
+    console.error('[createAgentTierSubscription] Error:', error)
+
+    const stripeErr = error as {
+      type?: string
+      code?: string
+      message?: string
+      payment_intent?: { id: string; client_secret: string }
+    }
+
+    // Handle card errors
+    if (stripeErr.type === 'StripeCardError') {
+      // Check if 3DS is required
+      if (stripeErr.code === 'authentication_required' && stripeErr.payment_intent) {
+        return {
+          success: false,
+          requiresAction: true,
+          clientSecret: stripeErr.payment_intent.client_secret,
+          error: '3D Secure authentication required',
+        }
+      }
+
+      return {
+        success: false,
+        error: stripeErr.message || 'Card was declined',
+      }
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create subscription',
+    }
+  }
 }

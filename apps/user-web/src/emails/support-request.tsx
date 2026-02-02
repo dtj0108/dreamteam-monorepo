@@ -14,7 +14,7 @@ import {
 type Urgency = 'low' | 'medium' | 'high';
 
 interface SupportRequestEmailProps {
-  type: 'bug' | 'support';
+  type: 'bug' | 'support' | 'feature';
   userName: string;
   userEmail: string;
   subject: string;
@@ -40,8 +40,8 @@ export function SupportRequestEmail({
   timestamp,
   urgency,
 }: SupportRequestEmailProps) {
-  const typeLabel = type === 'bug' ? 'Bug Report' : 'Support Request';
-  const badgeColor = type === 'bug' ? '#ef4444' : '#3b82f6';
+  const typeLabel = type === 'bug' ? 'Bug Report' : type === 'feature' ? 'Feature Request' : 'Support Request';
+  const badgeColor = type === 'bug' ? '#ef4444' : type === 'feature' ? '#22c55e' : '#3b82f6';
   const urgencyInfo = urgency ? urgencyConfig[urgency] : null;
 
   return (

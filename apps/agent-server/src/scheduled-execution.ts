@@ -37,6 +37,7 @@ const requestSchema = z.object({
   workspaceId: z.string().uuid().optional(),
   outputConfig: outputConfigSchema,
   profileId: z.string().uuid().optional(), // Schedule creator's profile_id for MCP authorization
+  simulatedTime: z.string().datetime().optional(), // For time-travel simulations: the scheduled run time
 })
 
 type OutputConfig = z.infer<typeof outputConfigSchema>
@@ -255,7 +256,7 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
       return res.status(400).json({ error: `Invalid request: ${parsed.error.message}` })
     }
 
-    const { executionId, agentId, taskPrompt, workspaceId, outputConfig, profileId } = parsed.data
+    const { executionId, agentId, taskPrompt, workspaceId, outputConfig, profileId, simulatedTime } = parsed.data
     console.log(`[Scheduled Execution] Processing execution ${executionId} for agent ${agentId}`)
     console.log(`[Scheduled Execution] workspaceId: ${workspaceId || 'NOT PROVIDED - MCP tools will not be available'}`)
     console.log(`[Scheduled Execution] profileId: ${profileId || 'NOT PROVIDED - MCP authorization may fail'}`)
@@ -329,7 +330,7 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
         ? toolNames.join(', ')
         : 'None available'
 
-      const contextSection = `${formatTimeContext(scheduleTimezone)}
+      const contextSection = `${formatTimeContext(scheduleTimezone, simulatedTime)}
 
 ## Execution Context
 - Workspace ID: ${workspaceId}
@@ -346,7 +347,7 @@ ${toolNames.length > 0
       finalTaskPrompt = contextSection + taskPrompt
     } else {
       // No workspaceId means no MCP tools can be created
-      const noToolsWarning = `${formatTimeContext(scheduleTimezone)}
+      const noToolsWarning = `${formatTimeContext(scheduleTimezone, simulatedTime)}
 
 ## IMPORTANT: No Workspace Context
 
@@ -413,6 +414,32 @@ ${outputInstructions}`
     }
 
     console.log(`[Scheduled Execution] Completed in ${duration}ms, success=${result.success}, hallucination=${wasHallucination}`)
+
+    // Send DM notification via admin API
+    try {
+      const adminUrl = process.env.ADMIN_URL || 'http://localhost:3000'
+      const notifyResponse = await fetch(`${adminUrl}/api/admin/scheduled-tasks/${executionId}/notify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+        },
+        body: JSON.stringify({
+          status: result.success ? 'completed' : 'failed',
+          resultText: result.content,
+          durationMs: duration,
+        }),
+      })
+      if (notifyResponse.ok) {
+        const notifyResult = await notifyResponse.json() as { recipientCount?: number }
+        console.log(`[Scheduled Execution] Notification sent for ${executionId}: ${notifyResult.recipientCount ?? 0} recipients`)
+      } else {
+        console.error(`[Scheduled Execution] Notification request failed: ${notifyResponse.status} ${notifyResponse.statusText}`)
+      }
+    } catch (notifyError) {
+      console.error(`[Scheduled Execution] Failed to send notification:`, notifyError)
+      // Don't fail execution if notification fails
+    }
 
     return res.json({
       success: result.success,
