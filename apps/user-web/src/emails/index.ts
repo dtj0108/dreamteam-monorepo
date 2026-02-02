@@ -17,6 +17,7 @@ function getResendClient(): Resend {
 export { AgentsIntroEmail } from './agents-intro';
 export { SupportRequestEmail } from './support-request';
 export { SupportConfirmationEmail } from './support-confirmation';
+export { EarlyAccessEmail } from './early-access';
 
 // Sender configuration
 // Use RESEND_FROM_EMAIL if set (should be verified domain like hello@dreamteam.ai)
@@ -45,6 +46,19 @@ export async function sendAgentsIntroEmail(to: string) {
   }
 
   return data;
+}
+
+/**
+ * Send the early access confirmation email
+ */
+export async function sendEarlyAccessEmail(to: string) {
+  const { EarlyAccessEmail } = await import('./early-access');
+
+  return sendEmail({
+    to,
+    subject: "You're on the early access list!",
+    react: EarlyAccessEmail({ email: to }),
+  });
 }
 
 // Generic send function for flexibility

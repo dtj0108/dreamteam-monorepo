@@ -3,6 +3,8 @@ import { cookies } from 'next/headers'
 import { createAdminClient, createServerSupabaseClient } from '@dreamteam/database/server'
 
 export type OnboardingGoal = 'finance' | 'team' | 'sales'
+export type PrimaryFocus = 'revenue' | 'costs' | 'team' | 'products' | 'operations' | 'cashflow'
+export type DecisionStyle = 'data' | 'bottomline' | 'options' | 'balanced'
 
 export interface ChecklistItem {
   id: string
@@ -246,6 +248,46 @@ export async function POST(request: Request) {
   }
 }
 
+// Map primary focus to agent-friendly goal description
+function mapPrimaryFocusToGoal(focus: PrimaryFocus | null): string | null {
+  if (!focus) return null
+  const mapping: Record<PrimaryFocus, string> = {
+    revenue: 'Increase revenue and grow customer base',
+    costs: 'Control costs and improve profit margins',
+    team: 'Build and scale the team effectively',
+    products: 'Launch new products and expand offerings',
+    operations: 'Streamline operations and automate workflows',
+    cashflow: 'Manage cash flow and extend runway',
+  }
+  return mapping[focus] || null
+}
+
+// Map decision style to agent-friendly decision making preference
+function mapDecisionStyleToPreference(style: DecisionStyle | null): string | null {
+  if (!style) return null
+  const mapping: Record<DecisionStyle, string> = {
+    data: 'data-driven',
+    bottomline: 'quick',
+    options: 'thorough',
+    balanced: 'balanced',
+  }
+  return mapping[style] || null
+}
+
+// Map industry type to agent-friendly industry label
+function mapIndustryToLabel(industry: string | null): string | null {
+  if (!industry) return null
+  const mapping: Record<string, string> = {
+    saas: 'saas',
+    ecommerce: 'ecommerce',
+    services: 'services',
+    healthcare: 'healthcare',
+    finance: 'finance',
+    other: 'other',
+  }
+  return mapping[industry] || industry
+}
+
 // PUT - Save onboarding wizard completion
 export async function PUT(request: Request) {
   try {
@@ -259,7 +301,7 @@ export async function PUT(request: Request) {
     const profileId = user.id
 
     const body = await request.json()
-    const { onboardingCompleted, goal, companyName, industryType, teamSize } = body
+    const { onboardingCompleted, primaryFocus, industryType, decisionStyle, teamSize, companyName, goal } = body
 
     const adminSupabase = createAdminClient()
 
@@ -270,21 +312,51 @@ export async function PUT(request: Request) {
       updateData.onboarding_completed = onboardingCompleted
     }
 
+    // Handle legacy goal field for backwards compatibility
     if (goal !== undefined) {
       updateData.onboarding_goal = goal
     }
 
-    if (companyName !== undefined) {
-      updateData.company_name = companyName
+    // Handle new primary focus field - also map to onboarding_goal for backwards compat
+    if (primaryFocus !== undefined) {
+      updateData.primary_focus = primaryFocus
+      // Map to a compatible goal for legacy code
+      const goalMapping: Record<string, string> = {
+        revenue: 'sales',
+        costs: 'finance',
+        team: 'team',
+        products: 'sales',
+        operations: 'finance',
+        cashflow: 'finance',
+      }
+      updateData.onboarding_goal = goalMapping[primaryFocus] || 'finance'
     }
 
     if (industryType !== undefined) {
       updateData.industry_type = industryType
     }
 
+    if (decisionStyle !== undefined) {
+      updateData.decision_style = decisionStyle
+    }
+
     if (teamSize !== undefined) {
       updateData.team_size = teamSize
     }
+
+    if (companyName !== undefined) {
+      updateData.company_name = companyName
+    }
+
+    // Build business context for agents from onboarding answers
+    const businessContext = {
+      guided: {
+        primaryGoal: mapPrimaryFocusToGoal(primaryFocus as PrimaryFocus),
+        industry: mapIndustryToLabel(industryType),
+        decisionMaking: mapDecisionStyleToPreference(decisionStyle as DecisionStyle),
+      }
+    }
+    updateData.business_context = businessContext
 
     const { error } = await adminSupabase
       .from('profiles')

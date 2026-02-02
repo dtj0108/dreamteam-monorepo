@@ -47,9 +47,19 @@ export function WelcomeStep({ userName, onContinue }: WelcomeStepProps) {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="text-lg text-muted-foreground max-w-md mb-8"
+        className="text-lg text-muted-foreground max-w-md mb-4"
       >
         Let&apos;s set up your workspace so you can start building, selling, and scaling with AI.
+      </motion.p>
+
+      {/* Agent Memory Messaging */}
+      <motion.p
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+        className="text-sm text-muted-foreground/80 max-w-md mb-8 italic"
+      >
+        Your answers will help shape the memory of your agents — they&apos;ll remember your preferences from day one.
       </motion.p>
 
       {/* CTA Button */}

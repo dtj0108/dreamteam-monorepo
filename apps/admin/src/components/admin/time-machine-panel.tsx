@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
+import { Progress } from '@/components/ui/progress'
 import {
   Clock,
   Play,
@@ -151,6 +152,20 @@ const SIMULATION_PRESETS = [
   { label: 'Next 7 days', hours: 168 },
 ]
 
+function formatTimeRemaining(ms: number): string {
+  if (ms < 1000) return 'less than a second'
+  const seconds = Math.floor(ms / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  if (minutes < 60) {
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
+  }
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+}
+
 function getStatusBadge(status: string) {
   switch (status) {
     case 'overdue':
@@ -182,6 +197,15 @@ export function TimeMachinePanel() {
   const [simStartTime, setSimStartTime] = useState<string>('')
   const [simEndTime, setSimEndTime] = useState<string>('')
   const [useSimulatedTimeContext, setUseSimulatedTimeContext] = useState<boolean>(true)
+
+  // Streaming simulation progress
+  const [simulationProgress, setSimulationProgress] = useState<{
+    isRunning: boolean
+    current: number
+    total: number
+    results: SimulationResult[]
+    avgDurationMs: number
+  } | null>(null)
 
   // Convert Date to datetime-local format
   const toDateTimeLocal = (date: Date) => {
@@ -316,13 +340,16 @@ export function TimeMachinePanel() {
   const handleRunSimulation = async () => {
     if (!simStartTime || !simEndTime || selectedIds.size === 0) return
 
+    // Initialize progress state and open dialog immediately
+    setSimulationProgress({ isRunning: true, current: 0, total: 0, results: [], avgDurationMs: 0 })
+    setResultDialogOpen(true)
     setActionLoading('simulate')
+
     try {
-      const res = await fetch('/api/admin/time-machine', {
+      const response = await fetch('/api/admin/time-machine/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'simulate',
           schedule_ids: Array.from(selectedIds),
           start_time: new Date(simStartTime).toISOString(),
           end_time: new Date(simEndTime).toISOString(),
@@ -330,28 +357,76 @@ export function TimeMachinePanel() {
         })
       })
 
-      const result = await res.json()
-      
-      // Transform the results for display
-      const actionResult: ActionResult = {
-        success: result.success,
-        action: 'simulate',
-        results: [],
-        summary: {
-          total: result.summary?.total || 0,
-          success: result.summary?.dispatched || 0,
-          failed: result.summary?.failed || 0,
-          dispatched: result.summary?.dispatched || 0,
-        },
-        simulation: result.simulation,
-        simulationResults: result.results,
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Simulation request failed')
       }
-      
-      setLastResult(actionResult)
-      setResultDialogOpen(true)
+
+      const reader = response.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let totalDuration = 0
+      let finalSummary: { total: number; dispatched: number; failed: number } | null = null
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+
+              if (data.type === 'init') {
+                setSimulationProgress(prev => prev ? { ...prev, total: data.total } : null)
+              } else if (data.type === 'progress') {
+                totalDuration += data.durationMs || 0
+                setSimulationProgress(prev => prev ? {
+                  ...prev,
+                  current: data.current,
+                  results: [...prev.results, data.result],
+                  avgDurationMs: totalDuration / data.current,
+                } : null)
+              } else if (data.type === 'complete') {
+                finalSummary = data.summary
+                setSimulationProgress(prev => prev ? { ...prev, isRunning: false } : null)
+              }
+            } catch (parseErr) {
+              console.error('Failed to parse SSE event:', parseErr)
+            }
+          }
+        }
+      }
+
+      // Update lastResult for the final summary display
+      if (finalSummary) {
+        setLastResult({
+          success: finalSummary.failed === 0,
+          action: 'simulate',
+          results: [],
+          summary: {
+            total: finalSummary.total,
+            success: finalSummary.dispatched,
+            failed: finalSummary.failed,
+            dispatched: finalSummary.dispatched,
+          },
+          simulation: {
+            start_time: new Date(simStartTime).toISOString(),
+            end_time: new Date(simEndTime).toISOString(),
+            schedules_included: selectedIds.size,
+            total_runs: finalSummary.total,
+          },
+        })
+      }
+
       await fetchSchedules()
     } catch (err) {
       console.error('Simulation failed:', err)
+      setSimulationProgress(prev => prev ? { ...prev, isRunning: false } : null)
     } finally {
       setActionLoading(null)
     }
@@ -820,7 +895,16 @@ export function TimeMachinePanel() {
       )}
 
       {/* Result Dialog */}
-      <Dialog open={resultDialogOpen} onOpenChange={setResultDialogOpen}>
+      <Dialog
+        open={resultDialogOpen}
+        onOpenChange={(open) => {
+          setResultDialogOpen(open)
+          if (!open) {
+            // Clear progress after dialog closes
+            setTimeout(() => setSimulationProgress(null), 300)
+          }
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -840,8 +924,65 @@ export function TimeMachinePanel() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Simulation Summary */}
-          {lastResult?.simulation && (
+          {/* Streaming Progress */}
+          {simulationProgress && (
+            <div className="space-y-4">
+              {/* Progress bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Progress</span>
+                  <span className="font-medium">
+                    {simulationProgress.current} / {simulationProgress.total} runs
+                  </span>
+                </div>
+                <Progress
+                  value={simulationProgress.total > 0 ? (simulationProgress.current / simulationProgress.total) * 100 : 0}
+                />
+              </div>
+
+              {/* Time estimate */}
+              {simulationProgress.isRunning && simulationProgress.avgDurationMs > 0 && simulationProgress.current < simulationProgress.total && (
+                <div className="text-sm text-muted-foreground">
+                  ~{formatTimeRemaining((simulationProgress.total - simulationProgress.current) * simulationProgress.avgDurationMs)} remaining
+                </div>
+              )}
+
+              {/* Completion message */}
+              {!simulationProgress.isRunning && simulationProgress.current > 0 && (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle className="h-4 w-4" />
+                  Simulation complete!
+                </div>
+              )}
+
+              {/* Live results feed */}
+              {simulationProgress.results.length > 0 && (
+                <ScrollArea className="h-[250px] border rounded-md p-2">
+                  <div className="space-y-1">
+                    {simulationProgress.results.map((result, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted/50"
+                      >
+                        {result.status === 'dispatched' ? (
+                          <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                        )}
+                        <span className="text-sm truncate flex-1">{result.scheduleName}</span>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">
+                          {format(new Date(result.runTime), 'HH:mm')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+          )}
+
+          {/* Simulation Summary (shown after completion, when not streaming) */}
+          {!simulationProgress && lastResult?.simulation && (
             <div className="p-3 rounded-md bg-muted text-sm space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Time Range:</span>
@@ -864,8 +1005,8 @@ export function TimeMachinePanel() {
             </div>
           )}
 
-          {/* Simulation Results */}
-          {lastResult?.simulationResults && lastResult.simulationResults.length > 0 && (
+          {/* Simulation Results (legacy display, when not streaming) */}
+          {!simulationProgress && lastResult?.simulationResults && lastResult.simulationResults.length > 0 && (
             <ScrollArea className="max-h-[300px]">
               <div className="space-y-2">
                 {lastResult.simulationResults.map((result, idx) => (
@@ -967,7 +1108,14 @@ export function TimeMachinePanel() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setResultDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setResultDialogOpen(false)
+                // Clear progress after a short delay to allow dialog animation
+                setTimeout(() => setSimulationProgress(null), 300)
+              }}
+            >
               Close
             </Button>
           </DialogFooter>

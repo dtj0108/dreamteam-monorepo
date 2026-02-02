@@ -28,7 +28,7 @@ function parseCookies(cookieHeader: string | undefined): Record<string, string> 
  */
 export function createAdminClient(): SupabaseClient {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       auth: {
@@ -45,8 +45,8 @@ export function createAdminClient(): SupabaseClient {
  */
 export function createAuthenticatedClient(accessToken: string): SupabaseClient {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!,
     {
       global: {
         headers: {
@@ -67,8 +67,8 @@ export function createAuthenticatedClient(accessToken: string): SupabaseClient {
  */
 function createCookieClient(cookies: Record<string, string>) {
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {

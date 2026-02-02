@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
 import { getSession } from "@dreamteam/auth/session"
 import { getNextRunTime, isValidCron } from "@/lib/cron-utils"
+import { getWorkspaceDeployment, type DeployedTeamConfig } from "@dreamteam/database"
 
 // GET /api/agents/schedules - List all schedules for hired agents
 export async function GET(request: NextRequest) {
@@ -34,15 +35,29 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get hired agents for this workspace
-    const { data: hiredAgents } = await supabase
-      .from("agents")
-      .select("ai_agent_id")
-      .eq("workspace_id", workspaceId)
-      .eq("is_active", true)
-      .not("ai_agent_id", "is", null)
+    // Get hired/deployed agents for this workspace
+    // First check deployed team, then fall back to legacy agents table
+    let hiredAgentIds: string[] = []
 
-    const hiredAgentIds = (hiredAgents || []).map((a: { ai_agent_id: string }) => a.ai_agent_id)
+    const deployment = await getWorkspaceDeployment(workspaceId)
+
+    if (deployment) {
+      // Use deployed team config for enabled agents
+      const activeConfig = deployment.active_config as DeployedTeamConfig
+      hiredAgentIds = (activeConfig?.agents || [])
+        .filter((a) => a.is_enabled)
+        .map((a) => a.id)
+    } else {
+      // Fallback: Check legacy agents table
+      const { data: hiredAgents } = await supabase
+        .from("agents")
+        .select("ai_agent_id")
+        .eq("workspace_id", workspaceId)
+        .eq("is_active", true)
+        .not("ai_agent_id", "is", null)
+
+      hiredAgentIds = (hiredAgents || []).map((a: { ai_agent_id: string }) => a.ai_agent_id)
+    }
 
     if (hiredAgentIds.length === 0) {
       return NextResponse.json({ schedules: [], total: 0 })
@@ -156,16 +171,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify the agent is hired by this workspace
-    const { data: hiredAgent, error: agentError } = await supabase
-      .from("agents")
-      .select("id, ai_agent_id")
-      .eq("workspace_id", workspaceId)
-      .eq("ai_agent_id", agent_id)
-      .eq("is_active", true)
-      .single()
+    // Verify the agent is hired/enabled in this workspace
+    // First check deployed team, then fall back to legacy agents table
+    const deployment = await getWorkspaceDeployment(workspaceId)
 
-    if (agentError || !hiredAgent) {
+    let agentVerified = false
+
+    if (deployment) {
+      // Check deployed team config for enabled agent
+      const activeConfig = deployment.active_config as DeployedTeamConfig
+      const deployedAgent = (activeConfig?.agents || []).find(
+        (a) => a.id === agent_id && a.is_enabled
+      )
+      agentVerified = !!deployedAgent
+    } else {
+      // Fallback: Check legacy agents table
+      const { data: hiredAgent } = await supabase
+        .from("agents")
+        .select("id, ai_agent_id")
+        .eq("workspace_id", workspaceId)
+        .eq("ai_agent_id", agent_id)
+        .eq("is_active", true)
+        .single()
+
+      agentVerified = !!hiredAgent
+    }
+
+    if (!agentVerified) {
       return NextResponse.json(
         { error: "Agent not hired in this workspace" },
         { status: 400 }

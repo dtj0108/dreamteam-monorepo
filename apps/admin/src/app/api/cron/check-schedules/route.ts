@@ -56,7 +56,8 @@ async function dispatchToAgentServer(
   agentId: string,
   taskPrompt: string,
   workspaceId?: string,
-  outputConfig?: Record<string, unknown>
+  outputConfig?: Record<string, unknown>,
+  profileId?: string
 ): Promise<{ success: boolean; error?: string; statusCode?: number }> {
   try {
     const response = await fetch(`${AGENT_SERVER_URL}/scheduled-execution`, {
@@ -71,6 +72,7 @@ async function dispatchToAgentServer(
         taskPrompt,
         workspaceId,
         outputConfig,
+        profileId,
       }),
     })
 
@@ -107,18 +109,20 @@ async function dispatchWithRetry(
   taskPrompt: string,
   workspaceId?: string,
   outputConfig?: Record<string, unknown>,
+  profileId?: string,
   maxRetries = 3
 ): Promise<{ success: boolean; error?: string; attempts: number; retryable: boolean; statusCode?: number }> {
   let lastError: string | undefined
   let lastStatusCode: number | undefined
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const result = await dispatchToAgentServer(
       executionId,
       agentId,
       taskPrompt,
       workspaceId,
-      outputConfig
+      outputConfig,
+      profileId
     )
     
     if (result.success) {
@@ -428,6 +432,7 @@ export async function GET(request: NextRequest) {
               schedule.task_prompt,
               resolvedWorkspaceId, // Pass resolved workspace context for MCP tools
               schedule.output_config, // Pass output formatting config
+              scheduleWithAgent.created_by, // Pass schedule creator's profile_id for MCP authorization
               3 // maxRetries
             ).then(async (result) => {
               if (!result.success) {

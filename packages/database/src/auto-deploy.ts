@@ -445,6 +445,30 @@ export async function autoDeployTeamForPlan(
         .from('workspace_deployed_teams')
         .update({ status: 'replaced' })
         .eq('id', existingDeployment.id)
+
+      // 5b. Clean up scheduled tasks from the old deployment's agents
+      const { data: oldDeployedAgents } = await supabase
+        .from('workspace_deployed_agents')
+        .select('agent_id')
+        .eq('deployment_id', existingDeployment.id)
+
+      if (oldDeployedAgents && oldDeployedAgents.length > 0) {
+        const oldAgentIds = oldDeployedAgents.map((a: { agent_id: string }) => a.agent_id)
+
+        // Delete schedules for these old agents (non-template schedules only)
+        const { error: deleteError } = await supabase
+          .from('agent_schedules')
+          .delete()
+          .eq('workspace_id', workspaceId)
+          .eq('is_template', false)
+          .in('agent_id', oldAgentIds)
+
+        if (deleteError) {
+          console.error(`[auto-deploy] Failed to clean up old schedules:`, deleteError)
+        } else {
+          console.log(`[auto-deploy] Cleaned up schedules for ${oldAgentIds.length} old agents in workspace ${workspaceId}`)
+        }
+      }
     }
 
     // 6. Create new deployment with empty customizations
@@ -453,6 +477,17 @@ export async function autoDeployTeamForPlan(
       disabled_delegations: [],
       added_mind: [],
       agent_overrides: {},
+    }
+
+    // Resolve creator for schedule authorization (fallback to workspace owner)
+    let resolvedCreatedByUserId = createdByUserId
+    if (!resolvedCreatedByUserId) {
+      const { data: workspace } = await supabase
+        .from('workspaces')
+        .select('owner_id')
+        .eq('id', workspaceId)
+        .single()
+      resolvedCreatedByUserId = workspace?.owner_id || undefined
     }
 
     const { data: deployment, error: insertError } = await supabase
@@ -464,7 +499,7 @@ export async function autoDeployTeamForPlan(
         base_config: baseConfig,
         customizations: emptyCustomizations,
         active_config: baseConfig, // Same as base_config since no customizations
-        deployed_by: createdByUserId || null,
+        deployed_by: resolvedCreatedByUserId || null,
         status: 'active',
         previous_deployment_id: existingDeployment?.id || null,
       })
@@ -481,7 +516,7 @@ export async function autoDeployTeamForPlan(
       supabase,
       baseConfig.agents.map(a => a.id),
       workspaceId,
-      createdByUserId
+      resolvedCreatedByUserId
     )
 
     console.log(`[auto-deploy] Successfully deployed team ${teamId} to workspace ${workspaceId}`)

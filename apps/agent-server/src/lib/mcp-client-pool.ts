@@ -9,6 +9,7 @@ import { createMCPClient, type MCPClientInstance } from "./mcp-client.js"
 
 interface PoolKey {
   workspaceId: string
+  userId: string
   toolNames: string[]
 }
 
@@ -35,8 +36,8 @@ class MCPClientPool {
     this.startCleanupInterval()
   }
 
-  private getPoolKey(workspaceId: string, toolNames: string[]): string {
-    return `${workspaceId}:${toolNames.sort().join(",")}`
+  private getPoolKey(workspaceId: string, toolNames: string[], userId: string): string {
+    return `${workspaceId}:${userId}:${toolNames.sort().join(",")}`
   }
 
   /**
@@ -47,7 +48,7 @@ class MCPClientPool {
     toolNames: string[],
     userId: string = "scheduled-execution"
   ): Promise<{ client: MCPClientInstance; tools: Record<string, any>; isNew: boolean }> {
-    const key = this.getPoolKey(workspaceId, toolNames)
+    const key = this.getPoolKey(workspaceId, toolNames, userId)
     const existing = this.pool.get(key)
 
     if (existing) {

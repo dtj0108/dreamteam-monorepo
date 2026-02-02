@@ -1,5 +1,7 @@
 "use client"
 
+import { useState, useCallback } from "react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -11,10 +13,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, Sparkles, Receipt, ExternalLink, Bot, Settings, AlertTriangle, CheckCircle2 } from "lucide-react"
-import { useBilling } from "@/hooks/use-billing"
+import { Loader2, Sparkles, Receipt, ExternalLink, Bot, Settings, AlertTriangle, CheckCircle2, PartyPopper } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { useBilling, type ProrationPreview } from "@/hooks/use-billing"
 import { usePlans, Plan } from "@/hooks/use-plans"
-import { AGENT_TIER_INFO, WORKSPACE_PLAN_INFO } from "@/types/billing"
+import { AGENT_TIER_INFO, WORKSPACE_PLAN_INFO, type AgentTier, getPaymentMethodInfo } from "@/types/billing"
+import { AgentTierConfirmDialog, type AgentTierPricing } from "@/components/billing/agent-tier-confirm-dialog"
 
 interface BillingTabProps {
   workspaceId: string
@@ -104,6 +114,7 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
     loading: billingLoading,
     error,
     createCheckoutSession,
+    previewUpgrade,
     openPortal,
     isActiveSubscription,
     isPro,
@@ -114,8 +125,94 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
 
   const { workspacePlans, agentTiers, loading: plansLoading } = usePlans()
 
+  // Agent tier confirmation modal state
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const [selectedTier, setSelectedTier] = useState<'startup' | 'teams' | 'enterprise' | null>(null)
+  const [prorationPreview, setProrationPreview] = useState<ProrationPreview | null>(null)
+  const [prorationLoading, setProrationLoading] = useState(false)
+  const [prorationError, setProrationError] = useState<string | null>(null)
+
+  // Success modal state
+  const [successDialogOpen, setSuccessDialogOpen] = useState(false)
+  const [purchasedTier, setPurchasedTier] = useState<'startup' | 'teams' | 'enterprise' | null>(null)
+
   // Get prices from database with fallbacks
   const { monthlyPrice, annualPrice } = getWorkspacePlanPrices(workspacePlans)
+
+  // Handle opening the confirmation modal for agent tier purchase/upgrade
+  const handleTierSelect = useCallback(async (tier: 'startup' | 'teams' | 'enterprise') => {
+    setSelectedTier(tier)
+    setProrationPreview(null)
+    setProrationError(null)
+    setConfirmDialogOpen(true)
+
+    // If user has existing agents, fetch proration preview
+    if (hasAgents && billing?.agent_tier && billing.agent_tier !== 'none') {
+      setProrationLoading(true)
+      try {
+        const preview = await previewUpgrade(tier)
+        setProrationPreview(preview)
+      } catch (err) {
+        setProrationError(err instanceof Error ? err.message : 'Failed to calculate price')
+      } finally {
+        setProrationLoading(false)
+      }
+    }
+  }, [hasAgents, billing?.agent_tier, previewUpgrade])
+
+  // Handle confirming the purchase/upgrade
+  const handleConfirmPurchase = useCallback(async () => {
+    if (!selectedTier) return
+
+    try {
+      const result = await createCheckoutSession({ type: 'agent_tier', tier: selectedTier })
+
+      // Handle 3DS required - redirect to confirmation page
+      if (result.requiresAction && result.clientSecret) {
+        const params = new URLSearchParams({
+          client_secret: result.clientSecret,
+          tier: selectedTier,
+          return_url: window.location.href,
+        })
+        window.location.href = `/billing/confirm-payment?${params}`
+        return
+      }
+
+      // For immediate upgrades, show success modal
+      if (result.upgraded) {
+        setConfirmDialogOpen(false)
+        setPurchasedTier(selectedTier)
+        setSuccessDialogOpen(true)
+
+        if (result.deploymentFailed) {
+          // Show warning toast for deployment issues (modal still shows)
+          toast.warning(
+            "Agents are still being configured. They should appear shortly.",
+            { duration: 6000 }
+          )
+        }
+        setSelectedTier(null)
+        return
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to process purchase")
+    }
+
+    setConfirmDialogOpen(false)
+    setSelectedTier(null)
+  }, [selectedTier, createCheckoutSession])
+
+  // Get current and target tier info for the modal
+  const currentTierInfo: AgentTierPricing | undefined = billing?.agent_tier && billing.agent_tier !== 'none'
+    ? getAgentTierInfo(billing.agent_tier as 'startup' | 'teams' | 'enterprise', agentTiers)
+    : undefined
+
+  const targetTierInfo: AgentTierPricing | undefined = selectedTier
+    ? getAgentTierInfo(selectedTier, agentTiers)
+    : undefined
+
+  // Get payment method info from billing state
+  const paymentMethod = billing ? getPaymentMethodInfo(billing) : null
 
   // Check if user can manage billing (owner always can, others need permission)
   if (!canManageBilling && !billingLoading) {
@@ -288,23 +385,22 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
                 </div>
               </div>
 
-              {/* Upgrade options - show if not on enterprise */}
-              {billing?.agent_tier !== 'enterprise' && (
+              {/* Tier change options - show if user has a tier that isn't 'none' */}
+              {billing?.agent_tier !== 'none' && (
                 <div className="mt-6 space-y-4">
                   <h4 className="text-sm font-medium text-muted-foreground">
-                    Want more agents?
+                    Change your plan
                   </h4>
                   <div className="grid gap-4 md:grid-cols-2">
                     {(['startup', 'teams', 'enterprise'] as const)
-                      .filter(tier => {
+                      .filter(tier => tier !== billing?.agent_tier)
+                      .map((tier) => {
                         const tierOrder = { startup: 1, teams: 2, enterprise: 3 }
                         const currentOrder = tierOrder[billing?.agent_tier as keyof typeof tierOrder] || 0
-                        return tierOrder[tier] > currentOrder
-                      })
-                      .map((tier) => {
+                        const isUpgrade = tierOrder[tier] > currentOrder
                         const info = getAgentTierInfo(tier, agentTiers)
                         const currentAgents = agentCount || 0
-                        const additionalAgents = info.agents - currentAgents
+                        const agentDifference = info.agents - currentAgents
                         return (
                           <div
                             key={tier}
@@ -315,8 +411,10 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
                                 <h4 className="font-semibold">{info.name}</h4>
                                 <p className="text-sm text-muted-foreground mt-1">
                                   {info.agents} agents total
-                                  {additionalAgents > 0 && (
-                                    <span className="text-primary ml-1">(+{additionalAgents} more)</span>
+                                  {agentDifference !== 0 && (
+                                    <span className={agentDifference > 0 ? "text-primary ml-1" : "text-amber-600 ml-1"}>
+                                      ({agentDifference > 0 ? '+' : ''}{agentDifference} agents)
+                                    </span>
                                   )}
                                 </p>
                               </div>
@@ -328,9 +426,9 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
                             <Button
                               className="w-full mt-3"
                               variant="outline"
-                              onClick={() => createCheckoutSession({ type: 'agent_tier', tier })}
+                              onClick={() => handleTierSelect(tier)}
                             >
-                              Upgrade
+                              {isUpgrade ? 'Upgrade' : 'Downgrade'}
                             </Button>
                           </div>
                         )
@@ -361,7 +459,7 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
                     <Button
                       className="w-full mt-4"
                       variant={tier === 'teams' ? 'default' : 'outline'}
-                      onClick={() => createCheckoutSession({ type: 'agent_tier', tier })}
+                      onClick={() => handleTierSelect(tier)}
                     >
                       Get Started
                     </Button>
@@ -487,6 +585,60 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
           )}
         </CardContent>
       </Card>
+
+      {/* Agent Tier Confirmation Modal */}
+      {selectedTier && targetTierInfo && (
+        <AgentTierConfirmDialog
+          open={confirmDialogOpen}
+          onOpenChange={setConfirmDialogOpen}
+          currentTier={(billing?.agent_tier as AgentTier) ?? 'none'}
+          targetTier={selectedTier}
+          currentTierInfo={currentTierInfo}
+          targetTierInfo={targetTierInfo}
+          prorationPreview={prorationPreview}
+          prorationLoading={prorationLoading}
+          prorationError={prorationError}
+          paymentMethod={paymentMethod}
+          onConfirm={handleConfirmPurchase}
+          onCancel={() => setSelectedTier(null)}
+        />
+      )}
+
+      {/* Success Modal */}
+      <Dialog open={successDialogOpen} onOpenChange={setSuccessDialogOpen}>
+        <DialogContent className="sm:max-w-md text-center">
+          <DialogHeader className="text-center sm:text-center">
+            <div className="mx-auto mb-4 p-4 rounded-full bg-gradient-to-br from-green-100 to-emerald-100">
+              <PartyPopper className="h-10 w-10 text-green-600" />
+            </div>
+            <DialogTitle className="text-2xl">
+              Welcome to {purchasedTier && getAgentTierInfo(purchasedTier, agentTiers).name}!
+            </DialogTitle>
+            <DialogDescription className="text-base pt-2">
+              You now have{' '}
+              <span className="font-semibold text-foreground">
+                {purchasedTier && getAgentTierInfo(purchasedTier, agentTiers).agents} AI agents
+              </span>{' '}
+              ready to help run your business.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 pt-4">
+            <div className="p-4 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+              <div className="flex items-center justify-center gap-2">
+                <Bot className="h-5 w-5 text-primary" />
+                <span>Your agents are being deployed now</span>
+              </div>
+            </div>
+            <Button
+              onClick={() => setSuccessDialogOpen(false)}
+              className="w-full"
+              size="lg"
+            >
+              Let&apos;s Go!
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

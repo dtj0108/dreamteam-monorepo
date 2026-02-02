@@ -13,6 +13,18 @@ interface CheckoutResult {
   upgraded?: boolean
   newTier?: string
   redirected?: boolean
+  deploymentFailed?: boolean
+  deploymentError?: string
+  requiresAction?: boolean // 3DS needed
+  clientSecret?: string // For 3DS confirmation
+}
+
+export interface ProrationPreview {
+  prorated_amount: number // cents - amount to charge now
+  credit_amount: number // cents - credit from current plan
+  total_due: number // cents - net amount due now
+  next_billing_date: string
+  next_billing_amount: number // cents - full price at next billing
 }
 
 interface UseBillingReturn {
@@ -33,6 +45,7 @@ interface UseBillingReturn {
     plan?: 'monthly' | 'annual'
     tier?: 'startup' | 'teams' | 'enterprise'
   }) => Promise<CheckoutResult>
+  previewUpgrade: (tier: 'startup' | 'teams' | 'enterprise') => Promise<ProrationPreview | null>
   openPortal: () => Promise<void>
 
   // Computed helpers
@@ -105,11 +118,24 @@ export function useBilling(): UseBillingReturn {
         throw new Error(data.error || 'Failed to create checkout session')
       }
 
+      // Handle 3DS required
+      if (data.requiresAction && data.clientSecret) {
+        return {
+          requiresAction: true,
+          clientSecret: data.clientSecret,
+        }
+      }
+
       // Handle immediate upgrade (no redirect needed)
       if (data.upgraded) {
         // Refresh billing data to get new tier
         await refresh()
-        return { upgraded: true, newTier: data.newTier }
+        return {
+          upgraded: true,
+          newTier: data.newTier,
+          deploymentFailed: data.deploymentFailed,
+          deploymentError: data.deploymentError,
+        }
       }
 
       // Handle checkout redirect
@@ -121,6 +147,29 @@ export function useBilling(): UseBillingReturn {
       throw new Error('Unexpected response from checkout API')
     },
     [refresh]
+  )
+
+  /**
+   * Preview proration for upgrading agent tier
+   * Returns null if no existing subscription (full price applies)
+   */
+  const previewUpgrade = useCallback(
+    async (tier: 'startup' | 'teams' | 'enterprise'): Promise<ProrationPreview | null> => {
+      const response = await fetch('/api/billing/preview-upgrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to preview upgrade')
+      }
+
+      return data.proration
+    },
+    []
   )
 
   /**
@@ -186,6 +235,7 @@ export function useBilling(): UseBillingReturn {
     error,
     refresh,
     createCheckoutSession,
+    previewUpgrade,
     openPortal,
     isActiveSubscription,
     isPro,
