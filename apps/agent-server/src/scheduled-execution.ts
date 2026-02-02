@@ -36,6 +36,7 @@ const requestSchema = z.object({
   taskPrompt: z.string(),
   workspaceId: z.string().uuid().optional(),
   outputConfig: outputConfigSchema,
+  profileId: z.string().uuid().optional(), // Schedule creator's profile_id for MCP authorization
 })
 
 type OutputConfig = z.infer<typeof outputConfigSchema>
@@ -138,6 +139,10 @@ async function loadAgentConfig(supabase: ReturnType<typeof createAdminClient>, a
 
   return { agent, error: null }
 }
+
+// NOTE: resolveAgentProfileId was removed because it queried a non-existent 'agents' table.
+// MCP authorization now uses the profileId passed from the cron endpoint, which is the
+// schedule creator's profile_id from agent_schedules.created_by.
 
 /**
  * Build system prompt with rules and skills
@@ -250,9 +255,10 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
       return res.status(400).json({ error: `Invalid request: ${parsed.error.message}` })
     }
 
-    const { executionId, agentId, taskPrompt, workspaceId, outputConfig } = parsed.data
+    const { executionId, agentId, taskPrompt, workspaceId, outputConfig, profileId } = parsed.data
     console.log(`[Scheduled Execution] Processing execution ${executionId} for agent ${agentId}`)
     console.log(`[Scheduled Execution] workspaceId: ${workspaceId || 'NOT PROVIDED - MCP tools will not be available'}`)
+    console.log(`[Scheduled Execution] profileId: ${profileId || 'NOT PROVIDED - MCP authorization may fail'}`)
 
     const supabase = createAdminClient()
 
@@ -306,6 +312,15 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
     // #endregion
 
     console.log(`[Scheduled Execution] Agent has ${toolNames.length} tools: ${toolNames.join(", ") || "none"}`)
+
+    // Use the schedule creator's profile_id for MCP authorization
+    // This was passed from the cron endpoint and comes from agent_schedules.created_by
+    const agentProfileId = profileId
+    if (!agentProfileId && workspaceId) {
+      console.log(`[Scheduled Execution] Warning: No profileId provided for MCP authorization in workspace ${workspaceId}`)
+    } else if (agentProfileId) {
+      console.log(`[Scheduled Execution] Using profile_id for MCP authorization: ${agentProfileId}`)
+    }
 
     // Build task prompt with context
     let finalTaskPrompt = taskPrompt
@@ -365,6 +380,7 @@ ${outputInstructions}`
       taskPrompt: finalTaskPrompt,
       toolNames,
       workspaceId: workspaceId || "",
+      agentProfileId: agentProfileId || undefined,
     })
 
     const duration = Date.now() - startTime
@@ -464,6 +480,7 @@ async function executeWithVercelAI(options: {
   taskPrompt: string
   toolNames: string[]
   workspaceId: string
+  agentProfileId?: string
 }): Promise<{
   success: boolean
   content: string
@@ -472,7 +489,7 @@ async function executeWithVercelAI(options: {
   toolCalls: any[]
   hallucinationCheck: HallucinationCheckResult | null
 }> {
-  const { provider, model, systemPrompt, taskPrompt, toolNames, workspaceId } = options
+  const { provider, model, systemPrompt, taskPrompt, toolNames, workspaceId, agentProfileId } = options
 
   // #region agent log - DEBUG executeWithVercelAI
   console.log(`[Scheduled Execution] ====== EXECUTE WITH VERCEL AI ======`)
@@ -496,9 +513,13 @@ async function executeWithVercelAI(options: {
   let aiTools: Record<string, any> = {}
 
   try {
-    if (toolNames.length > 0 && workspaceId) {
+    if (toolNames.length > 0 && workspaceId && agentProfileId) {
       try {
-        const { client, tools, isNew } = await mcpClientPool.getClient(workspaceId, toolNames, "scheduled-execution")
+        const { client, tools, isNew } = await mcpClientPool.getClient(
+          workspaceId,
+          toolNames,
+          agentProfileId
+        )
         mcpClient = client
         aiTools = tools
         console.log(`[Scheduled Execution] MCP client ${isNew ? 'created' : 'reused'} with ${Object.keys(aiTools).length} tools`)
@@ -512,6 +533,8 @@ async function executeWithVercelAI(options: {
         console.log(`[Scheduled Execution] No tools assigned to agent - MCP client not created`)
       } else if (!workspaceId) {
         console.log(`[Scheduled Execution] No workspaceId provided - MCP client not created (agent has ${toolNames.length} tools but cannot use them)`)
+      } else if (!agentProfileId) {
+        console.log(`[Scheduled Execution] No profileId provided - MCP client not created (cannot authorize without valid profile_id)`)
       }
     }
 

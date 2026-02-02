@@ -493,7 +493,7 @@ async function handleSimulateAction(
   // Fetch schedules
   const { data: schedules, error: fetchError } = await supabase
     .from('agent_schedules')
-    .select('id, name, agent_id, cron_expression, timezone, workspace_id, task_prompt, output_config')
+    .select('id, name, agent_id, cron_expression, timezone, workspace_id, task_prompt, output_config, created_by')
     .in('id', scheduleIds)
     .eq('is_template', false)
 
@@ -506,6 +506,28 @@ async function handleSimulateAction(
     return NextResponse.json({ error: 'No schedules found with provided IDs' }, { status: 404 })
   }
 
+  const workspaceOwnerMap = new Map<string, string>()
+  const workspaceIds = Array.from(
+    new Set(schedules.map((schedule) => schedule.workspace_id).filter(Boolean))
+  ) as string[]
+
+  if (workspaceIds.length > 0) {
+    const { data: workspaces, error: workspaceError } = await supabase
+      .from('workspaces')
+      .select('id, owner_id')
+      .in('id', workspaceIds)
+
+    if (workspaceError) {
+      console.warn('[Time Machine] Failed to load workspace owners for profile fallback:', workspaceError)
+    } else {
+      for (const workspace of workspaces || []) {
+        if (workspace?.id && workspace?.owner_id) {
+          workspaceOwnerMap.set(workspace.id, workspace.owner_id)
+        }
+      }
+    }
+  }
+
   // Calculate all runs for each schedule within the time range
   interface ScheduledRun {
     scheduleId: string
@@ -514,6 +536,7 @@ async function handleSimulateAction(
     workspaceId: string | null
     taskPrompt: string
     outputConfig: Record<string, unknown> | null
+    profileId: string | null
     runTime: Date
   }
 
@@ -530,6 +553,10 @@ async function handleSimulateAction(
       )
 
       for (const runTime of runs) {
+        const fallbackProfileId = schedule.workspace_id
+          ? workspaceOwnerMap.get(schedule.workspace_id)
+          : null
+
         allRuns.push({
           scheduleId: schedule.id,
           scheduleName: schedule.name,
@@ -537,6 +564,7 @@ async function handleSimulateAction(
           workspaceId: schedule.workspace_id,
           taskPrompt: schedule.task_prompt,
           outputConfig: schedule.output_config,
+          profileId: schedule.created_by || fallbackProfileId || null,
           runTime,
         })
       }
@@ -603,6 +631,7 @@ async function handleSimulateAction(
             taskPrompt: run.taskPrompt,
             workspaceId: run.workspaceId,
             outputConfig: run.outputConfig,
+            ...(run.profileId ? { profileId: run.profileId } : {}),
             // Pass simulated time so agent sees the "would have run at" time
             ...(useSimulatedTime ? { simulatedTime: run.runTime.toISOString() } : {}),
           }),

@@ -455,6 +455,17 @@ export async function autoDeployTeamForPlan(
       agent_overrides: {},
     }
 
+    // Resolve creator for schedule authorization (fallback to workspace owner)
+    let resolvedCreatedByUserId = createdByUserId
+    if (!resolvedCreatedByUserId) {
+      const { data: workspace } = await supabase
+        .from('workspaces')
+        .select('owner_id')
+        .eq('id', workspaceId)
+        .single()
+      resolvedCreatedByUserId = workspace?.owner_id || undefined
+    }
+
     const { data: deployment, error: insertError } = await supabase
       .from('workspace_deployed_teams')
       .insert({
@@ -464,7 +475,7 @@ export async function autoDeployTeamForPlan(
         base_config: baseConfig,
         customizations: emptyCustomizations,
         active_config: baseConfig, // Same as base_config since no customizations
-        deployed_by: createdByUserId || null,
+        deployed_by: resolvedCreatedByUserId || null,
         status: 'active',
         previous_deployment_id: existingDeployment?.id || null,
       })
@@ -481,7 +492,7 @@ export async function autoDeployTeamForPlan(
       supabase,
       baseConfig.agents.map(a => a.id),
       workspaceId,
-      createdByUserId
+      resolvedCreatedByUserId
     )
 
     console.log(`[auto-deploy] Successfully deployed team ${teamId} to workspace ${workspaceId}`)

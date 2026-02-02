@@ -48,6 +48,19 @@ export async function validateWorkspaceAccess(
 
   // If we have a user ID (from param or env), validate their workspace membership
   if (userId) {
+    // First, check if user is a superadmin (they have access to all workspaces)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_superadmin')
+      .eq('id', userId)
+      .single()
+
+    if (profile?.is_superadmin) {
+      // Superadmins have full access to all workspaces with owner-level permissions
+      return { role: 'owner', profile_id: userId }
+    }
+
+    // Regular user: check workspace membership
     const { data: member, error } = await supabase
       .from('workspace_members')
       .select('role, profile_id')
