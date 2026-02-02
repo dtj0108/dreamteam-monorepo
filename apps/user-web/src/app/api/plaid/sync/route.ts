@@ -5,6 +5,7 @@ import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-
 import { syncTransactions, fireSandboxWebhook, getPlaidEnvironment } from '@/lib/plaid'
 import { getAccessToken } from '@/lib/encryption'
 import { logPlaidEvent } from '@/lib/audit'
+import { checkRateLimit, getRateLimitHeaders } from '@dreamteam/auth/rate-limit'
 
 export async function POST(request: Request) {
   try {
@@ -33,6 +34,21 @@ export async function POST(request: Request) {
 
     if (!plaidItemId) {
       return NextResponse.json({ error: 'Plaid item ID is required' }, { status: 400 })
+    }
+
+    // Rate limit: 5 syncs per minute per user per plaid item
+    const rateLimitKey = `${auth.type === 'session' ? auth.userId : auth.keyId}:${plaidItemId}`
+    const rateLimitResult = checkRateLimit(rateLimitKey, {
+      windowMs: 60 * 1000,
+      maxRequests: 5,
+      keyPrefix: 'plaid_sync',
+    })
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please wait before syncing again.' },
+        { status: 429, headers: getRateLimitHeaders(rateLimitResult) }
+      )
     }
 
     const supabase = createAdminClient()
