@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/popover"
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header"
 import type { TransactionWithCategory } from "@/lib/types"
+import { getSuggestedCategoryFromPlaid } from "@/lib/plaid-category-mapping"
 
 // Action handlers type
 export type TransactionActions = {
@@ -164,6 +165,11 @@ export function getColumns(actions: TransactionActions): ColumnDef<TransactionWi
         const isIncome = transaction.amount > 0
         const isTransfer = transaction.is_transfer
 
+        // Use merchant name if available, fallback to description
+        const displayName = transaction.plaid_merchant_name || transaction.description
+        const showOriginalDescription = transaction.plaid_merchant_name &&
+          transaction.plaid_merchant_name !== transaction.description
+
         return (
           <div className="flex items-center gap-3">
             {isTransfer ? (
@@ -180,8 +186,20 @@ export function getColumns(actions: TransactionActions): ColumnDef<TransactionWi
               </div>
             )}
             <div className="min-w-0">
-              <div className="font-medium truncate">{transaction.description}</div>
-              {transaction.notes && (
+              <div className="flex items-center gap-2">
+                <span className="font-medium truncate">{displayName}</span>
+                {transaction.plaid_pending && (
+                  <Badge variant="outline" className="text-amber-600 border-amber-600 text-xs shrink-0">
+                    Pending
+                  </Badge>
+                )}
+              </div>
+              {showOriginalDescription && (
+                <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                  {transaction.description}
+                </div>
+              )}
+              {!showOriginalDescription && transaction.notes && (
                 <div className="text-xs text-muted-foreground truncate max-w-[200px]">
                   {transaction.notes}
                 </div>
@@ -201,6 +219,23 @@ export function getColumns(actions: TransactionActions): ColumnDef<TransactionWi
         const category = transaction.category
 
         if (!category) {
+          // Show category suggestion for uncategorized Plaid transactions
+          const suggestedCategory = getSuggestedCategoryFromPlaid(transaction.plaid_category)
+
+          if (suggestedCategory) {
+            return (
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground text-sm">Uncategorized</span>
+                <Badge
+                  variant="outline"
+                  className="text-xs text-blue-600 border-blue-300 bg-blue-50"
+                >
+                  Suggest: {suggestedCategory}
+                </Badge>
+              </div>
+            )
+          }
+
           return <span className="text-muted-foreground text-sm">Uncategorized</span>
         }
 

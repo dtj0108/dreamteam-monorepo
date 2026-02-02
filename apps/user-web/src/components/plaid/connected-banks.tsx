@@ -23,6 +23,7 @@ import {
   CheckCircle,
   Building2,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface PlaidAccount {
   id: string
@@ -83,12 +84,26 @@ export function ConnectedBanks({ onAccountsChange }: ConnectedBanksProps) {
       })
       const data = await res.json()
       if (data.success) {
-        console.log(`Synced: ${data.added} added, ${data.modified} modified, ${data.removed} removed`)
+        const { added = 0, modified = 0, removed = 0 } = data
+        const totalChanges = added + modified + removed
+
+        if (totalChanges > 0) {
+          const parts: string[] = []
+          if (added > 0) parts.push(`${added} added`)
+          if (modified > 0) parts.push(`${modified} updated`)
+          if (removed > 0) parts.push(`${removed} removed`)
+          toast.success(`Sync complete - ${parts.join(', ')}`)
+        } else {
+          toast.info('Already up to date')
+        }
+      } else {
+        toast.error(data.error || 'Sync failed')
       }
       await fetchItems()
       onAccountsChange?.()
     } catch (error) {
       console.error('Sync failed:', error)
+      toast.error('Failed to sync transactions')
     } finally {
       setSyncing(null)
     }

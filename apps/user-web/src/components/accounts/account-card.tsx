@@ -154,6 +154,23 @@ export function AccountCard({ account, onEdit, onDelete }: AccountCardProps) {
             </Badge>
           )}
         </div>
+        {/* Credit card limit and available credit */}
+        {account.type === 'credit_card' && account.plaid_limit != null && account.plaid_limit > 0 && (
+          <div className="mt-3 pt-3 border-t text-sm space-y-1">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Credit Limit</span>
+              <span>{formatBalance(account.plaid_limit)}</span>
+            </div>
+            {account.plaid_available_balance != null && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Available Credit</span>
+                <span className="text-emerald-600 font-medium">
+                  {formatBalance(account.plaid_available_balance)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
