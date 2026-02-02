@@ -5,92 +5,93 @@
  */
 
 // Mapping from Plaid primary categories to internal category names
+// Maps to the system's default business categories
 const PLAID_CATEGORY_MAP: Record<string, string> = {
-  // Food & Dining
-  'Food and Drink': 'Food & Dining',
-  'Restaurants': 'Food & Dining',
-  'Coffee Shop': 'Food & Dining',
-  'Fast Food': 'Food & Dining',
-  'Groceries': 'Groceries',
+  // Food & Dining -> Meals & Entertainment
+  'Food and Drink': 'Meals & Entertainment',
+  'Restaurants': 'Meals & Entertainment',
+  'Coffee Shop': 'Meals & Entertainment',
+  'Fast Food': 'Meals & Entertainment',
+  'Groceries': 'Meals & Entertainment',
 
-  // Transportation
-  'Transportation': 'Transportation',
-  'Travel': 'Travel',
-  'Airlines and Aviation Services': 'Travel',
-  'Car Service': 'Transportation',
-  'Gas Stations': 'Transportation',
-  'Parking': 'Transportation',
-  'Public Transportation Services': 'Transportation',
-  'Taxi': 'Transportation',
+  // Transportation -> Travel & Transportation / Vehicle Expenses
+  'Transportation': 'Travel & Transportation',
+  'Travel': 'Travel & Transportation',
+  'Airlines and Aviation Services': 'Travel & Transportation',
+  'Car Service': 'Travel & Transportation',
+  'Gas Stations': 'Vehicle Expenses',
+  'Parking': 'Vehicle Expenses',
+  'Public Transportation Services': 'Travel & Transportation',
+  'Taxi': 'Travel & Transportation',
 
-  // Shopping
-  'Shops': 'Shopping',
-  'Supermarkets and Groceries': 'Groceries',
-  'Clothing and Accessories': 'Shopping',
-  'Electronics': 'Shopping',
-  'Department Stores': 'Shopping',
-  'Sporting Goods': 'Shopping',
-  'Discount Stores': 'Shopping',
-  'Computers and Electronics': 'Shopping',
-  'Digital Purchase': 'Shopping',
-  'Bookstores': 'Shopping',
+  // Shopping -> Office Supplies / Equipment & Hardware
+  'Shops': 'Office Supplies',
+  'Supermarkets and Groceries': 'Meals & Entertainment',
+  'Clothing and Accessories': 'Other Expenses',
+  'Electronics': 'Equipment & Hardware',
+  'Department Stores': 'Office Supplies',
+  'Sporting Goods': 'Other Expenses',
+  'Discount Stores': 'Office Supplies',
+  'Computers and Electronics': 'Equipment & Hardware',
+  'Digital Purchase': 'Software & SaaS',
+  'Bookstores': 'Training & Education',
 
-  // Entertainment
-  'Recreation': 'Entertainment',
-  'Entertainment': 'Entertainment',
-  'Arts and Entertainment': 'Entertainment',
-  'Music, Video and DVD': 'Entertainment',
-  'Movies and DVDs': 'Entertainment',
-  'Gyms and Fitness Centers': 'Entertainment',
+  // Entertainment -> Meals & Entertainment
+  'Recreation': 'Meals & Entertainment',
+  'Entertainment': 'Meals & Entertainment',
+  'Arts and Entertainment': 'Meals & Entertainment',
+  'Music, Video and DVD': 'Software & SaaS',
+  'Movies and DVDs': 'Meals & Entertainment',
+  'Gyms and Fitness Centers': 'Other Expenses',
 
   // Bills & Utilities
-  'Service': 'Services',
+  'Service': 'Professional Services',
   'Utilities': 'Utilities',
-  'Telecommunication Services': 'Utilities',
-  'Cable': 'Utilities',
-  'Internet Services': 'Utilities',
-  'Telephone': 'Utilities',
+  'Telecommunication Services': 'Telecommunications',
+  'Cable': 'Telecommunications',
+  'Internet Services': 'Telecommunications',
+  'Telephone': 'Telecommunications',
 
   // Financial
-  'Bank Fees': 'Fees & Charges',
-  'Interest': 'Fees & Charges',
+  'Bank Fees': 'Bank Fees & Charges',
+  'Interest': 'Bank Fees & Charges',
   'Payment': 'Transfer',
   'Transfer': 'Transfer',
-  'Deposit': 'Income',
-  'Payroll': 'Income',
-  'Income': 'Income',
+  'Deposit': 'Other Income',
+  'Payroll': 'Payroll & Wages',
+  'Income': 'Other Income',
 
-  // Healthcare
-  'Healthcare': 'Healthcare',
-  'Healthcare Services': 'Healthcare',
-  'Pharmacies': 'Healthcare',
-  'Physicians': 'Healthcare',
-  'Dentists': 'Healthcare',
+  // Healthcare -> Other Expenses
+  'Healthcare': 'Other Expenses',
+  'Healthcare Services': 'Other Expenses',
+  'Pharmacies': 'Other Expenses',
+  'Physicians': 'Other Expenses',
+  'Dentists': 'Other Expenses',
 
-  // Home
-  'Home Improvement': 'Home',
-  'Rent': 'Housing',
-  'Mortgage': 'Housing',
+  // Home -> Rent & Lease / Repairs & Maintenance
+  'Home Improvement': 'Repairs & Maintenance',
+  'Rent': 'Rent & Lease',
+  'Mortgage': 'Rent & Lease',
 
   // Insurance
   'Insurance': 'Insurance',
 
-  // Education
-  'Education': 'Education',
-  'College and University': 'Education',
+  // Education -> Training & Education
+  'Education': 'Training & Education',
+  'College and University': 'Training & Education',
 
-  // Personal Care
-  'Personal Care': 'Personal Care',
-  'Hair Salons and Barbers': 'Personal Care',
-  'Spas and Beauty Services': 'Personal Care',
+  // Personal Care -> Other Expenses
+  'Personal Care': 'Other Expenses',
+  'Hair Salons and Barbers': 'Other Expenses',
+  'Spas and Beauty Services': 'Other Expenses',
 
-  // Subscriptions
-  'Subscription': 'Subscriptions',
+  // Subscriptions -> Software & SaaS
+  'Subscription': 'Software & SaaS',
 
-  // Other
-  'Government and Non-Profit': 'Government & Taxes',
-  'Taxes': 'Government & Taxes',
-  'Charitable Giving': 'Gifts & Donations',
+  // Government & Taxes
+  'Government and Non-Profit': 'Taxes & Licenses',
+  'Taxes': 'Taxes & Licenses',
+  'Charitable Giving': 'Other Expenses',
 }
 
 /**

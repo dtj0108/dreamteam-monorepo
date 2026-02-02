@@ -84,7 +84,7 @@ export function ConnectedBanks({ onAccountsChange }: ConnectedBanksProps) {
       })
       const data = await res.json()
       if (data.success) {
-        const { added = 0, modified = 0, removed = 0 } = data
+        const { added = 0, modified = 0, removed = 0, categorized = 0 } = data
         const totalChanges = added + modified + removed
 
         if (totalChanges > 0) {
@@ -92,7 +92,11 @@ export function ConnectedBanks({ onAccountsChange }: ConnectedBanksProps) {
           if (added > 0) parts.push(`${added} added`)
           if (modified > 0) parts.push(`${modified} updated`)
           if (removed > 0) parts.push(`${removed} removed`)
-          toast.success(`Sync complete - ${parts.join(', ')}`)
+          let message = `Sync complete - ${parts.join(', ')}`
+          if (categorized > 0) {
+            message += ` (${categorized} auto-categorized)`
+          }
+          toast.success(message)
         } else {
           toast.info('Already up to date')
         }
