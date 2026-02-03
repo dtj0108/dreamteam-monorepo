@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -40,12 +41,33 @@ interface ScheduleExecution extends AgentScheduleExecution {
     name: string
     task_prompt: string
     cron_expression: string
+    timezone?: string | null
+    requires_approval?: boolean | null
+    created_by?: string | null
+    workspace_id?: string | null
+    workspace?: {
+      id: string
+      name: string
+      slug: string
+    } | null
+    created_by_profile?: {
+      id: string
+      email: string
+      name: string | null
+    } | null
   }
   agent?: {
     id: string
     name: string
     avatar_url: string | null
+    model?: string | null
+    provider?: string | null
   }
+  approved_by_user?: {
+    id: string
+    email: string
+    name: string | null
+  } | null
 }
 
 const statusFilters = [
@@ -81,6 +103,9 @@ export default function ScheduledTasksPage() {
   const [executions, setExecutions] = useState<ScheduleExecution[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('pending_approval')
+  const [workspaceFilter, setWorkspaceFilter] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [workspaces, setWorkspaces] = useState<Array<{ id: string; name: string; slug: string }>>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   // Reject dialog state
@@ -92,16 +117,38 @@ export default function ScheduledTasksPage() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [selectedExecution, setSelectedExecution] = useState<ScheduleExecution | null>(null)
 
+  useEffect(() => {
+    let active = true
+    async function fetchWorkspaces() {
+      const res = await fetch('/api/admin/workspaces?limit=100')
+      if (!res.ok) return
+      const data = await res.json()
+      if (active) {
+        setWorkspaces(data.workspaces || [])
+      }
+    }
+    fetchWorkspaces()
+    return () => {
+      active = false
+    }
+  }, [])
+
   const fetchExecutions = useCallback(async () => {
     setLoading(true)
     const params = new URLSearchParams()
     params.set('status', statusFilter)
+    if (workspaceFilter !== 'all') {
+      params.set('workspace_id', workspaceFilter)
+    }
+    if (searchQuery.trim()) {
+      params.set('q', searchQuery.trim())
+    }
 
     const res = await fetch(`/api/admin/scheduled-tasks?${params}`)
     const data = await res.json()
     setExecutions(data.executions || [])
     setLoading(false)
-  }, [statusFilter])
+  }, [statusFilter, workspaceFilter, searchQuery])
 
   useEffect(() => {
     fetchExecutions()
@@ -167,7 +214,7 @@ export default function ScheduledTasksPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Scheduled Tasks</h1>
           <p className="text-muted-foreground">
@@ -177,18 +224,39 @@ export default function ScheduledTasksPage() {
             )}
           </p>
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            {statusFilters.map((filter) => (
-              <SelectItem key={filter.value} value={filter.value}>
-                {filter.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Select value={workspaceFilter} onValueChange={setWorkspaceFilter}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="All workspaces" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All workspaces</SelectItem>
+              {workspaces.map((workspace) => (
+                <SelectItem key={workspace.id} value={workspace.id}>
+                  {workspace.name} ({workspace.slug})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              {statusFilters.map((filter) => (
+                <SelectItem key={filter.value} value={filter.value}>
+                  {filter.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search agent, schedule, error..."
+            className="w-[240px]"
+          />
+        </div>
       </div>
 
       <div className="rounded-md border">
@@ -196,6 +264,7 @@ export default function ScheduledTasksPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Agent</TableHead>
+              <TableHead>Workspace</TableHead>
               <TableHead>Schedule</TableHead>
               <TableHead>Scheduled For</TableHead>
               <TableHead>Status</TableHead>
@@ -208,6 +277,7 @@ export default function ScheduledTasksPage() {
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-10 w-40" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-8 w-32 ml-auto" /></TableCell>
@@ -215,7 +285,7 @@ export default function ScheduledTasksPage() {
               ))
             ) : executions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
                   <Calendar className="mx-auto h-12 w-12 mb-4 opacity-50" />
                   <p className="text-lg font-medium">No scheduled tasks</p>
                   <p className="text-sm">
@@ -255,9 +325,24 @@ export default function ScheduledTasksPage() {
                     </div>
                   </TableCell>
                   <TableCell>
+                    {execution.schedule?.workspace ? (
+                      <div>
+                        <p className="text-sm font-medium">{execution.schedule.workspace.name}</p>
+                        <p className="text-xs text-muted-foreground">{execution.schedule.workspace.slug}</p>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Unknown Workspace</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
                     <p className="text-sm line-clamp-2 max-w-xs">
                       {execution.schedule?.task_prompt || 'No task defined'}
                     </p>
+                    {execution.status === 'failed' && execution.error_message && (
+                      <p className="text-xs text-destructive line-clamp-1 max-w-xs mt-1">
+                        {execution.error_message}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {format(new Date(execution.scheduled_for), 'MMM d, yyyy HH:mm')}

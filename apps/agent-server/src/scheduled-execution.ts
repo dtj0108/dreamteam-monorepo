@@ -16,11 +16,112 @@ type CoreMessage = { role: "user" | "assistant" | "system"; content: string }
 import { z } from "zod"
 import { type MCPClientInstance } from "./lib/mcp-client.js"
 import { mcpClientPool } from "./lib/mcp-client-pool.js"
-import { getModel, getApiKeyEnvVar } from "./lib/ai-providers.js"
+import { getModel, getApiKeyEnvVar, inferProviderFromModel } from "./lib/ai-providers.js"
 import { createAdminClient } from "./lib/supabase.js"
 import { applyRulesToPrompt, type AgentRule } from "./lib/agent-rules.js"
 import { detectHallucination, formatHallucinationResult, type HallucinationCheckResult } from "./lib/hallucination-detection.js"
 import { formatTimeContext } from "./lib/time-context.js"
+import { sendAgentServerErrorEmail } from "./lib/error-email.js"
+
+type AuditContext = {
+  ipAddress?: string
+  userAgent?: string
+}
+
+function getRequestAuditContext(req: Request): AuditContext {
+  const forwardedFor = req.headers["x-forwarded-for"]
+  const realIp = req.headers["x-real-ip"]
+  const ipAddress = Array.isArray(forwardedFor)
+    ? forwardedFor[0]
+    : forwardedFor?.split(",")[0]?.trim() || (Array.isArray(realIp) ? realIp[0] : realIp)
+
+  const userAgentHeader = req.headers["user-agent"]
+  const userAgent = Array.isArray(userAgentHeader) ? userAgentHeader[0] : userAgentHeader
+
+  return {
+    ipAddress: ipAddress || undefined,
+    userAgent: userAgent || undefined,
+  }
+}
+
+async function logAuditEvent(
+  supabase: ReturnType<typeof createAdminClient>,
+  event: {
+    action: string
+    resourceType: string
+    resourceId: string
+    workspaceId?: string | null
+    userId?: string | null
+    details?: Record<string, unknown>
+    context?: AuditContext
+  }
+): Promise<void> {
+  try {
+    const { error } = await supabase.from("audit_logs").insert({
+      action: event.action,
+      resource_type: event.resourceType,
+      resource_id: event.resourceId,
+      workspace_id: event.workspaceId || null,
+      user_id: event.userId || null,
+      details: event.details || null,
+      ip_address: event.context?.ipAddress || null,
+      user_agent: event.context?.userAgent || null,
+    })
+
+    if (error) {
+      console.error("[AuditLog] Failed to log audit event:", error)
+    }
+  } catch (error) {
+    console.error("[AuditLog] Exception logging audit event:", error)
+  }
+}
+
+type ScheduleContext = {
+  scheduleId: string | null
+  scheduleName: string | null
+  scheduleTimezone: string
+  scheduleWorkspaceId: string | null
+}
+
+function unwrapSingle<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null
+  return Array.isArray(value) ? value[0] ?? null : value
+}
+
+async function loadScheduleContext(
+  supabase: ReturnType<typeof createAdminClient>,
+  executionId: string
+): Promise<ScheduleContext> {
+  try {
+    const { data: execution } = await supabase
+      .from("agent_schedule_executions")
+      .select("schedule_id, schedule:agent_schedules(id, name, timezone, workspace_id)")
+      .eq("id", executionId)
+      .single()
+
+    const schedule = unwrapSingle(execution?.schedule as {
+      id?: string
+      name?: string
+      timezone?: string
+      workspace_id?: string
+    } | null)
+
+    return {
+      scheduleId: execution?.schedule_id || null,
+      scheduleName: schedule?.name || null,
+      scheduleTimezone: schedule?.timezone || "UTC",
+      scheduleWorkspaceId: schedule?.workspace_id || null,
+    }
+  } catch (error) {
+    console.warn("[Scheduled Execution] Failed to load schedule context:", error)
+    return {
+      scheduleId: null,
+      scheduleName: null,
+      scheduleTimezone: "UTC",
+      scheduleWorkspaceId: null,
+    }
+  }
+}
 
 // Output config schema for controlling response style
 const outputConfigSchema = z.object({
@@ -242,6 +343,13 @@ YOU MUST FOLLOW THESE RULES EXACTLY. VIOLATIONS ARE SERIOUS FAILURES.
 export async function scheduledExecutionHandler(req: Request, res: Response) {
   const startTime = Date.now()
   console.log("[Scheduled Execution] ========== NEW REQUEST ==========")
+  const auditContext = getRequestAuditContext(req)
+  let scheduleContext: ScheduleContext = {
+    scheduleId: null,
+    scheduleName: null,
+    scheduleTimezone: "UTC",
+    scheduleWorkspaceId: null,
+  }
 
   try {
     // Verify cron secret
@@ -266,6 +374,7 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
     console.log(`[Scheduled Execution] profileId: ${profileId || 'NOT PROVIDED - MCP authorization may fail'}`)
 
     const supabase = createAdminClient()
+    scheduleContext = await loadScheduleContext(supabase, executionId)
 
     // Update execution to running
     await supabase
@@ -276,6 +385,22 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
       })
       .eq("id", executionId)
 
+    // Log execution start for audit trail
+    await logAuditEvent(supabase, {
+      action: "schedule_execution_started",
+      resourceType: "agent_schedule_execution",
+      resourceId: executionId,
+      workspaceId: scheduleContext.scheduleWorkspaceId || workspaceId || null,
+      details: {
+        schedule_id: scheduleContext.scheduleId,
+        schedule_name: scheduleContext.scheduleName,
+        agent_id: agentId,
+        actor_type: "cron",
+        simulated_time: simulatedTime || null,
+      },
+      context: auditContext,
+    })
+
     // Load agent configuration
     const { agent, error: agentError } = await loadAgentConfig(supabase, agentId)
     if (!agent) {
@@ -285,15 +410,7 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
     }
 
     // Get schedule timezone for time context
-    let scheduleTimezone = 'UTC';
-    if (executionId) {
-      const { data: execution } = await supabase
-        .from("agent_schedule_executions")
-        .select("schedule:schedule_id(timezone)")
-        .eq("id", executionId)
-        .single();
-      scheduleTimezone = (execution?.schedule as { timezone?: string } | null)?.timezone || 'UTC';
-    }
+    const scheduleTimezone = scheduleContext.scheduleTimezone
 
     // #region agent log - DEBUG scheduled execution provider
     console.log(`[Scheduled Execution] ====== AGENT DEBUG ======`)
@@ -307,8 +424,9 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
     // Build system prompt with rules and skills
     const systemPrompt = buildSystemPrompt(agent)
     const toolNames = getToolNames(agent)
-    const provider = agent.provider || "anthropic"
     const model = agent.model || "sonnet"
+    // ALWAYS infer provider from model name to ensure consistency
+    const provider = inferProviderFromModel(model)
 
     // #region agent log - DEBUG resolved provider
     console.log(`[Scheduled Execution] Resolved provider: "${provider}"`)
@@ -412,6 +530,25 @@ ${outputInstructions}`
       })
       .eq("id", executionId)
 
+    // Log execution completion for audit trail
+    await logAuditEvent(supabase, {
+      action: "schedule_execution_completed",
+      resourceType: "agent_schedule_execution",
+      resourceId: executionId,
+      workspaceId: scheduleContext.scheduleWorkspaceId || workspaceId || null,
+      details: {
+        schedule_id: scheduleContext.scheduleId,
+        schedule_name: scheduleContext.scheduleName,
+        agent_id: agentId,
+        duration_ms: duration,
+        tool_calls: result.toolCalls?.length || 0,
+        hallucination: wasHallucination,
+        hallucination_confidence: hallucinationConfidence,
+        actor_type: "cron",
+      },
+      context: auditContext,
+    })
+
     // Log additional warning for hallucination
     if (wasHallucination) {
       console.warn(`[Scheduled Execution] ⚠️ Execution ${executionId} completed but HALLUCINATION DETECTED (${hallucinationConfidence} confidence)`)
@@ -470,9 +607,69 @@ ${outputInstructions}`
           error instanceof Error ? error.message : "Unknown error",
           startTime
         )
+        let scheduleId: string | null = scheduleContext.scheduleId
+        let scheduleName: string | null = scheduleContext.scheduleName
+        try {
+          const { data: scheduleInfo } = await supabase
+            .from("agent_schedule_executions")
+            .select("schedule_id, schedule:agent_schedules(id, name)")
+            .eq("id", parsed.data.executionId)
+            .single()
+          scheduleId = scheduleInfo?.schedule_id || null
+          const schedule = Array.isArray(scheduleInfo?.schedule) ? scheduleInfo?.schedule[0] : scheduleInfo?.schedule
+          scheduleName = (schedule as { name?: string } | null)?.name || null
+        } catch (scheduleError) {
+          console.warn("[Scheduled Execution] Failed to load schedule context:", scheduleError)
+        }
+
+        const taskPrompt = parsed.data.taskPrompt || ""
+        await sendAgentServerErrorEmail({
+          source: "scheduled-execution",
+          statusCode: 500,
+          error,
+          request: req,
+          context: {
+            executionId: parsed.data.executionId,
+            scheduleId,
+            scheduleName,
+            agentId: parsed.data.agentId,
+            workspaceId: parsed.data.workspaceId,
+            taskPrompt: taskPrompt ? taskPrompt.slice(0, 800) : undefined,
+            durationMs: duration,
+          },
+        })
+        res.locals.errorReported = true
+
+        await logAuditEvent(supabase, {
+          action: "schedule_execution_failed",
+          resourceType: "agent_schedule_execution",
+          resourceId: parsed.data.executionId,
+          workspaceId: scheduleContext.scheduleWorkspaceId || parsed.data.workspaceId || null,
+          details: {
+            schedule_id: scheduleId,
+            schedule_name: scheduleName,
+            agent_id: parsed.data.agentId,
+            error: error instanceof Error ? error.message : "Unknown error",
+            actor_type: "cron",
+          },
+          context: auditContext,
+        })
       }
     } catch (updateError) {
       console.error("[Scheduled Execution] Failed to update execution status:", updateError)
+    }
+
+    if (!res.locals.errorReported) {
+      await sendAgentServerErrorEmail({
+        source: "scheduled-execution",
+        statusCode: 500,
+        error,
+        request: req,
+        context: {
+          durationMs: duration,
+        },
+      })
+      res.locals.errorReported = true
     }
 
     return res.status(500).json({

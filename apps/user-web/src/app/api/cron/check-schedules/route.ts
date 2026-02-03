@@ -23,6 +23,15 @@ export const maxDuration = 60
  * Test mode: Add ?test=true to force-run the first available schedule
  */
 export async function GET(request: NextRequest) {
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production'
+
+  if (isProduction) {
+    return NextResponse.json(
+      { error: "Cron scheduling is handled by the admin app in production." },
+      { status: 410 }
+    )
+  }
+
   // Rate limiting - use IP address as identifier
   const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0] || 
                    request.headers.get('x-real-ip') || 
@@ -44,8 +53,6 @@ export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
   const { searchParams } = new URL(request.url)
   const testMode = searchParams.get("test") === "true"
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production'
-
   // Block test mode in production (security fix)
   if (testMode && isProduction) {
     return NextResponse.json({ error: "Test mode not allowed in production" }, { status: 403 })

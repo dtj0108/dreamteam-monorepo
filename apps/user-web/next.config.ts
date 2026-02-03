@@ -15,10 +15,14 @@ const nextConfig: NextConfig = {
   // Rewrite agent-chat to agent-server before filesystem/middleware
   // Use AGENT_SERVER_URL env var, or default to Railway production URL
   async rewrites() {
-    const agentServerUrl = process.env.AGENT_SERVER_URL 
-      || "https://agent-server-production-580f.up.railway.app";
+    const isProduction = process.env.NODE_ENV === "production"
+    const defaultRailwayUrl = "https://agent-server-production-580f.up.railway.app"
+    const agentServerUrl = isProduction
+      ? defaultRailwayUrl
+      : (process.env.AGENT_SERVER_URL || defaultRailwayUrl)
+
     // #region agent log
-    console.log(`[DEBUG] agent-server rewrite target: ${agentServerUrl}`);
+    console.log(`[agent-server rewrite] env=${process.env.NODE_ENV || "unknown"} target=${agentServerUrl}`)
     // #endregion
     
     return {

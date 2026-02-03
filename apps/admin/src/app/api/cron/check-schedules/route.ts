@@ -5,8 +5,14 @@ import { getNextRunTime } from '@/lib/cron-utils'
 import { moveToDLQWithClassification } from '@/lib/schedule-dlq'
 import { logAuditEvent, audit } from '@/lib/audit-logger'
 
-// Agent server URL - Railway in production, localhost in development
-const AGENT_SERVER_URL = process.env.AGENT_SERVER_URL || 'http://localhost:3002'
+// Agent server URL - always Railway in production, env override in development
+const isProductionEnv =
+  process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production'
+const AGENT_SERVER_URL = isProductionEnv
+  ? 'https://agent-server-production-580f.up.railway.app'
+  : process.env.AGENT_SERVER_URL || 'http://localhost:3002'
+
+console.log(`[agent-server dispatch] env=${process.env.NODE_ENV || 'unknown'} target=${AGENT_SERVER_URL}`)
 
 /**
  * Determine if an error is retryable based on HTTP status or error message

@@ -15,7 +15,7 @@ import { streamText, stepCountIs } from "ai"
 type CoreMessage = { role: "user" | "assistant" | "system"; content: string }
 import { z } from "zod"
 import { createMCPClient, type MCPClientInstance } from "./lib/mcp-client.js"
-import { getModel } from "./lib/ai-providers.js"
+import { getModel, inferProviderFromModel } from "./lib/ai-providers.js"
 import {
   createAdminClient,
   authenticateRequest,
@@ -41,6 +41,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { DeployedTeamConfig } from "./types/team.js"
 import { loadDeployedTeamConfig, getHeadAgent } from "./lib/team-config.js"
 import { buildDelegationTool, type DelegationTool } from "./lib/delegation-tool.js"
+import { sendAgentServerErrorEmail } from "./lib/error-email.js"
 // Note: handleDelegation is available for future MCP integration
 // import { handleDelegation } from "./lib/delegation-handler.js"
 
@@ -669,9 +670,11 @@ IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond 
       // ========================================
       // All AI providers use Vercel AI SDK: Anthropic, OpenAI, xAI (Grok), Google (Gemini), Groq, Mistral, etc.
       // This path supports MCP tools via our MCP client adapter.
-      const provider = targetAgentForProvider?.provider || "anthropic"
       const model = targetAgentForProvider?.model || "sonnet"
-        console.log(`[Agent Chat] Using Vercel AI SDK with provider: ${provider}, model: ${model}`)
+      // ALWAYS infer provider from model name to ensure consistency
+      // This fixes cases where config has mismatched provider/model (e.g., provider: "anthropic" with model: "grok-4-fast")
+      const provider = inferProviderFromModel(model)
+      console.log(`[Agent Chat] Using Vercel AI SDK with provider: ${provider}, model: ${model}`)
         console.log(`[Agent Chat] xAI tools enabled: ${toolNames.length > 0 ? toolNames.join(', ') : 'none'}`)
 
         // Check API key for the provider
@@ -744,61 +747,98 @@ IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond 
             messages: aiMessages,
             tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
             stopWhen: stepCountIs(5), // AI SDK 6: stop after 5 steps (allows tool call rounds)
-            onStepFinish: async (step) => {
-              // Send tool events for each step
-              if (step.toolCalls && step.toolCalls.length > 0) {
-                for (const toolCall of step.toolCalls) {
-                  // AI SDK 6: use type assertion for tool call args
-                  const tc = toolCall as { toolName: string; toolCallId: string; input?: unknown }
-                  sendEvent("tool_start", {
-                    type: "tool_start",
-                    toolName: tc.toolName,
-                    toolCallId: tc.toolCallId,
-                    args: tc.input,
-                    displayName: tc.toolName
-                      .replace(/([A-Z])/g, " $1")
-                      .trim(),
-                  } as ToolStartMessage)
-                }
-              }
-              if (step.toolResults && step.toolResults.length > 0) {
-                for (const tr of step.toolResults) {
-                  // AI SDK 6: use type assertion for tool results
-                  const toolResult = tr as { toolCallId: string; toolName: string; output?: unknown }
-                  sendEvent("tool_result", {
-                    type: "tool_result",
-                    toolCallId: toolResult.toolCallId,
-                    toolName: toolResult.toolName,
-                    result: toolResult.output,
-                    success: true,
-                    durationMs: 0,
-                  } as ToolResultMessage)
-                }
-              }
-            },
           })
 
           let assistantContent = ""
           let totalInputTokens = 0
           let totalOutputTokens = 0
+          let hadStreamError = false
 
           // Stream the response
           console.log(`[Agent Chat] Starting to stream response from ${provider}/${model}`);
-          try {
-            for await (const textPart of result.textStream) {
-              assistantContent += textPart
-              sendEvent("text", {
-                type: "text",
-                content: textPart,
-                isComplete: false,
-              } as TextMessage)
+          for await (const chunk of result.fullStream) {
+            switch (chunk.type) {
+              case "text-delta": {
+                const textDelta = (chunk as { text?: string }).text || ""
+                if (textDelta) {
+                  assistantContent += textDelta
+                  sendEvent("text", {
+                    type: "text",
+                    content: textDelta,
+                    isComplete: false,
+                  } as TextMessage)
+                }
+                break
+              }
+              case "tool-call": {
+                const toolCall = chunk as {
+                  toolCallId: string
+                  toolName: string
+                  input?: unknown
+                }
+                sendEvent("tool_start", {
+                  type: "tool_start",
+                  toolName: toolCall.toolName,
+                  toolCallId: toolCall.toolCallId,
+                  args: toolCall.input,
+                  displayName: toolCall.toolName
+                    .replace(/([A-Z])/g, " $1")
+                    .trim(),
+                } as ToolStartMessage)
+                break
+              }
+              case "tool-result": {
+                const toolResult = chunk as {
+                  toolCallId: string
+                  toolName: string
+                  output?: unknown
+                }
+                sendEvent("tool_result", {
+                  type: "tool_result",
+                  toolCallId: toolResult.toolCallId,
+                  toolName: toolResult.toolName,
+                  result: toolResult.output,
+                  success: true,
+                  durationMs: 0,
+                } as ToolResultMessage)
+                break
+              }
+              case "error": {
+                const errorChunk = chunk as { error?: unknown }
+                const message =
+                  errorChunk.error instanceof Error
+                    ? errorChunk.error.message
+                    : "Stream error"
+                console.error(`[Agent Chat] Stream error from ${provider}:`, errorChunk.error)
+                sendEvent("error", {
+                  type: "error",
+                  message,
+                  recoverable: false,
+                } as ErrorMessage)
+                hadStreamError = true
+                break
+              }
+              default:
+                break
             }
-          } catch (streamError) {
-            console.error(`[Agent Chat] Stream error from ${provider}:`, streamError);
-            throw streamError;
           }
           const steps = await result.steps;
           console.log(`[Agent Chat] Stream completed, got ${assistantContent.length} chars, ${steps.length} steps`);
+
+          if (!assistantContent.trim() && !hadStreamError) {
+            const fallback =
+              "I'm having trouble generating a response right now. Please try again."
+            assistantContent = fallback
+            sendEvent("text", {
+              type: "text",
+              content: fallback,
+              isComplete: false,
+            } as TextMessage)
+          }
+
+          if (hadStreamError) {
+            return
+          }
 
           // Get final usage stats (AI SDK 6 uses inputTokens/outputTokens)
           const usage = await result.usage
@@ -874,6 +914,27 @@ IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond 
     }
   } catch (error) {
     console.error("[Agent Chat] Error:", error)
+    try {
+      const parsed = requestSchema.safeParse(req.body)
+      const context = parsed.success
+        ? {
+            workspaceId: parsed.data.workspaceId,
+            agentId: parsed.data.agentId,
+            conversationId: parsed.data.conversationId,
+            message: parsed.data.message ? parsed.data.message.slice(0, 500) : undefined,
+          }
+        : undefined
+      await sendAgentServerErrorEmail({
+        source: "agent-chat",
+        statusCode: 500,
+        error,
+        request: req,
+        context,
+      })
+      res.locals.errorReported = true
+    } catch (notifyError) {
+      console.error("[Agent Chat] Failed to send error email:", notifyError)
+    }
     // If headers haven't been sent yet, send JSON error
     if (!res.headersSent) {
       return res.status(500).json({

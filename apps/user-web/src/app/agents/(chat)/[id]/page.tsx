@@ -108,9 +108,7 @@ export default function AgentChatPage() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [loadedMessages, setLoadedMessages] = useState<AgentMessage[]>([])
   const [lastUserMessage, setLastUserMessage] = useState<string | null>(null)
-  const [syntheticStage, setSyntheticStage] = useState(0)
   const lastSavedMessageCount = useRef(0)
-  const syntheticTimersRef = useRef<NodeJS.Timeout[]>([])
 
   // Loading states
   const [isLoadingActivity, setIsLoadingActivity] = useState(false)
@@ -226,33 +224,6 @@ export default function AgentChatPage() {
     }
     loadAnimation()
   }, [])
-
-  // Progress synthetic reasoning stages during streaming
-  useEffect(() => {
-    // Clear any existing timers
-    syntheticTimersRef.current.forEach(clearTimeout)
-    syntheticTimersRef.current = []
-
-    if (status === "streaming" || status === "connecting") {
-      // Start synthetic stages
-      setSyntheticStage(0)
-      const delays = [0, 800, 1800, 3000]
-      delays.forEach((delay, i) => {
-        if (i > 0) {
-          const timer = setTimeout(() => setSyntheticStage(i), delay)
-          syntheticTimersRef.current.push(timer)
-        }
-      })
-    } else {
-      // Reset on idle
-      setSyntheticStage(0)
-    }
-
-    return () => {
-      syntheticTimersRef.current.forEach(clearTimeout)
-      syntheticTimersRef.current = []
-    }
-  }, [status])
 
   const fetchConversations = useCallback(async () => {
     if (!workspaceId) return
@@ -498,7 +469,6 @@ export default function AgentChatPage() {
                 <SyntheticThinkingRenderer 
                   status={status}
                   messages={messages}
-                  stage={syntheticStage}
                 />
 
                 {/* Error state with retry */}

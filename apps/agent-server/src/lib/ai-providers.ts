@@ -154,3 +154,39 @@ export function shouldUseVercelAI(provider: string | undefined): boolean {
   // Always use Vercel AI SDK for all providers (including Anthropic)
   return true
 }
+
+/**
+ * Infer the provider from a model name
+ * Used when provider is not explicitly set in the config
+ */
+export function inferProviderFromModel(model: string): string {
+  const modelLower = model.toLowerCase()
+  
+  // xAI Grok models
+  if (modelLower.includes("grok")) {
+    return "xai"
+  }
+  
+  // OpenAI models
+  if (modelLower.includes("gpt") || modelLower.startsWith("o1") || modelLower.includes("chatgpt")) {
+    return "openai"
+  }
+  
+  // Google Gemini models
+  if (modelLower.includes("gemini")) {
+    return "google"
+  }
+  
+  // Anthropic Claude models (also check aliases)
+  if (modelLower.includes("claude") || modelLower === "sonnet" || modelLower === "opus" || modelLower === "haiku") {
+    return "anthropic"
+  }
+  
+  // Groq models
+  if (modelLower.includes("llama") || modelLower.includes("mixtral")) {
+    return "groq"
+  }
+  
+  // Default to anthropic if we can't infer
+  return "anthropic"
+}
