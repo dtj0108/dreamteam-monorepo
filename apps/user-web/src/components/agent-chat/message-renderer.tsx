@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import {
   Message,
   MessageContent,
@@ -209,49 +209,62 @@ export function MessageRenderer({
 interface SyntheticThinkingRendererProps {
   messages: AgentMessage[]
   status: ChatStatus
-  stage: number
 }
 
 export function SyntheticThinkingRenderer({
   messages,
   status,
-  stage,
 }: SyntheticThinkingRendererProps) {
-  // Check if we should show synthetic thinking
-  const shouldShowSynthetic = (() => {
+  const [isVisible, setIsVisible] = useState(false)
+  const delayRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const shouldShowSynthetic = useMemo(() => {
     if (status !== "connecting" && status !== "streaming") return false
     if (messages.length === 0) return false
 
-    // Find the last assistant message
     const lastAssistantMessage = [...messages]
       .reverse()
       .find((m) => m.role === "assistant")
     if (!lastAssistantMessage) {
-      console.log("[SyntheticThinkingRenderer] No assistant message yet, showing synthetic")
-      return true // No assistant message yet, show synthetic
+      return true
     }
 
-    // Check if there's any visible content (parts OR content string)
     const hasParts =
       lastAssistantMessage.parts && lastAssistantMessage.parts.length > 0
     const hasContent =
       lastAssistantMessage.content && lastAssistantMessage.content.length > 0
-    
-    console.log("[SyntheticThinkingRenderer] Last assistant message:", {
-      hasParts,
-      hasContent,
-      contentLength: lastAssistantMessage.content?.length,
-      partsCount: lastAssistantMessage.parts?.length,
-    })
-    
-    return !(hasParts || hasContent) // Show synthetic only if no content
-  })()
 
-  if (!shouldShowSynthetic) {
+    return !(hasParts || hasContent)
+  }, [messages, status])
+
+  useEffect(() => {
+    if (!shouldShowSynthetic) {
+      if (delayRef.current) {
+        clearTimeout(delayRef.current)
+        delayRef.current = null
+      }
+      setIsVisible(false)
+      return
+    }
+
+    if (delayRef.current) return
+    delayRef.current = setTimeout(() => {
+      setIsVisible(true)
+    }, 300)
+
+    return () => {
+      if (delayRef.current) {
+        clearTimeout(delayRef.current)
+        delayRef.current = null
+      }
+    }
+  }, [shouldShowSynthetic])
+
+  if (!shouldShowSynthetic || !isVisible) {
     return null
   }
 
-  return <SyntheticThinking status={status as "streaming" | "connecting" | "idle"} stage={stage} />
+  return <SyntheticThinking status={status as "streaming" | "connecting" | "idle"} />
 }
 
 export {

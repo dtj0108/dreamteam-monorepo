@@ -30,7 +30,7 @@ import {
 import { getAgentProfile } from "./agent-profile.js"
 import { waitForAgentResponse } from "./channel-subscription.js"
 import { createMCPClient, type MCPClientInstance } from "./mcp-client.js"
-import { getModel, getApiKeyEnvVar } from "./ai-providers.js"
+import { getModel, getApiKeyEnvVar, inferProviderFromModel } from "./ai-providers.js"
 
 /**
  * Result of a delegation execution
@@ -237,7 +237,9 @@ export async function handleDelegation(
 
   // Get tool names for this agent
   const toolNames = targetAgent.tools?.map((t) => t.name) || []
-  const provider = targetAgent.provider || "anthropic"
+  const model = targetAgent.model || "sonnet"
+  // ALWAYS infer provider from model name to ensure consistency
+  const provider = inferProviderFromModel(model)
 
   // Check API key
   const apiKeyEnvVar = getApiKeyEnvVar(provider)

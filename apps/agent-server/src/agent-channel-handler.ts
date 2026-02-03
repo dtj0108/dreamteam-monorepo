@@ -22,8 +22,9 @@ import { getAgentProfile } from "./lib/agent-profile.js"
 import { applyRulesToPrompt, type AgentRule } from "./lib/agent-rules.js"
 import { formatTimeContext } from "./lib/time-context.js"
 import { createMCPClient, type MCPClientInstance } from "./lib/mcp-client.js"
-import { getModel, getApiKeyEnvVar } from "./lib/ai-providers.js"
+import { getModel, getApiKeyEnvVar, inferProviderFromModel } from "./lib/ai-providers.js"
 import type { DeployedAgent, DeployedMind } from "./types/team.js"
+import { sendAgentServerErrorEmail } from "./lib/error-email.js"
 
 /**
  * Webhook payload from Supabase
@@ -130,7 +131,9 @@ async function runSpecialistQuery(
 ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
   const systemPrompt = buildSpecialistPrompt(agent, teamMind, workspaceId, timezone)
   const toolNames = agent.tools?.map((t) => t.name) || []
-  const provider = agent.provider || "anthropic"
+  const model = agent.model || "sonnet"
+  // ALWAYS infer provider from model name to ensure consistency
+  const provider = inferProviderFromModel(model)
 
   // Check API key
   const apiKeyEnvVar = getApiKeyEnvVar(provider)
@@ -322,6 +325,25 @@ export async function agentChannelMessageHandler(
     })
   } catch (error) {
     console.error("[Agent Channel Handler] Error:", error)
+    try {
+      const body = req.body as Partial<WebhookPayload> | undefined
+      const record = body?.record
+      await sendAgentServerErrorEmail({
+        source: "agent-channel-message",
+        statusCode: 500,
+        error,
+        request: req,
+        context: {
+          messageId: record?.id,
+          channelId: record?.channel_id,
+          profileId: record?.profile_id,
+          agentRequestId: record?.agent_request_id,
+        },
+      })
+      res.locals.errorReported = true
+    } catch (notifyError) {
+      console.error("[Agent Channel Handler] Failed to send error email:", notifyError)
+    }
     res.status(500).json({
       error: error instanceof Error ? error.message : "Internal server error",
     })

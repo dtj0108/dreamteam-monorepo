@@ -15,6 +15,7 @@ import { agentChatHandler } from "./agent-chat.js"
 import { agentChannelMessageHandler } from "./agent-channel-handler.js"
 import { scheduledExecutionHandler } from "./scheduled-execution.js"
 import { testTool, type ToolTestRequest } from "./tools-test.js"
+import { sendAgentServerErrorEmail } from "./lib/error-email.js"
 
 const app = express()
 
@@ -70,6 +71,21 @@ app.post("/tools/test", async (req, res) => {
     res.json(result)
   } catch (err) {
     console.error("[Tools Test] Error:", err)
+    try {
+      await sendAgentServerErrorEmail({
+        source: "tools-test",
+        statusCode: 500,
+        error: err,
+        request: req,
+        context: {
+          toolName: (req.body as ToolTestRequest | undefined)?.toolName,
+          workspaceId: (req.body as ToolTestRequest | undefined)?.workspaceId,
+        },
+      })
+      res.locals.errorReported = true
+    } catch (notifyError) {
+      console.error("[Tools Test] Failed to send error email:", notifyError)
+    }
     res.status(500).json({ error: "Test execution failed" })
   }
 })
@@ -100,6 +116,17 @@ app.use(
     _next: express.NextFunction
   ) => {
     console.error("[Server] Unhandled error:", err)
+    if (!res.locals.errorReported) {
+      sendAgentServerErrorEmail({
+        source: "unhandled-error",
+        statusCode: 500,
+        error: err,
+        request: _req,
+      }).catch((notifyError) => {
+        console.error("[Server] Failed to send error email:", notifyError)
+      })
+      res.locals.errorReported = true
+    }
     res.status(500).json({
       error: "Internal server error",
       message: err.message,

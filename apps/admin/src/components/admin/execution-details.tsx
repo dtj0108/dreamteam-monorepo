@@ -31,12 +31,33 @@ interface ExecutionDetailsProps {
       name: string
       task_prompt: string
       cron_expression: string
+      timezone?: string | null
+      requires_approval?: boolean | null
+      created_by?: string | null
+      workspace_id?: string | null
+      workspace?: {
+        id: string
+        name: string
+        slug: string
+      } | null
+      created_by_profile?: {
+        id: string
+        email: string
+        name: string | null
+      } | null
     }
     agent?: {
       id: string
       name: string
       avatar_url: string | null
+      model?: string | null
+      provider?: string | null
     }
+    approved_by_user?: {
+      id: string
+      email: string
+      name: string | null
+    } | null
   }
   rawApiResponse?: Record<string, unknown>
 }
@@ -139,6 +160,83 @@ export function ExecutionDetails({ execution, rawApiResponse }: ExecutionDetails
             <p>{format(new Date(execution.completed_at), 'MMM d, yyyy HH:mm:ss')}</p>
           </div>
         )}
+      </div>
+
+      {/* Context */}
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Context</Label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Workspace</Label>
+            <p className="font-medium">
+              {execution.schedule?.workspace?.name || 'Unknown Workspace'}
+            </p>
+            <p className="text-xs text-muted-foreground font-mono">
+              {execution.schedule?.workspace?.slug || execution.schedule?.workspace_id || '-'}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Agent</Label>
+            <p className="font-medium">{execution.agent?.name || 'Unknown Agent'}</p>
+            <p className="text-xs text-muted-foreground font-mono">
+              {execution.agent?.id || execution.agent_id}
+            </p>
+            {(execution.agent?.provider || execution.agent?.model) && (
+              <p className="text-xs text-muted-foreground">
+                {execution.agent?.provider || 'Unknown provider'}
+                {execution.agent?.model ? ` • ${execution.agent.model}` : ''}
+              </p>
+            )}
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Schedule</Label>
+            <p className="font-medium">{execution.schedule?.name || 'Unknown Schedule'}</p>
+            <p className="text-xs text-muted-foreground font-mono">
+              {execution.schedule?.id || execution.schedule_id}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {execution.schedule?.cron_expression || 'No cron expression'}
+              {execution.schedule?.timezone ? ` • ${execution.schedule.timezone}` : ''}
+            </p>
+            {execution.schedule?.requires_approval !== undefined && (
+              <p className="text-xs text-muted-foreground">
+                Requires approval: {execution.schedule?.requires_approval ? 'Yes' : 'No'}
+              </p>
+            )}
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">People</Label>
+            <p className="text-sm">
+              Created by:{' '}
+              <span className="font-medium">
+                {execution.schedule?.created_by_profile?.name || 'Unknown'}
+              </span>
+              {execution.schedule?.created_by_profile?.email ? (
+                <span className="text-xs text-muted-foreground">
+                  {' '}
+                  ({execution.schedule.created_by_profile.email})
+                </span>
+              ) : null}
+            </p>
+            <p className="text-sm">
+              Approved by:{' '}
+              <span className="font-medium">
+                {execution.approved_by_user?.name || (execution.approved_by ? 'Unknown' : 'N/A')}
+              </span>
+              {execution.approved_by_user?.email ? (
+                <span className="text-xs text-muted-foreground">
+                  {' '}
+                  ({execution.approved_by_user.email})
+                </span>
+              ) : null}
+            </p>
+            {execution.approved_at && (
+              <p className="text-xs text-muted-foreground">
+                Approved at: {format(new Date(execution.approved_at), 'MMM d, yyyy HH:mm:ss')}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Task Prompt */}

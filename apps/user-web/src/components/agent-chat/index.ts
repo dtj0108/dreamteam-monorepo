@@ -1,7 +1,6 @@
 export { UserMessage } from "./user-message"
 export { AssistantMessage } from "./assistant-message"
-export { SyntheticThinking, SYNTHETIC_STAGES } from "./synthetic-thinking"
-export type { SyntheticStage } from "./synthetic-thinking"
+export { SyntheticThinking } from "./synthetic-thinking"
 export {
   MessageRenderer,
   SyntheticThinkingRenderer,

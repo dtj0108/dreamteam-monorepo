@@ -12,6 +12,8 @@ interface AuditLogOptions {
   ipAddress?: string
   userAgent?: string
   requestId?: string
+  details?: Record<string, unknown>
+  // Backwards-compat: allow metadata to be passed and merge into details.
   metadata?: Record<string, unknown>
 }
 
@@ -21,20 +23,25 @@ interface AuditLogOptions {
 export async function logAuditEvent(options: AuditLogOptions): Promise<void> {
   try {
     const supabase = createAdminClient()
-    
+
+    const details = {
+      ...(options.details || {}),
+      ...(options.metadata || {}),
+      actor_type: options.actorType,
+      actor_id: options.actorId || null,
+      agent_id: options.agentId || null,
+      request_id: options.requestId || null,
+    }
+
     const { error } = await supabase.from('audit_logs').insert({
       action: options.action,
       resource_type: options.resourceType,
       resource_id: options.resourceId,
       workspace_id: options.workspaceId,
-      agent_id: options.agentId,
-      actor_type: options.actorType,
-      actor_id: options.actorId,
-      ip_address: options.ipAddress,
-      user_agent: options.userAgent,
-      request_id: options.requestId,
-      metadata: options.metadata || {},
-      created_at: new Date().toISOString(),
+      user_id: options.actorId || null,
+      details,
+      ip_address: options.ipAddress || null,
+      user_agent: options.userAgent || null,
     })
 
     if (error) {
