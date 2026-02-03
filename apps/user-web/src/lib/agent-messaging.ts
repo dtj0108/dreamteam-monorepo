@@ -37,7 +37,9 @@ export async function getWorkspaceOwnerId(
 }
 
 interface SendAgentMessageParams {
-  agentId: string           // agents.id (local agent ID)
+  agentId?: string           // agents.id (legacy local agent ID)
+  agentProfileId?: string    // profiles.id (preferred when available)
+  aiAgentId?: string         // ai_agents.id (deployment path)
   recipientProfileId: string // User's profile_id
   workspaceId: string
   content: string
@@ -59,55 +61,115 @@ interface SendAgentMessageResult {
 export async function sendAgentMessage(
   params: SendAgentMessageParams
 ): Promise<SendAgentMessageResult> {
-  const { agentId, recipientProfileId, workspaceId, content, supabase } = params
+  const {
+    agentId,
+    agentProfileId,
+    aiAgentId,
+    recipientProfileId,
+    workspaceId,
+    content,
+    supabase
+  } = params
 
   console.log(`[AgentMessaging] ========== START sendAgentMessage ==========`)
-  console.log(`[AgentMessaging] agentId: ${agentId}`)
+  console.log(`[AgentMessaging] agentId: ${agentId || "none"}`)
+  console.log(`[AgentMessaging] agentProfileId: ${agentProfileId || "none"}`)
+  console.log(`[AgentMessaging] aiAgentId: ${aiAgentId || "none"}`)
   console.log(`[AgentMessaging] recipientProfileId: ${recipientProfileId}`)
   console.log(`[AgentMessaging] workspaceId: ${workspaceId}`)
   console.log(`[AgentMessaging] content length: ${content.length} chars`)
 
   try {
-    // 1. Get the agent's profile_id
-    console.log(`[AgentMessaging] Step 1: Fetching agent...`)
-    const { data: agent, error: agentError } = await supabase
-      .from("agents")
-      .select("id, profile_id, name")
-      .eq("id", agentId)
-      .single()
+    // 1. Resolve the agent's profile_id (preferred: explicit profile -> legacy agents -> profiles)
+    console.log(`[AgentMessaging] Step 1: Resolving agent profile...`)
+    let resolvedProfileId: string | null | undefined = agentProfileId
+    let agentName = "Agent"
 
-    if (agentError || !agent) {
-      console.error("[AgentMessaging] Step 1 FAILED - Agent not found:", agentError)
+    if (resolvedProfileId) {
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, name, is_agent")
+        .eq("id", resolvedProfileId)
+        .single()
+
+      if (profileError || !profile) {
+        console.error("[AgentMessaging] Step 1 FAILED - Agent profile not found:", profileError)
+        return {
+          success: false,
+          error: `Agent profile not found: ${profileError?.message || "Unknown error"}`,
+        }
+      }
+
+      if (!profile.is_agent) {
+        console.error("[AgentMessaging] Step 1 FAILED - Profile is not an agent:", resolvedProfileId)
+        return {
+          success: false,
+          error: "Agent profile is invalid (not marked as agent).",
+        }
+      }
+
+      agentName = profile.name || agentName
+    } else if (agentId) {
+      const { data: agent, error: agentError } = await supabase
+        .from("agents")
+        .select("id, profile_id, name")
+        .eq("id", agentId)
+        .single()
+
+      if (agentError || !agent) {
+        console.error("[AgentMessaging] Step 1 FAILED - Agent not found:", agentError)
+        return {
+          success: false,
+          error: `Agent not found: ${agentError?.message || "Unknown error"}`,
+        }
+      }
+
+      console.log(`[AgentMessaging] Step 1 OK - Agent found: ${agent.name}, profile_id: ${agent.profile_id}`)
+
+      if (!agent.profile_id) {
+        console.error("[AgentMessaging] Step 1 FAILED - Agent has no profile_id:", agentId)
+        return {
+          success: false,
+          error: "Agent has no associated profile. Please ensure the migration has been run.",
+        }
+      }
+
+      resolvedProfileId = agent.profile_id
+      agentName = agent.name || agentName
+    } else if (aiAgentId) {
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, name, is_agent")
+        .eq("linked_agent_id", aiAgentId)
+        .eq("agent_workspace_id", workspaceId)
+        .eq("is_agent", true)
+        .limit(1)
+        .maybeSingle()
+
+      if (profileError || !profile) {
+        console.error("[AgentMessaging] Step 1 FAILED - Agent profile not found for aiAgentId:", profileError)
+        return {
+          success: false,
+          error: `Agent profile not found: ${profileError?.message || "Unknown error"}`,
+        }
+      }
+
+      resolvedProfileId = profile.id
+      agentName = profile.name || agentName
+    } else {
       return {
         success: false,
-        error: `Agent not found: ${agentError?.message || "Unknown error"}`,
+        error: "Agent resolution failed: provide agentId, agentProfileId, or aiAgentId.",
       }
     }
 
-    console.log(`[AgentMessaging] Step 1 OK - Agent found: ${agent.name}, profile_id: ${agent.profile_id}`)
-
-    if (!agent.profile_id) {
-      console.error("[AgentMessaging] Step 1 FAILED - Agent has no profile_id:", agentId)
+    const resolvedProfileIdFinal = resolvedProfileId
+    if (!resolvedProfileIdFinal) {
       return {
         success: false,
-        error: "Agent has no associated profile. Please ensure the migration has been run.",
+        error: "Agent profile could not be resolved.",
       }
     }
-
-    const agentProfileId = agent.profile_id
-
-    // Verify the agent profile exists and is_agent=true
-    const { data: agentProfile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, name, is_agent")
-      .eq("id", agentProfileId)
-      .single()
-
-    console.log(`[AgentMessaging] Agent profile check:`, {
-      found: !!agentProfile,
-      is_agent: agentProfile?.is_agent,
-      error: profileError?.message,
-    })
 
     // 2. Find existing DM conversation between agent and user
     console.log(`[AgentMessaging] Step 2: Looking for existing conversation...`)
@@ -120,7 +182,7 @@ export async function sendAgentMessage(
         conversation_id,
         dm_conversation:conversation_id(id, workspace_id)
       `)
-      .eq("profile_id", agentProfileId)
+      .eq("profile_id", resolvedProfileIdFinal)
 
     console.log(`[AgentMessaging] Agent's conversations: ${agentConvos?.length || 0}, error: ${convosError?.message || 'none'}`)
 
@@ -173,13 +235,13 @@ export async function sendAgentMessage(
 
       // Add both participants
       console.log(`[AgentMessaging] Step 3b: Adding participants...`)
-      console.log(`[AgentMessaging]   - Agent profile: ${agentProfileId}`)
+      console.log(`[AgentMessaging]   - Agent profile: ${resolvedProfileIdFinal}`)
       console.log(`[AgentMessaging]   - Recipient profile: ${recipientProfileId}`)
 
       const { error: participantsError } = await supabase
         .from("dm_participants")
         .insert([
-          { conversation_id: conversationId, profile_id: agentProfileId },
+          { conversation_id: conversationId, profile_id: resolvedProfileIdFinal },
           { conversation_id: conversationId, profile_id: recipientProfileId },
         ])
 
@@ -204,14 +266,14 @@ export async function sendAgentMessage(
     console.log(`[AgentMessaging] Step 4: Inserting message...`)
     console.log(`[AgentMessaging]   - workspace_id: ${workspaceId}`)
     console.log(`[AgentMessaging]   - dm_conversation_id: ${conversationId}`)
-    console.log(`[AgentMessaging]   - sender_id (agent profile): ${agentProfileId}`)
+    console.log(`[AgentMessaging]   - sender_id (agent profile): ${resolvedProfileIdFinal}`)
 
     const { data: message, error: messageError } = await supabase
       .from("messages")
       .insert({
         workspace_id: workspaceId,
         dm_conversation_id: conversationId,
-        sender_id: agentProfileId,
+        sender_id: resolvedProfileIdFinal,
         content,
       })
       .select("id")
@@ -232,7 +294,7 @@ export async function sendAgentMessage(
 
     console.log(`[AgentMessaging] Step 4 OK - Message inserted: ${message.id}`)
     console.log(
-      `[AgentMessaging] ========== SUCCESS - Sent message from agent ${agent.name} (${agentId}) to user ${recipientProfileId} ==========`
+      `[AgentMessaging] ========== SUCCESS - Sent message from agent ${agentName} (${agentId || aiAgentId || "profile-only"}) to user ${recipientProfileId} ==========`
     )
 
     return {

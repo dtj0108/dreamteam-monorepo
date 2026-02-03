@@ -108,8 +108,8 @@ export async function POST(request: NextRequest) {
       ],
       // Collect customer email during checkout
       customer_email: undefined, // Let Stripe collect it
-      // Redirect to signup page after successful payment
-      success_url: `${appUrl}/signup?session_id={CHECKOUT_SESSION_ID}&${successParam}`,
+      // Redirect to complete signup page after successful payment
+      success_url: `${appUrl}/signup/complete?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/pricing?canceled=true`,
       // Store metadata for later linking
       metadata: {

@@ -301,7 +301,7 @@ export async function PUT(request: Request) {
     const profileId = user.id
 
     const body = await request.json()
-    const { onboardingCompleted, primaryFocus, industryType, decisionStyle, teamSize, companyName, goal } = body
+    const { onboardingCompleted, timezone, primaryFocus, industryType, decisionStyle, teamSize, companyName, goal } = body
 
     const adminSupabase = createAdminClient()
 
@@ -366,6 +366,33 @@ export async function PUT(request: Request) {
     if (error) {
       console.error('Onboarding wizard update error:', error)
       return NextResponse.json({ error: 'Failed to save onboarding data' }, { status: 500 })
+    }
+
+    // Update workspace timezone if provided
+    if (timezone) {
+      // Get user's default workspace
+      const { data: profile } = await adminSupabase
+        .from('profiles')
+        .select('default_workspace_id')
+        .eq('id', profileId)
+        .single()
+
+      if (profile?.default_workspace_id) {
+        // Verify user is owner of the workspace
+        const { data: workspace } = await adminSupabase
+          .from('workspaces')
+          .select('owner_id')
+          .eq('id', profile.default_workspace_id)
+          .single()
+
+        if (workspace?.owner_id === profileId) {
+          // User is owner, update workspace timezone
+          await adminSupabase
+            .from('workspaces')
+            .update({ timezone })
+            .eq('id', profile.default_workspace_id)
+        }
+      }
     }
 
     return NextResponse.json({ success: true })

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSuperadmin, logAdminAction } from '@/lib/admin-auth'
-import { deployTeamToWorkspaces } from '@/lib/deployment'
+import { deployTeamWithAgentResources } from '@/lib/deployment'
 import { autoDeployTeamToAllPlanWorkspaces } from '@/lib/auto-deploy'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -76,7 +76,34 @@ export async function POST(request: NextRequest, context: RouteContext) {
       )
     }
 
-    result = await deployTeamToWorkspaces(teamId, workspace_ids, user!.id)
+    const { data: workspaces, error: workspacesError } = await supabase
+      .from('workspaces')
+      .select('id, owner_id')
+      .in('id', workspace_ids)
+
+    if (workspacesError) {
+      console.error('Failed to fetch workspace owners:', workspacesError)
+    }
+
+    const channelCreatorByWorkspaceId = new Map<string, string>()
+    for (const workspace of workspaces || []) {
+      const record = workspace as { id: string; owner_id: string | null }
+      if (record.owner_id) {
+        channelCreatorByWorkspaceId.set(record.id, record.owner_id)
+      }
+    }
+
+    const deployResult = await deployTeamWithAgentResources(
+      teamId,
+      workspace_ids,
+      user!.id,
+      channelCreatorByWorkspaceId
+    )
+
+    result = {
+      success: deployResult.deployments.map(d => d.workspace_id),
+      failed: deployResult.failed,
+    }
 
     await logAdminAction(
       user!.id,

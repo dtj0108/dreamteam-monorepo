@@ -5,6 +5,8 @@ import { executeAgentTask } from "./agent-executor"
 import { sendAgentMessage, formatTaskCompletionMessage, getWorkspaceAdminIds, getWorkspaceOwnerId } from "./agent-messaging"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { logAuditEvent } from "./audit-logger"
+import { mapToolNamesToCategories } from "./agent-tool-mapping"
+import { resolveWorkspaceAgent } from "./workspace-agent"
 
 interface ScheduleRow {
   id: string
@@ -16,6 +18,7 @@ interface ScheduleRow {
   requires_approval: boolean
   is_enabled: boolean
   next_run_at: string | null
+  workspace_id: string | null
   created_by: string | null
   output_config: OutputConfig | null
   ai_agent: {
@@ -36,6 +39,7 @@ interface LocalAgentRow {
   reports_to: string[] | null
   style_presets: Record<string, unknown> | null
   custom_instructions: string | null
+  profile_id?: string | null
 }
 
 interface ExecutionRow {
@@ -49,6 +53,21 @@ interface ExecutionRow {
       model: string | null
     } | null
   }
+}
+
+interface ResolvedAgentContext {
+  source: "deployment" | "legacy"
+  ai_agent_id: string
+  workspace_id: string
+  tools: string[]
+  system_prompt: string | null
+  provider?: string | null
+  model?: string | null
+  reports_to?: string[] | null
+  style_presets?: Record<string, unknown> | null
+  custom_instructions?: string | null
+  agent_profile_id?: string | null
+  legacy_agent_id?: string | null
 }
 
 /**
@@ -86,12 +105,14 @@ export async function processAgentSchedules(): Promise<{
 
   console.log(`[ScheduleProcessor] Found ${dueSchedules.length} due schedules`)
 
-  // 2. BATCHED AGENT LOOKUP - Fix N+1 problem
-  // Collect all agent_ids from schedules and fetch in a single query
-  const agentIds = [...new Set((dueSchedules as ScheduleRow[]).map(s => s.agent_id))]
+  // 2. BATCHED DATA LOOKUPS
+  const scheduleRows = dueSchedules as ScheduleRow[]
+  const agentIds = [...new Set(scheduleRows.map(s => s.agent_id))]
+  const workspaceIds = [...new Set(scheduleRows.map(s => s.workspace_id).filter(Boolean) as string[])]
+
   const { data: localAgents, error: agentsError } = await supabase
     .from("agents")
-    .select("id, ai_agent_id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions")
+    .select("id, ai_agent_id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions, profile_id")
     .in("ai_agent_id", agentIds)
     .eq("is_active", true)
 
@@ -100,13 +121,44 @@ export async function processAgentSchedules(): Promise<{
     return { processed: 0, errors: 1, skipped: 0 }
   }
 
-  // Build lookup map for O(1) access
-  const agentMap = new Map<string, LocalAgentRow>()
-  for (const agent of (localAgents || [])) {
-    agentMap.set(agent.ai_agent_id, agent as LocalAgentRow)
+  const { data: deployments, error: deploymentError } = await supabase
+    .from("workspace_deployed_teams")
+    .select("*")
+    .in("workspace_id", workspaceIds)
+    .eq("status", "active")
+
+  if (deploymentError) {
+    console.error("[ScheduleProcessor] Error fetching workspace deployments:", deploymentError)
+    return { processed: 0, errors: 1, skipped: 0 }
   }
 
-  console.log(`[ScheduleProcessor] Resolved ${agentMap.size} local agents for ${dueSchedules.length} schedules`)
+  const { data: agentTools } = await supabase
+    .from("ai_agent_tools")
+    .select("agent_id, tool:agent_tools(name)")
+    .in("agent_id", agentIds)
+
+  const toolNameMap = new Map<string, string[]>()
+  for (const row of agentTools || []) {
+    const toolRow = row as { agent_id: string; tool?: { name?: string | null } | null }
+    const toolName = toolRow.tool?.name
+    if (!toolName) continue
+    const existing = toolNameMap.get(toolRow.agent_id) || []
+    existing.push(toolName)
+    toolNameMap.set(toolRow.agent_id, existing)
+  }
+
+  const agentMap = new Map<string, LocalAgentRow>()
+  for (const agent of (localAgents || [])) {
+    if (!agent.workspace_id) continue
+    agentMap.set(`${agent.workspace_id}:${agent.ai_agent_id}`, agent as LocalAgentRow)
+  }
+
+  const deploymentMap = new Map<string, { active_config?: unknown }>()
+  for (const deployment of deployments || []) {
+    deploymentMap.set(deployment.workspace_id, deployment as { active_config?: unknown })
+  }
+
+  console.log(`[ScheduleProcessor] Resolved ${agentMap.size} legacy agents and ${deploymentMap.size} deployments for ${dueSchedules.length} schedules`)
 
   for (const schedule of dueSchedules as ScheduleRow[]) {
     let lockAcquired = false
@@ -159,12 +211,76 @@ export async function processAgentSchedules(): Promise<{
         continue
       }
 
-      // 5. Look up local agent from map instead of querying (O(1) lookup)
-      const localAgent = agentMap.get(schedule.agent_id)
-
-      if (!localAgent) {
+      const workspaceId = schedule.workspace_id
+      if (!workspaceId) {
         console.warn(
-          `[ScheduleProcessor] No active local agent found for ai_agent_id=${schedule.agent_id}, skipping schedule ${schedule.id}`
+          `[ScheduleProcessor] Schedule ${schedule.id} has no workspace_id, skipping`
+        )
+        skipped++
+        continue
+      }
+
+      const deployment = deploymentMap.get(workspaceId) ?? null
+      let agentContext: ResolvedAgentContext | null = null
+
+      if (deployment) {
+        const resolvedAgent = await resolveWorkspaceAgent({
+          workspaceId,
+          aiAgentId: schedule.agent_id,
+          supabase,
+          deployment,
+        })
+
+        if (!resolvedAgent.isEnabled || !resolvedAgent.deploymentAgent) {
+          console.warn(
+            `[ScheduleProcessor] Agent not enabled for schedule ${schedule.id} in workspace ${workspaceId}, skipping`
+          )
+          skipped++
+          continue
+        }
+
+        const rawToolNames = toolNameMap.get(schedule.agent_id) || []
+        const toolCategories = mapToolNamesToCategories(rawToolNames)
+
+        agentContext = {
+          source: "deployment",
+          ai_agent_id: schedule.agent_id,
+          workspace_id: workspaceId,
+          tools: toolCategories,
+          system_prompt: resolvedAgent.deploymentAgent.system_prompt || null,
+          provider: resolvedAgent.deploymentAgent.provider || scheduleWithAgent.ai_agent?.provider || null,
+          model: resolvedAgent.deploymentAgent.model || scheduleWithAgent.ai_agent?.model || null,
+          agent_profile_id: resolvedAgent.agentProfileId ?? null,
+        }
+      } else {
+        const localAgent = agentMap.get(`${workspaceId}:${schedule.agent_id}`)
+        if (!localAgent) {
+          console.warn(
+            `[ScheduleProcessor] No active local agent found for ai_agent_id=${schedule.agent_id} in workspace ${workspaceId}, skipping schedule ${schedule.id}`
+          )
+          skipped++
+          continue
+        }
+
+        agentContext = {
+          source: "legacy",
+          ai_agent_id: schedule.agent_id,
+          workspace_id: localAgent.workspace_id,
+          tools: localAgent.tools || [],
+          system_prompt: localAgent.system_prompt,
+          provider: scheduleWithAgent.ai_agent?.provider || null,
+          model: scheduleWithAgent.ai_agent?.model || null,
+          reports_to: localAgent.reports_to,
+          style_presets: localAgent.style_presets,
+          custom_instructions: localAgent.custom_instructions,
+          agent_profile_id: localAgent.profile_id ?? null,
+          legacy_agent_id: localAgent.id,
+        }
+      }
+
+      if (!agentContext) {
+        console.warn(
+          `[ScheduleProcessor] Unable to resolve agent context for schedule ${schedule.id}, skipping`
         )
         skipped++
         continue
@@ -211,7 +327,7 @@ export async function processAgentSchedules(): Promise<{
         await runExecution(
           execution.id,
           scheduleWithAgent as ScheduleRow,
-          localAgent as LocalAgentRow,
+          agentContext,
           supabase,
           schedule.created_by // Notify the user who created the schedule
         )
@@ -281,12 +397,13 @@ export async function processApprovedExecutions(): Promise<{
     return { processed: 0, errors: 0 }
   }
 
-  // BATCHED AGENT LOOKUP - Fix N+1 problem
-  // Collect all agent_ids from executions and fetch in a single query
-  const agentIds = [...new Set((approved as ExecutionRow[]).map(e => e.agent_id))]
+  const executionRows = approved as ExecutionRow[]
+  const agentIds = [...new Set(executionRows.map(e => e.agent_id))]
+  const workspaceIds = [...new Set(executionRows.map(e => e.schedule.workspace_id).filter(Boolean) as string[])]
+
   const { data: localAgents, error: agentsError } = await supabase
     .from("agents")
-    .select("id, ai_agent_id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions")
+    .select("id, ai_agent_id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions, profile_id")
     .in("ai_agent_id", agentIds)
 
   if (agentsError) {
@@ -294,29 +411,148 @@ export async function processApprovedExecutions(): Promise<{
     return { processed: 0, errors: 1 }
   }
 
-  // Build lookup map for O(1) access
-  const agentMap = new Map<string, LocalAgentRow>()
-  for (const agent of (localAgents || [])) {
-    agentMap.set(agent.ai_agent_id, agent as LocalAgentRow)
+  const { data: deployments, error: deploymentError } = await supabase
+    .from("workspace_deployed_teams")
+    .select("*")
+    .in("workspace_id", workspaceIds)
+    .eq("status", "active")
+
+  if (deploymentError) {
+    console.error("[ScheduleProcessor] Error fetching workspace deployments:", deploymentError)
+    return { processed: 0, errors: 1 }
   }
 
-  console.log(`[ScheduleProcessor] Resolved ${agentMap.size} local agents for ${approved.length} approved executions`)
+  const { data: agentTools } = await supabase
+    .from("ai_agent_tools")
+    .select("agent_id, tool:agent_tools(name)")
+    .in("agent_id", agentIds)
+
+  const toolNameMap = new Map<string, string[]>()
+  for (const row of agentTools || []) {
+    const toolRow = row as { agent_id: string; tool?: { name?: string | null } | null }
+    const toolName = toolRow.tool?.name
+    if (!toolName) continue
+    const existing = toolNameMap.get(toolRow.agent_id) || []
+    existing.push(toolName)
+    toolNameMap.set(toolRow.agent_id, existing)
+  }
+
+  const agentMap = new Map<string, LocalAgentRow>()
+  for (const agent of (localAgents || [])) {
+    if (!agent.workspace_id) continue
+    agentMap.set(`${agent.workspace_id}:${agent.ai_agent_id}`, agent as LocalAgentRow)
+  }
+
+  const deploymentMap = new Map<string, { active_config?: unknown }>()
+  for (const deployment of deployments || []) {
+    deploymentMap.set(deployment.workspace_id, deployment as { active_config?: unknown })
+  }
+
+  console.log(`[ScheduleProcessor] Resolved ${agentMap.size} legacy agents and ${deploymentMap.size} deployments for ${approved.length} approved executions`)
 
   for (const exec of approved as ExecutionRow[]) {
     try {
-      // Look up local agent from map instead of querying (O(1) lookup)
-      const localAgent = agentMap.get(exec.agent_id)
-
-      if (!localAgent) {
+      const workspaceId = exec.schedule.workspace_id
+      if (!workspaceId) {
         console.warn(
-          `[ScheduleProcessor] No local agent found for execution ${exec.id}`
+          `[ScheduleProcessor] Execution ${exec.id} has no workspace_id`
         )
         await supabase
           .from("agent_schedule_executions")
           .update({
             status: "failed",
             completed_at: new Date().toISOString(),
-            error_message: "Agent no longer available in workspace",
+            error_message: "Schedule missing workspace context",
+          })
+          .eq("id", exec.id)
+        errors++
+        continue
+      }
+
+      const deployment = deploymentMap.get(workspaceId) ?? null
+      let agentContext: ResolvedAgentContext | null = null
+
+      if (deployment) {
+        const resolvedAgent = await resolveWorkspaceAgent({
+          workspaceId,
+          aiAgentId: exec.agent_id,
+          supabase,
+          deployment,
+        })
+
+        if (!resolvedAgent.isEnabled || !resolvedAgent.deploymentAgent) {
+          console.warn(
+            `[ScheduleProcessor] Agent not enabled for execution ${exec.id} in workspace ${workspaceId}`
+          )
+          await supabase
+            .from("agent_schedule_executions")
+            .update({
+              status: "failed",
+              completed_at: new Date().toISOString(),
+              error_message: "Agent not enabled in workspace",
+            })
+            .eq("id", exec.id)
+          errors++
+          continue
+        }
+
+        const rawToolNames = toolNameMap.get(exec.agent_id) || []
+        const toolCategories = mapToolNamesToCategories(rawToolNames)
+
+        agentContext = {
+          source: "deployment",
+          ai_agent_id: exec.agent_id,
+          workspace_id: workspaceId,
+          tools: toolCategories,
+          system_prompt: resolvedAgent.deploymentAgent.system_prompt || null,
+          provider: resolvedAgent.deploymentAgent.provider || exec.schedule.ai_agent?.provider || null,
+          model: resolvedAgent.deploymentAgent.model || exec.schedule.ai_agent?.model || null,
+          agent_profile_id: resolvedAgent.agentProfileId ?? null,
+        }
+      } else {
+        const localAgent = agentMap.get(`${workspaceId}:${exec.agent_id}`)
+        if (!localAgent) {
+          console.warn(
+            `[ScheduleProcessor] No local agent found for execution ${exec.id} in workspace ${workspaceId}`
+          )
+          await supabase
+            .from("agent_schedule_executions")
+            .update({
+              status: "failed",
+              completed_at: new Date().toISOString(),
+              error_message: "Agent no longer available in workspace",
+            })
+            .eq("id", exec.id)
+          errors++
+          continue
+        }
+
+        agentContext = {
+          source: "legacy",
+          ai_agent_id: exec.agent_id,
+          workspace_id: localAgent.workspace_id,
+          tools: localAgent.tools || [],
+          system_prompt: localAgent.system_prompt,
+          provider: exec.schedule.ai_agent?.provider || null,
+          model: exec.schedule.ai_agent?.model || null,
+          reports_to: localAgent.reports_to,
+          style_presets: localAgent.style_presets,
+          custom_instructions: localAgent.custom_instructions,
+          agent_profile_id: localAgent.profile_id ?? null,
+          legacy_agent_id: localAgent.id,
+        }
+      }
+
+      if (!agentContext) {
+        console.warn(
+          `[ScheduleProcessor] Unable to resolve agent context for execution ${exec.id}`
+        )
+        await supabase
+          .from("agent_schedule_executions")
+          .update({
+            status: "failed",
+            completed_at: new Date().toISOString(),
+            error_message: "Agent resolution failed",
           })
           .eq("id", exec.id)
         errors++
@@ -337,7 +573,7 @@ export async function processApprovedExecutions(): Promise<{
         action: 'schedule_execution_started',
         resourceType: 'agent_schedule_execution',
         resourceId: exec.id,
-        workspaceId: localAgent.workspace_id,
+        workspaceId: agentContext.workspace_id,
         agentId: exec.agent_id,
         actorType: 'system',
         metadata: {
@@ -350,7 +586,7 @@ export async function processApprovedExecutions(): Promise<{
       await runExecution(
         exec.id,
         exec.schedule,
-        localAgent as LocalAgentRow,
+        agentContext,
         supabase,
         exec.approved_by
       )
@@ -374,18 +610,20 @@ export async function processApprovedExecutions(): Promise<{
 async function runExecution(
   executionId: string,
   schedule: ScheduleRow,
-  localAgent: LocalAgentRow,
+  agentContext: ResolvedAgentContext,
   supabase: SupabaseClient,
   notifyUserId?: string | null
 ): Promise<void> {
   // Get provider and model from AI agent config
-  const provider = (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) || "anthropic"
-  const model = schedule.ai_agent?.model || undefined
+  const provider = (agentContext.provider as "anthropic" | "xai" | undefined) ||
+    (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) ||
+    "anthropic"
+  const model = agentContext.model || schedule.ai_agent?.model || undefined
 
   try {
     // Prefer local agent's system prompt, fall back to AI agent's
     const systemPrompt =
-      localAgent.system_prompt ||
+      agentContext.system_prompt ||
       schedule.ai_agent?.system_prompt ||
       "You are a helpful AI assistant."
 
@@ -400,13 +638,13 @@ ${outputInstructions}`
     const result = await executeAgentTask({
       taskPrompt: finalTaskPrompt,
       systemPrompt,
-      tools: localAgent.tools || [],
-      workspaceId: localAgent.workspace_id,
+      tools: agentContext.tools || [],
+      workspaceId: agentContext.workspace_id,
       supabase,
       provider,
       model,
-      stylePresets: localAgent.style_presets as Record<string, unknown> | null,
-      customInstructions: localAgent.custom_instructions,
+      stylePresets: agentContext.style_presets as Record<string, unknown> | null,
+      customInstructions: agentContext.custom_instructions || null,
     })
 
     await supabase
@@ -431,8 +669,8 @@ ${outputInstructions}`
       action: 'schedule_execution_completed',
       resourceType: 'agent_schedule_execution',
       resourceId: executionId,
-      workspaceId: localAgent.workspace_id,
-      agentId: localAgent.id,
+      workspaceId: agentContext.workspace_id,
+      agentId: agentContext.ai_agent_id,
       actorType: 'system',
       metadata: {
         schedule_id: schedule.id,
@@ -450,20 +688,20 @@ ${outputInstructions}`
     let recipientIds: string[] = []
     let recipientSource: string = 'none'
 
-    if (localAgent.reports_to && localAgent.reports_to.length > 0) {
-      recipientIds = localAgent.reports_to
+    if (agentContext.reports_to && agentContext.reports_to.length > 0) {
+      recipientIds = agentContext.reports_to
       recipientSource = 'reports_to'
     } else if (notifyUserId) {
       recipientIds = [notifyUserId]
       recipientSource = 'notifyUserId'
     } else {
       // Fallback to workspace admins
-      recipientIds = await getWorkspaceAdminIds(localAgent.workspace_id, supabase)
+      recipientIds = await getWorkspaceAdminIds(agentContext.workspace_id, supabase)
       recipientSource = 'workspaceAdmins'
 
       // Final fallback: workspace owner specifically
       if (recipientIds.length === 0) {
-        const ownerId = await getWorkspaceOwnerId(localAgent.workspace_id, supabase)
+        const ownerId = await getWorkspaceOwnerId(agentContext.workspace_id, supabase)
         if (ownerId) {
           recipientIds = [ownerId]
           recipientSource = 'workspaceOwner'
@@ -492,9 +730,11 @@ ${outputInstructions}`
       for (const recipientId of recipientIds) {
         try {
           const msgResult = await sendAgentMessage({
-            agentId: localAgent.id,
+            agentId: agentContext.legacy_agent_id || undefined,
+            agentProfileId: agentContext.agent_profile_id || undefined,
+            aiAgentId: agentContext.ai_agent_id,
             recipientProfileId: recipientId,
-            workspaceId: localAgent.workspace_id,
+            workspaceId: agentContext.workspace_id,
             content,
             supabase,
           })
@@ -518,8 +758,8 @@ ${outputInstructions}`
     } else {
       console.warn(
         `[ScheduleProcessor] WARNING: No recipients found for execution ${executionId}. ` +
-        `Agent reports_to=${JSON.stringify(localAgent.reports_to)}, ` +
-        `schedule.created_by=${notifyUserId || 'null'}, workspace_id=${localAgent.workspace_id}`
+        `Agent reports_to=${JSON.stringify(agentContext.reports_to)}, ` +
+        `schedule.created_by=${notifyUserId || 'null'}, workspace_id=${agentContext.workspace_id}`
       )
     }
   } catch (error) {
@@ -544,8 +784,8 @@ ${outputInstructions}`
       action: 'schedule_execution_failed',
       resourceType: 'agent_schedule_execution',
       resourceId: executionId,
-      workspaceId: localAgent.workspace_id,
-      agentId: localAgent.id,
+      workspaceId: agentContext.workspace_id,
+      agentId: agentContext.ai_agent_id,
       actorType: 'system',
       metadata: {
         schedule_id: schedule.id,
@@ -558,15 +798,15 @@ ${outputInstructions}`
     // Post failure message to agent chat
     // Priority: agent.reports_to > schedule.created_by > workspace admins > workspace owner
     let failureRecipientIds: string[] = []
-    if (localAgent.reports_to && localAgent.reports_to.length > 0) {
-      failureRecipientIds = localAgent.reports_to
+    if (agentContext.reports_to && agentContext.reports_to.length > 0) {
+      failureRecipientIds = agentContext.reports_to
     } else if (notifyUserId) {
       failureRecipientIds = [notifyUserId]
     } else {
-      failureRecipientIds = await getWorkspaceAdminIds(localAgent.workspace_id, supabase)
+      failureRecipientIds = await getWorkspaceAdminIds(agentContext.workspace_id, supabase)
       // Final fallback: workspace owner
       if (failureRecipientIds.length === 0) {
-        const ownerId = await getWorkspaceOwnerId(localAgent.workspace_id, supabase)
+        const ownerId = await getWorkspaceOwnerId(agentContext.workspace_id, supabase)
         if (ownerId) {
           failureRecipientIds = [ownerId]
         }
@@ -588,9 +828,11 @@ ${outputInstructions}`
       for (const recipientId of failureRecipientIds) {
         try {
           await sendAgentMessage({
-            agentId: localAgent.id,
+            agentId: agentContext.legacy_agent_id || undefined,
+            agentProfileId: agentContext.agent_profile_id || undefined,
+            aiAgentId: agentContext.ai_agent_id,
             recipientProfileId: recipientId,
-            workspaceId: localAgent.workspace_id,
+            workspaceId: agentContext.workspace_id,
             content,
             supabase,
           })
@@ -607,9 +849,9 @@ ${outputInstructions}`
       }
     } else {
       console.warn(
-        `[ScheduleProcessor] WARNING: No recipients found for failed execution ${executionId}. ` +
-        `Agent reports_to=${JSON.stringify(localAgent.reports_to)}, ` +
-        `schedule.created_by=${notifyUserId || 'null'}, workspace_id=${localAgent.workspace_id}`
+      `[ScheduleProcessor] WARNING: No recipients found for failed execution ${executionId}. ` +
+        `Agent reports_to=${JSON.stringify(agentContext.reports_to)}, ` +
+        `schedule.created_by=${notifyUserId || 'null'}, workspace_id=${agentContext.workspace_id}`
       )
     }
   }

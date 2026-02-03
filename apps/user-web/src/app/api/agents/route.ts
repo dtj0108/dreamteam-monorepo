@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, getWorkspaceDeployment } from "@dreamteam/database"
 import { getSession } from "@dreamteam/auth/session"
-import type { AgentWithHireStatus } from "@/lib/types/agents"
+import type { AgentWithHireStatus, AgentDepartment } from "@/lib/types/agents"
 
 // Type for deployed agent from active_config
 interface DeployedAgent {
@@ -18,6 +18,7 @@ interface DeployedAgent {
   skills: unknown[]
   mind: unknown[]
   rules: unknown[]
+  department_id?: string | null
 }
 
 interface DeployedTeamConfig {
@@ -30,6 +31,11 @@ interface DeployedTeamConfig {
   agents: DeployedAgent[]
   delegations: unknown[]
   team_mind: unknown[]
+}
+
+interface AgentOrganization {
+  department_assignments: Record<string, string | null>
+  position_order: string[]
 }
 
 // GET /api/agents - List agents from deployed team config
@@ -75,32 +81,50 @@ export async function GET(request: NextRequest) {
       // NEW: Read agents from deployed team config
       const activeConfig = deployment.active_config as DeployedTeamConfig
       const deployedAt = deployment.deployed_at
+      const customizations = (deployment.customizations as Record<string, unknown>) || {}
+      const agentOrganization = customizations.agent_organization as AgentOrganization | undefined
 
-      let agents: AgentWithHireStatus[] = (activeConfig?.agents || []).map((agent: DeployedAgent) => ({
-        id: agent.id,
-        name: agent.name,
-        slug: agent.slug,
-        description: agent.description,
-        department_id: null, // Deployed config doesn't include department
-        avatar_url: agent.avatar_url,
-        model: (agent.model || "sonnet") as "sonnet" | "opus" | "haiku",
-        system_prompt: agent.system_prompt,
-        permission_mode: "default" as const,
-        max_turns: 10,
-        is_enabled: true, // Template level enablement
-        is_head: activeConfig.team.head_agent_id === agent.id,
-        config: {},
-        current_version: 1,
-        published_version: 1,
-        created_at: deployedAt,
-        updated_at: deployedAt,
-        // New fields for auto-hire model
-        isHired: agent.is_enabled, // Hired = in deployed team AND enabled
-        isInPlan: true, // All agents from deployed team are part of the plan
-        isEnabled: agent.is_enabled, // Agent's enabled state in customizations
-        localAgentId: agent.id, // Use the agent ID directly
-        hiredAt: agent.is_enabled ? deployedAt : null,
-      }))
+      // Fetch all departments for lookup
+      const { data: departmentsData } = await supabase
+        .from("agent_departments")
+        .select("id, name, description, icon")
+
+      const departmentsMap = new Map<string, AgentDepartment>(
+        (departmentsData || []).map((d: AgentDepartment) => [d.id, d])
+      )
+
+      let agents: AgentWithHireStatus[] = (activeConfig?.agents || []).map((agent: DeployedAgent) => {
+        // Get department ID from organization customizations, fallback to agent's default
+        const departmentId = agentOrganization?.department_assignments?.[agent.id] ?? agent.department_id ?? null
+        const department = departmentId ? departmentsMap.get(departmentId) : null
+
+        return {
+          id: agent.id,
+          name: agent.name,
+          slug: agent.slug,
+          description: agent.description,
+          department_id: departmentId,
+          department: department || null,
+          avatar_url: agent.avatar_url,
+          model: (agent.model || "sonnet") as "sonnet" | "opus" | "haiku",
+          system_prompt: agent.system_prompt,
+          permission_mode: "default" as const,
+          max_turns: 10,
+          is_enabled: true, // Template level enablement
+          is_head: activeConfig.team.head_agent_id === agent.id,
+          config: {},
+          current_version: 1,
+          published_version: 1,
+          created_at: deployedAt,
+          updated_at: deployedAt,
+          // New fields for auto-hire model
+          isHired: agent.is_enabled, // Hired = in deployed team AND enabled
+          isInPlan: true, // All agents from deployed team are part of the plan
+          isEnabled: agent.is_enabled, // Agent's enabled state in customizations
+          localAgentId: agent.id, // Use the agent ID directly
+          hiredAt: agent.is_enabled ? deployedAt : null,
+        }
+      })
 
       // Apply search filter
       if (search) {
@@ -121,11 +145,31 @@ export async function GET(request: NextRequest) {
         agents = agents.filter(a => a.isHired)
       }
 
+      // Sort by position order if available
+      if (agentOrganization?.position_order && agentOrganization.position_order.length > 0) {
+        const positionMap = new Map(
+          agentOrganization.position_order.map((id, index) => [id, index])
+        )
+        agents.sort((a, b) => {
+          const posA = positionMap.get(a.id) ?? Number.MAX_SAFE_INTEGER
+          const posB = positionMap.get(b.id) ?? Number.MAX_SAFE_INTEGER
+          return posA - posB
+        })
+      }
+
       // Apply pagination
       const total = agents.length
       agents = agents.slice(offset, offset + limit)
 
-      return NextResponse.json({ agents, total })
+      // Get all departments for the response
+      const departments = Array.from(departmentsMap.values())
+
+      return NextResponse.json({
+        agents,
+        total,
+        departments,
+        organization: agentOrganization || { department_assignments: {}, position_order: [] }
+      })
     }
 
     // FALLBACK: If no deployment, check for legacy hired agents in agents table

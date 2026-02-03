@@ -9,6 +9,7 @@ export type TeamSize = "solo" | "small" | "growing" | "large"
 
 export interface OnboardingState {
   currentStep: number
+  timezone: string
   primaryFocus: PrimaryFocus | null
   industryType: IndustryType | null
   decisionStyle: DecisionStyle | null
@@ -16,11 +17,20 @@ export interface OnboardingState {
   companyName: string
 }
 
-const TOTAL_STEPS = 6 // Welcome (0), Primary Focus (1), Industry (2), Decision Style (3), Team Size (4), Company (5)
+const TOTAL_STEPS = 7 // Welcome (0), Timezone (1), Primary Focus (2), Industry (3), Decision Style (4), Team Size (5), Company (6)
+
+function getBrowserTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone
+  } catch {
+    return "UTC"
+  }
+}
 
 export function useOnboardingWizard(initialCompanyName: string = "") {
   const [state, setState] = useState<OnboardingState>({
     currentStep: 0,
+    timezone: getBrowserTimezone(),
     primaryFocus: null,
     industryType: null,
     decisionStyle: null,
@@ -42,6 +52,10 @@ export function useOnboardingWizard(initialCompanyName: string = "") {
       ...prev,
       currentStep: Math.max(prev.currentStep - 1, 0),
     }))
+  }, [])
+
+  const setTimezone = useCallback((timezone: string) => {
+    setState((prev) => ({ ...prev, timezone }))
   }, [])
 
   const setPrimaryFocus = useCallback((primaryFocus: PrimaryFocus) => {
@@ -106,6 +120,7 @@ export function useOnboardingWizard(initialCompanyName: string = "") {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           onboardingCompleted: true,
+          timezone: state.timezone,
           primaryFocus: state.primaryFocus,
           industryType: state.industryType,
           decisionStyle: state.decisionStyle,
@@ -138,6 +153,7 @@ export function useOnboardingWizard(initialCompanyName: string = "") {
     canSubmit,
     nextStep,
     prevStep,
+    setTimezone,
     setPrimaryFocus,
     setPrimaryFocusAndAdvance,
     setIndustryType,

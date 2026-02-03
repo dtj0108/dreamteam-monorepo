@@ -84,11 +84,11 @@ BEGIN
     ) RETURNING id INTO v_agent_id;
 
     -- Pipeline Agent scheduled tasks
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Pipeline Scan', 'Quick health check on pipeline', '0 8 * * 1-5', 'Run daily pipeline scan. Check for stalled deals, missing data, and qualification issues.', true),
-      (v_agent_id, 'Weekly Pipeline Review', 'Comprehensive pipeline analysis', '0 9 * * 1', 'Run weekly pipeline review. Analyze stage conversions, velocity trends, and coverage ratios.', true),
-      (v_agent_id, 'Monthly Pipeline Deep Dive', 'Full pipeline audit', '0 10 1 * *', 'Run monthly pipeline deep dive. Full audit of qualification, historical trends, and recommendations.', true);
+      (v_agent_id, 'Daily Pipeline Scan', 'Quick health check on pipeline', '0 8 * * 1-5', 'Run daily pipeline scan. Check for stalled deals, missing data, and qualification issues.', true, true, NULL),
+      (v_agent_id, 'Weekly Pipeline Review', 'Comprehensive pipeline analysis', '0 9 * * 1', 'Run weekly pipeline review. Analyze stage conversions, velocity trends, and coverage ratios.', true, true, NULL),
+      (v_agent_id, 'Monthly Pipeline Deep Dive', 'Full pipeline audit', '0 10 1 * *', 'Run monthly pipeline deep dive. Full audit of qualification, historical trends, and recommendations.', true, true, NULL);
   END IF;
 
   -- 2. Sales Strategist Agent
@@ -113,10 +113,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Competitive Intel', 'Competitive landscape analysis', '0 10 * * 2', 'Run weekly competitive intelligence update. Analyze competitor activity, win/loss patterns, and positioning opportunities.', true),
-      (v_agent_id, 'Monthly Strategy Review', 'Strategic account review', '0 14 15 * *', 'Run monthly strategy review. Review top accounts, identify expansion opportunities, update battlecards.', true);
+      (v_agent_id, 'Weekly Competitive Intel', 'Competitive landscape analysis', '0 10 * * 2', 'Run weekly competitive intelligence update. Analyze competitor activity, win/loss patterns, and positioning opportunities.', true, true, NULL),
+      (v_agent_id, 'Monthly Strategy Review', 'Strategic account review', '0 14 15 * *', 'Run monthly strategy review. Review top accounts, identify expansion opportunities, update battlecards.', true, true, NULL);
   END IF;
 
   -- 3. Deal Review Agent
@@ -141,11 +141,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Deal Alerts', 'Flag deals needing attention', '0 9 * * 1-5', 'Run daily deal alerts. Scan all active deals, identify warning signs, alert owners proactively.', true),
-      (v_agent_id, 'Weekly Deal Reviews', 'Structured review of key deals', '0 14 * * 3', 'Run weekly deal reviews. Review most important deals in pipeline, provide coaching and recommendations.', true),
-      (v_agent_id, 'Forecast Gut-Check', 'Validate forecasted deals', '0 10 * * 4', 'Run forecast gut-check. Review deals in commit/forecast, assess realistic close probability, flag discrepancies.', true);
+      (v_agent_id, 'Daily Deal Alerts', 'Flag deals needing attention', '0 9 * * 1-5', 'Run daily deal alerts. Scan all active deals, identify warning signs, alert owners proactively.', true, true, NULL),
+      (v_agent_id, 'Weekly Deal Reviews', 'Structured review of key deals', '0 14 * * 3', 'Run weekly deal reviews. Review most important deals in pipeline, provide coaching and recommendations.', true, true, NULL),
+      (v_agent_id, 'Forecast Gut-Check', 'Validate forecasted deals', '0 10 * * 4', 'Run forecast gut-check. Review deals in commit/forecast, assess realistic close probability, flag discrepancies.', true, true, NULL);
   END IF;
 
   -- 4. Revenue Forecast Agent
@@ -170,12 +170,12 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Forecast Update', 'Produce weekly revenue forecast', '0 9 * * 1', 'Run weekly forecast update. Analyze pipeline, assess probabilities, produce forecast with ranges.', true),
-      (v_agent_id, 'Monthly Forecast Close', 'End-of-month forecast lock', '0 14 25 * *', 'Run monthly forecast close. Produce final month forecast with maximum accuracy.', true),
-      (v_agent_id, 'Quarterly Forecast Analysis', 'Quarter review and projection', '0 10 1 1,4,7,10 *', 'Run quarterly forecast analysis. Analyze last quarter accuracy, build next quarter forecast model.', true),
-      (v_agent_id, 'Forecast Reality Check', 'Mid-week forecast validation', '0 15 * * 3', 'Run forecast reality check. Check forecast assumptions, validate deal probabilities, flag changes.', true);
+      (v_agent_id, 'Weekly Forecast Update', 'Produce weekly revenue forecast', '0 9 * * 1', 'Run weekly forecast update. Analyze pipeline, assess probabilities, produce forecast with ranges.', true, true, NULL),
+      (v_agent_id, 'Monthly Forecast Close', 'End-of-month forecast lock', '0 14 25 * *', 'Run monthly forecast close. Produce final month forecast with maximum accuracy.', true, true, NULL),
+      (v_agent_id, 'Quarterly Forecast Analysis', 'Quarter review and projection', '0 10 1 1,4,7,10 *', 'Run quarterly forecast analysis. Analyze last quarter accuracy, build next quarter forecast model.', true, true, NULL),
+      (v_agent_id, 'Forecast Reality Check', 'Mid-week forecast validation', '0 15 * * 3', 'Run forecast reality check. Check forecast assumptions, validate deal probabilities, flag changes.', true, true, NULL);
   END IF;
 
   -- 5. Objection Intelligence Agent
@@ -200,10 +200,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Objection Review', 'Analyze recent objections', '0 11 * * 5', 'Run weekly objection review. Analyze objections from the week, identify patterns, update responses.', true),
-      (v_agent_id, 'Monthly Objection Report', 'Comprehensive objection analysis', '0 10 1 * *', 'Run monthly objection report. Full analysis of objection trends, response effectiveness, and recommendations.', true);
+      (v_agent_id, 'Weekly Objection Review', 'Analyze recent objections', '0 11 * * 5', 'Run weekly objection review. Analyze objections from the week, identify patterns, update responses.', true, true, NULL),
+      (v_agent_id, 'Monthly Objection Report', 'Comprehensive objection analysis', '0 10 1 * *', 'Run monthly objection report. Full analysis of objection trends, response effectiveness, and recommendations.', true, true, NULL);
   END IF;
 
   -- 6. Follow-Up Automation Agent
@@ -228,11 +228,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Follow-Up Check', 'Ensure all follow-ups happen on time', '0 8 * * 1-5', 'Run daily follow-up check. Identify leads/deals needing follow-up today, create tasks, flag overdue items.', true),
-      (v_agent_id, 'Weekly Sequence Performance', 'Analyze sequence effectiveness', '0 10 * * 5', 'Run weekly sequence performance. Review all sequence performance, identify what''s working, flag underperformers.', true),
-      (v_agent_id, 'Monthly Sequence Audit', 'Comprehensive sequence review', '0 14 1 * *', 'Run monthly sequence audit. Full audit of all sequences, update underperformers, retire dead sequences.', true);
+      (v_agent_id, 'Daily Follow-Up Check', 'Ensure all follow-ups happen on time', '0 8 * * 1-5', 'Run daily follow-up check. Identify leads/deals needing follow-up today, create tasks, flag overdue items.', true, true, NULL),
+      (v_agent_id, 'Weekly Sequence Performance', 'Analyze sequence effectiveness', '0 10 * * 5', 'Run weekly sequence performance. Review all sequence performance, identify what''s working, flag underperformers.', true, true, NULL),
+      (v_agent_id, 'Monthly Sequence Audit', 'Comprehensive sequence review', '0 14 1 * *', 'Run monthly sequence audit. Full audit of all sequences, update underperformers, retire dead sequences.', true, true, NULL);
   END IF;
 
 END $$;
@@ -270,11 +270,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Standup Summary', 'Compile cross-team status', '0 9 * * 1-5', 'Run daily standup summary. Compile status from all teams, identify blockers, flag dependencies.', true),
-      (v_agent_id, 'Weekly Program Review', 'Comprehensive program status', '0 10 * * 1', 'Run weekly program review. Full status of all programs, milestone tracking, risk assessment.', true),
-      (v_agent_id, 'Monthly Program Report', 'Executive program summary', '0 14 1 * *', 'Run monthly program report. Executive summary of all programs, achievements, challenges, next month outlook.', true);
+      (v_agent_id, 'Daily Standup Summary', 'Compile cross-team status', '0 9 * * 1-5', 'Run daily standup summary. Compile status from all teams, identify blockers, flag dependencies.', true, true, NULL),
+      (v_agent_id, 'Weekly Program Review', 'Comprehensive program status', '0 10 * * 1', 'Run weekly program review. Full status of all programs, milestone tracking, risk assessment.', true, true, NULL),
+      (v_agent_id, 'Monthly Program Report', 'Executive program summary', '0 14 1 * *', 'Run monthly program report. Executive summary of all programs, achievements, challenges, next month outlook.', true, true, NULL);
   END IF;
 
   -- 2. Workflow Architect Agent
@@ -299,10 +299,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Workflow Review', 'Assess workflow health', '0 14 * * 4', 'Run weekly workflow review. Check workflow performance, identify friction points, suggest improvements.', true),
-      (v_agent_id, 'Monthly Process Audit', 'Comprehensive process review', '0 10 15 * *', 'Run monthly process audit. Full review of all workflows, identify optimization opportunities, update documentation.', true);
+      (v_agent_id, 'Weekly Workflow Review', 'Assess workflow health', '0 14 * * 4', 'Run weekly workflow review. Check workflow performance, identify friction points, suggest improvements.', true, true, NULL),
+      (v_agent_id, 'Monthly Process Audit', 'Comprehensive process review', '0 10 15 * *', 'Run monthly process audit. Full review of all workflows, identify optimization opportunities, update documentation.', true, true, NULL);
   END IF;
 
   -- 3. Execution Monitor Agent
@@ -327,10 +327,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Execution Scan', 'Monitor all active work', '0 8 * * 1-5', 'Run daily execution scan. Check all active projects, flag delays, identify at-risk items.', true),
-      (v_agent_id, 'Weekly Execution Report', 'Comprehensive execution status', '0 16 * * 5', 'Run weekly execution report. Full status of execution across teams, trends, and recommendations.', true);
+      (v_agent_id, 'Daily Execution Scan', 'Monitor all active work', '0 8 * * 1-5', 'Run daily execution scan. Check all active projects, flag delays, identify at-risk items.', true, true, NULL),
+      (v_agent_id, 'Weekly Execution Report', 'Comprehensive execution status', '0 16 * * 5', 'Run weekly execution report. Full status of execution across teams, trends, and recommendations.', true, true, NULL);
   END IF;
 
   -- 4. Bottleneck Detector Agent
@@ -355,10 +355,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Bottleneck Scan', 'Identify current constraints', '0 11 * * 3', 'Run weekly bottleneck scan. Analyze queues, wait times, and throughput to identify current constraints.', true),
-      (v_agent_id, 'Monthly Constraint Analysis', 'Deep dive on systemic issues', '0 14 10 * *', 'Run monthly constraint analysis. Deep analysis of recurring bottlenecks, root causes, and strategic recommendations.', true);
+      (v_agent_id, 'Weekly Bottleneck Scan', 'Identify current constraints', '0 11 * * 3', 'Run weekly bottleneck scan. Analyze queues, wait times, and throughput to identify current constraints.', true, true, NULL),
+      (v_agent_id, 'Monthly Constraint Analysis', 'Deep dive on systemic issues', '0 14 10 * *', 'Run monthly constraint analysis. Deep analysis of recurring bottlenecks, root causes, and strategic recommendations.', true, true, NULL);
   END IF;
 
   -- 5. QA Agent
@@ -383,11 +383,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Quality Check', 'Monitor quality metrics', '0 9 * * 1-5', 'Run daily quality check. Review quality metrics, flag issues, track defect trends.', true),
-      (v_agent_id, 'Weekly Quality Report', 'Comprehensive quality status', '0 15 * * 5', 'Run weekly quality report. Full quality status, trend analysis, improvement recommendations.', true),
-      (v_agent_id, 'Monthly Quality Review', 'Strategic quality assessment', '0 10 1 * *', 'Run monthly quality review. Strategic assessment of quality trends, root causes, and improvement initiatives.', true);
+      (v_agent_id, 'Daily Quality Check', 'Monitor quality metrics', '0 9 * * 1-5', 'Run daily quality check. Review quality metrics, flag issues, track defect trends.', true, true, NULL),
+      (v_agent_id, 'Weekly Quality Report', 'Comprehensive quality status', '0 15 * * 5', 'Run weekly quality report. Full quality status, trend analysis, improvement recommendations.', true, true, NULL),
+      (v_agent_id, 'Monthly Quality Review', 'Strategic quality assessment', '0 10 1 * *', 'Run monthly quality review. Strategic assessment of quality trends, root causes, and improvement initiatives.', true, true, NULL);
   END IF;
 
   -- 6. SOP Agent
@@ -412,11 +412,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly SOP Review', 'Check for outdated SOPs', '0 14 * * 4', 'Run weekly SOP review. Identify SOPs due for review, flag outdated content, track update status.', true),
-      (v_agent_id, 'Monthly SOP Audit', 'Comprehensive SOP assessment', '0 10 15 * *', 'Run monthly SOP audit. Full audit of all SOPs, coverage gaps, and maintenance needs.', true),
-      (v_agent_id, 'Quarterly SOP Report', 'Strategic documentation review', '0 10 1 1,4,7,10 *', 'Run quarterly SOP report. Strategic review of documentation health, gaps, and improvement plan.', true);
+      (v_agent_id, 'Weekly SOP Review', 'Check for outdated SOPs', '0 14 * * 4', 'Run weekly SOP review. Identify SOPs due for review, flag outdated content, track update status.', true, true, NULL),
+      (v_agent_id, 'Monthly SOP Audit', 'Comprehensive SOP assessment', '0 10 15 * *', 'Run monthly SOP audit. Full audit of all SOPs, coverage gaps, and maintenance needs.', true, true, NULL),
+      (v_agent_id, 'Quarterly SOP Report', 'Strategic documentation review', '0 10 1 1,4,7,10 *', 'Run quarterly SOP report. Strategic review of documentation health, gaps, and improvement plan.', true, true, NULL);
   END IF;
 
 END $$;
@@ -454,11 +454,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Hiring Pulse', 'Monitor active recruiting', '0 9 * * 1-5', 'Run daily hiring pulse. Check candidate pipeline, interview schedules, pending decisions.', true),
-      (v_agent_id, 'Weekly Hiring Review', 'Comprehensive hiring status', '0 10 * * 1', 'Run weekly hiring review. Full status of all open roles, pipeline health, and bottlenecks.', true),
-      (v_agent_id, 'Monthly Hiring Report', 'Strategic hiring assessment', '0 10 1 * *', 'Run monthly hiring report. Hiring velocity, quality metrics, and strategic recommendations.', true);
+      (v_agent_id, 'Daily Hiring Pulse', 'Monitor active recruiting', '0 9 * * 1-5', 'Run daily hiring pulse. Check candidate pipeline, interview schedules, pending decisions.', true, true, NULL),
+      (v_agent_id, 'Weekly Hiring Review', 'Comprehensive hiring status', '0 10 * * 1', 'Run weekly hiring review. Full status of all open roles, pipeline health, and bottlenecks.', true, true, NULL),
+      (v_agent_id, 'Monthly Hiring Report', 'Strategic hiring assessment', '0 10 1 * *', 'Run monthly hiring report. Hiring velocity, quality metrics, and strategic recommendations.', true, true, NULL);
   END IF;
 
   -- 2. Org Design Agent
@@ -483,10 +483,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Quarterly Org Review', 'Assess organizational health', '0 10 1 1,4,7,10 *', 'Run quarterly org review. Assess structure effectiveness, identify bottlenecks, recommend adjustments.', true),
-      (v_agent_id, 'Monthly Headcount Analysis', 'Team sizing and planning', '0 14 15 * *', 'Run monthly headcount analysis. Review team sizes, growth projections, and capacity planning.', true);
+      (v_agent_id, 'Quarterly Org Review', 'Assess organizational health', '0 10 1 1,4,7,10 *', 'Run quarterly org review. Assess structure effectiveness, identify bottlenecks, recommend adjustments.', true, true, NULL),
+      (v_agent_id, 'Monthly Headcount Analysis', 'Team sizing and planning', '0 14 15 * *', 'Run monthly headcount analysis. Review team sizes, growth projections, and capacity planning.', true, true, NULL);
   END IF;
 
   -- 3. Talent Optimization Agent
@@ -511,10 +511,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Monthly Talent Review', 'Development progress tracking', '0 10 1 * *', 'Run monthly talent review. Track development progress, identify high-potentials, flag retention risks.', true),
-      (v_agent_id, 'Quarterly Skills Analysis', 'Organization skills assessment', '0 14 1 1,4,7,10 *', 'Run quarterly skills analysis. Assess skill gaps, training effectiveness, and capability building needs.', true);
+      (v_agent_id, 'Monthly Talent Review', 'Development progress tracking', '0 10 1 * *', 'Run monthly talent review. Track development progress, identify high-potentials, flag retention risks.', true, true, NULL),
+      (v_agent_id, 'Quarterly Skills Analysis', 'Organization skills assessment', '0 14 1 1,4,7,10 *', 'Run quarterly skills analysis. Assess skill gaps, training effectiveness, and capability building needs.', true, true, NULL);
   END IF;
 
   -- 4. Burnout Prevention Agent
@@ -539,10 +539,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Wellness Check', 'Monitor team health signals', '0 9 * * 1', 'Run weekly wellness check. Monitor workload patterns, identify burnout risks, flag concerns.', true),
-      (v_agent_id, 'Monthly Burnout Report', 'Comprehensive wellness assessment', '0 10 1 * *', 'Run monthly burnout report. Full assessment of team wellness, trends, and recommendations.', true);
+      (v_agent_id, 'Weekly Wellness Check', 'Monitor team health signals', '0 9 * * 1', 'Run weekly wellness check. Monitor workload patterns, identify burnout risks, flag concerns.', true, true, NULL),
+      (v_agent_id, 'Monthly Burnout Report', 'Comprehensive wellness assessment', '0 10 1 * *', 'Run monthly burnout report. Full assessment of team wellness, trends, and recommendations.', true, true, NULL);
   END IF;
 
   -- 5. Leadership Coach Agent
@@ -567,11 +567,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Leadership Tips', 'Share management insights', '0 8 * * 1', 'Run weekly leadership tips. Share practical management advice based on current challenges.', true),
-      (v_agent_id, 'Monthly Manager Check-in', 'Leadership development status', '0 14 15 * *', 'Run monthly manager check-in. Review leadership development progress, identify coaching needs.', true),
-      (v_agent_id, 'Quarterly Leadership Review', 'Comprehensive leadership assessment', '0 10 1 1,4,7,10 *', 'Run quarterly leadership review. Assess leadership bench, development effectiveness, and gaps.', true);
+      (v_agent_id, 'Weekly Leadership Tips', 'Share management insights', '0 8 * * 1', 'Run weekly leadership tips. Share practical management advice based on current challenges.', true, true, NULL),
+      (v_agent_id, 'Monthly Manager Check-in', 'Leadership development status', '0 14 15 * *', 'Run monthly manager check-in. Review leadership development progress, identify coaching needs.', true, true, NULL),
+      (v_agent_id, 'Quarterly Leadership Review', 'Comprehensive leadership assessment', '0 10 1 1,4,7,10 *', 'Run quarterly leadership review. Assess leadership bench, development effectiveness, and gaps.', true, true, NULL);
   END IF;
 
 END $$;
@@ -609,11 +609,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Content Review', 'Content performance check', '0 10 * * 1', 'Run weekly content review. Analyze content performance, upcoming calendar, and resource needs.', true),
-      (v_agent_id, 'Monthly Content Report', 'Comprehensive content analysis', '0 10 1 * *', 'Run monthly content report. Full analysis of content performance, trends, and strategy adjustments.', true),
-      (v_agent_id, 'Quarterly Content Strategy', 'Strategic content planning', '0 10 1 1,4,7,10 *', 'Run quarterly content strategy. Plan next quarter themes, pillars, and major initiatives.', true);
+      (v_agent_id, 'Weekly Content Review', 'Content performance check', '0 10 * * 1', 'Run weekly content review. Analyze content performance, upcoming calendar, and resource needs.', true, true, NULL),
+      (v_agent_id, 'Monthly Content Report', 'Comprehensive content analysis', '0 10 1 * *', 'Run monthly content report. Full analysis of content performance, trends, and strategy adjustments.', true, true, NULL),
+      (v_agent_id, 'Quarterly Content Strategy', 'Strategic content planning', '0 10 1 1,4,7,10 *', 'Run quarterly content strategy. Plan next quarter themes, pillars, and major initiatives.', true, true, NULL);
   END IF;
 
   -- 2. Analytics Agent
@@ -638,11 +638,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Metrics Check', 'Monitor key marketing metrics', '0 8 * * 1-5', 'Run daily metrics check. Monitor key marketing metrics, flag anomalies, track trends.', true),
-      (v_agent_id, 'Weekly Analytics Report', 'Comprehensive marketing analysis', '0 9 * * 1', 'Run weekly analytics report. Full analysis of marketing performance, insights, and recommendations.', true),
-      (v_agent_id, 'Monthly Marketing Review', 'Strategic marketing analysis', '0 10 1 * *', 'Run monthly marketing review. Deep dive on marketing effectiveness, attribution, and optimization opportunities.', true);
+      (v_agent_id, 'Daily Metrics Check', 'Monitor key marketing metrics', '0 8 * * 1-5', 'Run daily metrics check. Monitor key marketing metrics, flag anomalies, track trends.', true, true, NULL),
+      (v_agent_id, 'Weekly Analytics Report', 'Comprehensive marketing analysis', '0 9 * * 1', 'Run weekly analytics report. Full analysis of marketing performance, insights, and recommendations.', true, true, NULL),
+      (v_agent_id, 'Monthly Marketing Review', 'Strategic marketing analysis', '0 10 1 * *', 'Run monthly marketing review. Deep dive on marketing effectiveness, attribution, and optimization opportunities.', true, true, NULL);
   END IF;
 
   -- 3. Distribution Agent
@@ -667,10 +667,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Distribution Check', 'Monitor scheduled content', '0 7 * * 1-5', 'Run daily distribution check. Review scheduled posts, check engagement, optimize timing.', true),
-      (v_agent_id, 'Weekly Distribution Report', 'Channel performance analysis', '0 10 * * 5', 'Run weekly distribution report. Analyze channel performance, reach metrics, and optimization opportunities.', true);
+      (v_agent_id, 'Daily Distribution Check', 'Monitor scheduled content', '0 7 * * 1-5', 'Run daily distribution check. Review scheduled posts, check engagement, optimize timing.', true, true, NULL),
+      (v_agent_id, 'Weekly Distribution Report', 'Channel performance analysis', '0 10 * * 5', 'Run weekly distribution report. Analyze channel performance, reach metrics, and optimization opportunities.', true, true, NULL);
   END IF;
 
   -- 4. Growth Experiments Agent
@@ -695,10 +695,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Experiment Review', 'Check running experiments', '0 10 * * 3', 'Run weekly experiment review. Check running experiments, analyze results, plan new tests.', true),
-      (v_agent_id, 'Monthly Growth Report', 'Experiment learnings summary', '0 10 1 * *', 'Run monthly growth report. Summarize experiment results, key learnings, and growth recommendations.', true);
+      (v_agent_id, 'Weekly Experiment Review', 'Check running experiments', '0 10 * * 3', 'Run weekly experiment review. Check running experiments, analyze results, plan new tests.', true, true, NULL),
+      (v_agent_id, 'Monthly Growth Report', 'Experiment learnings summary', '0 10 1 * *', 'Run monthly growth report. Summarize experiment results, key learnings, and growth recommendations.', true, true, NULL);
   END IF;
 
   -- 5. Brand Agent
@@ -723,11 +723,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Brand Check', 'Monitor brand consistency', '0 10 * * 5', 'Run weekly brand check. Review recent materials for brand consistency, flag issues.', true),
-      (v_agent_id, 'Monthly Brand Health', 'Brand perception analysis', '0 10 1 * *', 'Run monthly brand health. Analyze brand perception, sentiment trends, and competitive positioning.', true),
-      (v_agent_id, 'Quarterly Brand Review', 'Strategic brand assessment', '0 10 1 1,4,7,10 *', 'Run quarterly brand review. Comprehensive brand health assessment and strategic recommendations.', true);
+      (v_agent_id, 'Weekly Brand Check', 'Monitor brand consistency', '0 10 * * 5', 'Run weekly brand check. Review recent materials for brand consistency, flag issues.', true, true, NULL),
+      (v_agent_id, 'Monthly Brand Health', 'Brand perception analysis', '0 10 1 * *', 'Run monthly brand health. Analyze brand perception, sentiment trends, and competitive positioning.', true, true, NULL),
+      (v_agent_id, 'Quarterly Brand Review', 'Strategic brand assessment', '0 10 1 1,4,7,10 *', 'Run quarterly brand review. Comprehensive brand health assessment and strategic recommendations.', true, true, NULL);
   END IF;
 
   -- 6. Funnel Optimization Agent
@@ -752,11 +752,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Funnel Check', 'Monitor conversion metrics', '0 8 * * 1-5', 'Run daily funnel check. Monitor conversion rates, flag anomalies, track trends.', true),
-      (v_agent_id, 'Weekly Funnel Report', 'Conversion analysis', '0 10 * * 1', 'Run weekly funnel report. Analyze funnel performance, drop-offs, and optimization opportunities.', true),
-      (v_agent_id, 'Monthly CRO Review', 'Comprehensive conversion review', '0 10 1 * *', 'Run monthly CRO review. Full funnel analysis, test results, and strategic recommendations.', true);
+      (v_agent_id, 'Daily Funnel Check', 'Monitor conversion metrics', '0 8 * * 1-5', 'Run daily funnel check. Monitor conversion rates, flag anomalies, track trends.', true, true, NULL),
+      (v_agent_id, 'Weekly Funnel Report', 'Conversion analysis', '0 10 * * 1', 'Run weekly funnel report. Analyze funnel performance, drop-offs, and optimization opportunities.', true, true, NULL),
+      (v_agent_id, 'Monthly CRO Review', 'Comprehensive conversion review', '0 10 1 * *', 'Run monthly CRO review. Full funnel analysis, test results, and strategic recommendations.', true, true, NULL);
   END IF;
 
 END $$;
@@ -794,12 +794,12 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Financial Pulse', 'Quick financial health check', '0 7 * * 1-5', 'Run daily financial pulse. Check cash position, daily revenue, major financial events.', true),
-      (v_agent_id, 'Weekly Financial Review', 'Comprehensive weekly review', '0 10 * * 5', 'Run weekly financial review. Cash flow, P&L snapshot, budget variance, key metrics.', true),
-      (v_agent_id, 'Monthly Financial Close', 'Full monthly close', '0 10 5 * *', 'Run monthly financial close. Complete P&L, cash flow statement, balance sheet, variance analysis.', true),
-      (v_agent_id, 'Quarterly Financial Report', 'Board-ready financials', '0 10 10 1,4,7,10 *', 'Run quarterly financial report. Full statements, KPI performance, runway analysis, strategic recommendations.', true);
+      (v_agent_id, 'Daily Financial Pulse', 'Quick financial health check', '0 7 * * 1-5', 'Run daily financial pulse. Check cash position, daily revenue, major financial events.', true, true, NULL),
+      (v_agent_id, 'Weekly Financial Review', 'Comprehensive weekly review', '0 10 * * 5', 'Run weekly financial review. Cash flow, P&L snapshot, budget variance, key metrics.', true, true, NULL),
+      (v_agent_id, 'Monthly Financial Close', 'Full monthly close', '0 10 5 * *', 'Run monthly financial close. Complete P&L, cash flow statement, balance sheet, variance analysis.', true, true, NULL),
+      (v_agent_id, 'Quarterly Financial Report', 'Board-ready financials', '0 10 10 1,4,7,10 *', 'Run quarterly financial report. Full statements, KPI performance, runway analysis, strategic recommendations.', true, true, NULL);
   END IF;
 
   -- 2. Capital Allocation Agent
@@ -824,10 +824,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Monthly Investment Review', 'Review investment performance', '0 14 1 * *', 'Run monthly investment review. Assess ROI on major investments, identify reallocation opportunities.', true),
-      (v_agent_id, 'Quarterly Allocation Review', 'Strategic allocation assessment', '0 10 15 1,4,7,10 *', 'Run quarterly allocation review. Full assessment of capital deployment, performance, and reallocation recommendations.', true);
+      (v_agent_id, 'Monthly Investment Review', 'Review investment performance', '0 14 1 * *', 'Run monthly investment review. Assess ROI on major investments, identify reallocation opportunities.', true, true, NULL),
+      (v_agent_id, 'Quarterly Allocation Review', 'Strategic allocation assessment', '0 10 15 1,4,7,10 *', 'Run quarterly allocation review. Full assessment of capital deployment, performance, and reallocation recommendations.', true, true, NULL);
   END IF;
 
   -- 3. Unit Economics Agent
@@ -852,11 +852,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Unit Economics Check', 'Monitor key metrics', '0 10 * * 1', 'Run weekly unit economics check. Monitor LTV, CAC, payback, and flag anomalies.', true),
-      (v_agent_id, 'Monthly Cohort Analysis', 'Detailed cohort performance', '0 10 1 * *', 'Run monthly cohort analysis. Analyze customer cohorts, LTV trends, and profitability by segment.', true),
-      (v_agent_id, 'Quarterly Economics Report', 'Strategic unit economics review', '0 14 1 1,4,7,10 *', 'Run quarterly economics report. Comprehensive unit economics analysis with strategic recommendations.', true);
+      (v_agent_id, 'Weekly Unit Economics Check', 'Monitor key metrics', '0 10 * * 1', 'Run weekly unit economics check. Monitor LTV, CAC, payback, and flag anomalies.', true, true, NULL),
+      (v_agent_id, 'Monthly Cohort Analysis', 'Detailed cohort performance', '0 10 1 * *', 'Run monthly cohort analysis. Analyze customer cohorts, LTV trends, and profitability by segment.', true, true, NULL),
+      (v_agent_id, 'Quarterly Economics Report', 'Strategic unit economics review', '0 14 1 1,4,7,10 *', 'Run quarterly economics report. Comprehensive unit economics analysis with strategic recommendations.', true, true, NULL);
   END IF;
 
   -- 4. Forecasting Agent
@@ -881,11 +881,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Forecast Update', 'Update rolling forecast', '0 9 * * 1', 'Run weekly forecast update. Update rolling forecast with latest data, flag variances.', true),
-      (v_agent_id, 'Monthly Reforecast', 'Full monthly reforecast', '0 10 5 * *', 'Run monthly reforecast. Update full-year forecast based on actual results and new information.', true),
-      (v_agent_id, 'Quarterly Planning', 'Quarterly planning cycle', '0 10 15 3,6,9,12 *', 'Run quarterly planning. Prepare for next quarter, update scenarios, set targets.', true);
+      (v_agent_id, 'Weekly Forecast Update', 'Update rolling forecast', '0 9 * * 1', 'Run weekly forecast update. Update rolling forecast with latest data, flag variances.', true, true, NULL),
+      (v_agent_id, 'Monthly Reforecast', 'Full monthly reforecast', '0 10 5 * *', 'Run monthly reforecast. Update full-year forecast based on actual results and new information.', true, true, NULL),
+      (v_agent_id, 'Quarterly Planning', 'Quarterly planning cycle', '0 10 15 3,6,9,12 *', 'Run quarterly planning. Prepare for next quarter, update scenarios, set targets.', true, true, NULL);
   END IF;
 
   -- 5. Exit/M&A Agent
@@ -910,10 +910,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Quarterly Exit Readiness', 'Assess exit preparedness', '0 10 1 1,4,7,10 *', 'Run quarterly exit readiness. Assess data room status, valuation metrics, and exit preparedness.', true),
-      (v_agent_id, 'Monthly Market Scan', 'M&A market intelligence', '0 14 15 * *', 'Run monthly market scan. Review comparable transactions, market multiples, and M&A activity.', true);
+      (v_agent_id, 'Quarterly Exit Readiness', 'Assess exit preparedness', '0 10 1 1,4,7,10 *', 'Run quarterly exit readiness. Assess data room status, valuation metrics, and exit preparedness.', true, true, NULL),
+      (v_agent_id, 'Monthly Market Scan', 'M&A market intelligence', '0 14 15 * *', 'Run monthly market scan. Review comparable transactions, market multiples, and M&A activity.', true, true, NULL);
   END IF;
 
 END $$;
@@ -951,12 +951,12 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Executive Brief', 'Morning briefing', '0 7 * * 1-5', 'Run daily executive brief. Summarize key metrics, urgent items, and priorities for the day.', true),
-      (v_agent_id, 'Weekly Leadership Review', 'Cross-functional status', '0 9 * * 1', 'Run weekly leadership review. Status from all departments, key decisions needed, and priority alignment.', true),
-      (v_agent_id, 'Monthly Strategic Review', 'Strategic progress check', '0 10 1 * *', 'Run monthly strategic review. Progress on strategic priorities, adjustments needed, and forward look.', true),
-      (v_agent_id, 'Quarterly Board Prep', 'Board meeting preparation', '0 10 20 3,6,9,12 *', 'Run quarterly board prep. Prepare materials for board meeting, key narratives, and discussion items.', true);
+      (v_agent_id, 'Daily Executive Brief', 'Morning briefing', '0 7 * * 1-5', 'Run daily executive brief. Summarize key metrics, urgent items, and priorities for the day.', true, true, NULL),
+      (v_agent_id, 'Weekly Leadership Review', 'Cross-functional status', '0 9 * * 1', 'Run weekly leadership review. Status from all departments, key decisions needed, and priority alignment.', true, true, NULL),
+      (v_agent_id, 'Monthly Strategic Review', 'Strategic progress check', '0 10 1 * *', 'Run monthly strategic review. Progress on strategic priorities, adjustments needed, and forward look.', true, true, NULL),
+      (v_agent_id, 'Quarterly Board Prep', 'Board meeting preparation', '0 10 20 3,6,9,12 *', 'Run quarterly board prep. Prepare materials for board meeting, key narratives, and discussion items.', true, true, NULL);
   END IF;
 
   -- 2. Priority Agent
@@ -981,10 +981,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Priority Check', 'Assess priority alignment', '0 10 * * 1', 'Run weekly priority check. Assess alignment of work to priorities, flag scope creep, and identify conflicts.', true),
-      (v_agent_id, 'Monthly Priority Review', 'Strategic priority assessment', '0 14 1 * *', 'Run monthly priority review. Assess priority health, recommend adjustments, and communicate changes.', true);
+      (v_agent_id, 'Weekly Priority Check', 'Assess priority alignment', '0 10 * * 1', 'Run weekly priority check. Assess alignment of work to priorities, flag scope creep, and identify conflicts.', true, true, NULL),
+      (v_agent_id, 'Monthly Priority Review', 'Strategic priority assessment', '0 14 1 * *', 'Run monthly priority review. Assess priority health, recommend adjustments, and communicate changes.', true, true, NULL);
   END IF;
 
   -- 3. Long-Term Vision Agent
@@ -1009,10 +1009,10 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Monthly Trend Scan', 'Scan for strategic trends', '0 10 15 * *', 'Run monthly trend scan. Identify emerging trends, threats, and opportunities relevant to vision.', true),
-      (v_agent_id, 'Quarterly Vision Check', 'Assess vision alignment', '0 10 1 1,4,7,10 *', 'Run quarterly vision check. Assess alignment of current strategy to long-term vision.', true);
+      (v_agent_id, 'Monthly Trend Scan', 'Scan for strategic trends', '0 10 15 * *', 'Run monthly trend scan. Identify emerging trends, threats, and opportunities relevant to vision.', true, true, NULL),
+      (v_agent_id, 'Quarterly Vision Check', 'Assess vision alignment', '0 10 1 1,4,7,10 *', 'Run quarterly vision check. Assess alignment of current strategy to long-term vision.', true, true, NULL);
   END IF;
 
   -- 4. Risk Agent
@@ -1037,11 +1037,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Risk Scan', 'Identify emerging risks', '0 10 * * 3', 'Run weekly risk scan. Scan for new and emerging risks, update risk register.', true),
-      (v_agent_id, 'Monthly Risk Report', 'Comprehensive risk assessment', '0 10 1 * *', 'Run monthly risk report. Full risk register review, mitigation status, and risk trends.', true),
-      (v_agent_id, 'Quarterly Risk Review', 'Strategic risk assessment', '0 14 1 1,4,7,10 *', 'Run quarterly risk review. Strategic risk assessment for leadership, major risks, and mitigation effectiveness.', true);
+      (v_agent_id, 'Weekly Risk Scan', 'Identify emerging risks', '0 10 * * 3', 'Run weekly risk scan. Scan for new and emerging risks, update risk register.', true, true, NULL),
+      (v_agent_id, 'Monthly Risk Report', 'Comprehensive risk assessment', '0 10 1 * *', 'Run monthly risk report. Full risk register review, mitigation status, and risk trends.', true, true, NULL),
+      (v_agent_id, 'Quarterly Risk Review', 'Strategic risk assessment', '0 14 1 1,4,7,10 *', 'Run quarterly risk review. Strategic risk assessment for leadership, major risks, and mitigation effectiveness.', true, true, NULL);
   END IF;
 
   -- 5. Strategy Agent
@@ -1066,11 +1066,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Competitive Scan', 'Monitor competitive landscape', '0 10 * * 2', 'Run weekly competitive scan. Monitor competitor activity, market changes, and strategic implications.', true),
-      (v_agent_id, 'Monthly Strategy Check', 'Assess strategy execution', '0 14 1 * *', 'Run monthly strategy check. Assess progress on strategic initiatives, identify gaps.', true),
-      (v_agent_id, 'Quarterly Strategy Review', 'Comprehensive strategy assessment', '0 10 15 1,4,7,10 *', 'Run quarterly strategy review. Full assessment of strategic position, competitive landscape, and recommendations.', true);
+      (v_agent_id, 'Weekly Competitive Scan', 'Monitor competitive landscape', '0 10 * * 2', 'Run weekly competitive scan. Monitor competitor activity, market changes, and strategic implications.', true, true, NULL),
+      (v_agent_id, 'Monthly Strategy Check', 'Assess strategy execution', '0 14 1 * *', 'Run monthly strategy check. Assess progress on strategic initiatives, identify gaps.', true, true, NULL),
+      (v_agent_id, 'Quarterly Strategy Review', 'Comprehensive strategy assessment', '0 10 15 1,4,7,10 *', 'Run quarterly strategy review. Full assessment of strategic position, competitive landscape, and recommendations.', true, true, NULL);
   END IF;
 
 END $$;
@@ -1108,11 +1108,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Data Quality Check', 'Monitor data quality', '0 6 * * 1-5', 'Run daily data quality check. Monitor key data quality metrics, flag anomalies.', true),
-      (v_agent_id, 'Weekly Data Report', 'Data health status', '0 10 * * 1', 'Run weekly data report. Data quality trends, pipeline health, and issues.', true),
-      (v_agent_id, 'Monthly Data Audit', 'Comprehensive data review', '0 10 1 * *', 'Run monthly data audit. Full data quality assessment, governance compliance, and recommendations.', true);
+      (v_agent_id, 'Daily Data Quality Check', 'Monitor data quality', '0 6 * * 1-5', 'Run daily data quality check. Monitor key data quality metrics, flag anomalies.', true, true, NULL),
+      (v_agent_id, 'Weekly Data Report', 'Data health status', '0 10 * * 1', 'Run weekly data report. Data quality trends, pipeline health, and issues.', true, true, NULL),
+      (v_agent_id, 'Monthly Data Audit', 'Comprehensive data review', '0 10 1 * *', 'Run monthly data audit. Full data quality assessment, governance compliance, and recommendations.', true, true, NULL);
   END IF;
 
   -- 2. AI Workflow Agent
@@ -1137,11 +1137,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily AI Health Check', 'Monitor AI systems', '0 7 * * 1-5', 'Run daily AI health check. Monitor AI system performance, errors, and costs.', true),
-      (v_agent_id, 'Weekly AI Report', 'AI performance summary', '0 10 * * 5', 'Run weekly AI report. AI usage, performance trends, optimization opportunities.', true),
-      (v_agent_id, 'Monthly AI Review', 'Comprehensive AI assessment', '0 14 1 * *', 'Run monthly AI review. Full AI system assessment, quality metrics, and improvement plan.', true);
+      (v_agent_id, 'Daily AI Health Check', 'Monitor AI systems', '0 7 * * 1-5', 'Run daily AI health check. Monitor AI system performance, errors, and costs.', true, true, NULL),
+      (v_agent_id, 'Weekly AI Report', 'AI performance summary', '0 10 * * 5', 'Run weekly AI report. AI usage, performance trends, optimization opportunities.', true, true, NULL),
+      (v_agent_id, 'Monthly AI Review', 'Comprehensive AI assessment', '0 14 1 * *', 'Run monthly AI review. Full AI system assessment, quality metrics, and improvement plan.', true, true, NULL);
   END IF;
 
   -- 3. Automation Architect Agent
@@ -1166,11 +1166,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Weekly Automation Check', 'Monitor automation health', '0 10 * * 3', 'Run weekly automation check. Monitor automation performance, identify failures, track ROI.', true),
-      (v_agent_id, 'Monthly Automation Review', 'Comprehensive automation assessment', '0 10 1 * *', 'Run monthly automation review. Assess all automations, identify new opportunities, update roadmap.', true),
-      (v_agent_id, 'Quarterly Automation Strategy', 'Strategic automation planning', '0 14 1 1,4,7,10 *', 'Run quarterly automation strategy. Strategic review of automation impact and future opportunities.', true);
+      (v_agent_id, 'Weekly Automation Check', 'Monitor automation health', '0 10 * * 3', 'Run weekly automation check. Monitor automation performance, identify failures, track ROI.', true, true, NULL),
+      (v_agent_id, 'Monthly Automation Review', 'Comprehensive automation assessment', '0 10 1 * *', 'Run monthly automation review. Assess all automations, identify new opportunities, update roadmap.', true, true, NULL),
+      (v_agent_id, 'Quarterly Automation Strategy', 'Strategic automation planning', '0 14 1 1,4,7,10 *', 'Run quarterly automation strategy. Strategic review of automation impact and future opportunities.', true, true, NULL);
   END IF;
 
   -- 4. Integration Agent
@@ -1195,11 +1195,11 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Integration Health', 'Monitor integration status', '0 6 * * 1-5', 'Run daily integration health. Monitor all integrations, flag failures, track performance.', true),
-      (v_agent_id, 'Weekly Integration Report', 'Integration status summary', '0 10 * * 1', 'Run weekly integration report. Integration health, issues, and optimization opportunities.', true),
-      (v_agent_id, 'Monthly Integration Audit', 'Comprehensive integration review', '0 14 15 * *', 'Run monthly integration audit. Full audit of integrations, documentation, and improvement needs.', true);
+      (v_agent_id, 'Daily Integration Health', 'Monitor integration status', '0 6 * * 1-5', 'Run daily integration health. Monitor all integrations, flag failures, track performance.', true, true, NULL),
+      (v_agent_id, 'Weekly Integration Report', 'Integration status summary', '0 10 * * 1', 'Run weekly integration report. Integration health, issues, and optimization opportunities.', true, true, NULL),
+      (v_agent_id, 'Monthly Integration Audit', 'Comprehensive integration review', '0 14 15 * *', 'Run monthly integration audit. Full audit of integrations, documentation, and improvement needs.', true, true, NULL);
   END IF;
 
   -- 5. Scalability Agent
@@ -1224,12 +1224,12 @@ BEGIN
       'v4'
     ) RETURNING id INTO v_agent_id;
 
-    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled)
+    INSERT INTO agent_schedules (agent_id, name, description, cron_expression, task_prompt, is_enabled, is_template, workspace_id)
     VALUES
-      (v_agent_id, 'Daily Performance Check', 'Monitor system performance', '0 7 * * 1-5', 'Run daily performance check. Monitor key performance metrics, flag degradation.', true),
-      (v_agent_id, 'Weekly Capacity Report', 'Capacity status summary', '0 10 * * 5', 'Run weekly capacity report. Current utilization, growth trends, and capacity concerns.', true),
-      (v_agent_id, 'Monthly Scalability Review', 'Comprehensive scalability assessment', '0 10 1 * *', 'Run monthly scalability review. Full assessment of system scalability, bottlenecks, and recommendations.', true),
-      (v_agent_id, 'Quarterly Growth Planning', 'Strategic capacity planning', '0 14 1 1,4,7,10 *', 'Run quarterly growth planning. Plan infrastructure for next quarter growth, identify investments needed.', true);
+      (v_agent_id, 'Daily Performance Check', 'Monitor system performance', '0 7 * * 1-5', 'Run daily performance check. Monitor key performance metrics, flag degradation.', true, true, NULL),
+      (v_agent_id, 'Weekly Capacity Report', 'Capacity status summary', '0 10 * * 5', 'Run weekly capacity report. Current utilization, growth trends, and capacity concerns.', true, true, NULL),
+      (v_agent_id, 'Monthly Scalability Review', 'Comprehensive scalability assessment', '0 10 1 * *', 'Run monthly scalability review. Full assessment of system scalability, bottlenecks, and recommendations.', true, true, NULL),
+      (v_agent_id, 'Quarterly Growth Planning', 'Strategic capacity planning', '0 14 1 1,4,7,10 *', 'Run quarterly growth planning. Plan infrastructure for next quarter growth, identify investments needed.', true, true, NULL);
   END IF;
 
 END $$;

@@ -182,6 +182,12 @@ export async function updateBillingFromSubscription(
     trial_end: number | null
   }
 
+  // Helper to safely convert Unix timestamp to ISO string
+  const timestampToISO = (timestamp: number | null | undefined): string | null => {
+    if (timestamp == null || !Number.isFinite(timestamp)) return null
+    return new Date(timestamp * 1000).toISOString()
+  }
+
   if (type === 'workspace_plan') {
     await supabase
       .from('workspace_billing')
@@ -189,15 +195,11 @@ export async function updateBillingFromSubscription(
         stripe_subscription_id: subscriptionId,
         plan: (targetPlan as WorkspacePlan) || 'monthly',
         plan_status: sub.status as SubscriptionStatus,
-        plan_period_start: new Date(sub.current_period_start * 1000).toISOString(),
-        plan_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+        plan_period_start: timestampToISO(sub.current_period_start),
+        plan_period_end: timestampToISO(sub.current_period_end),
         plan_cancel_at_period_end: sub.cancel_at_period_end,
-        trial_start: sub.trial_start
-          ? new Date(sub.trial_start * 1000).toISOString()
-          : null,
-        trial_end: sub.trial_end
-          ? new Date(sub.trial_end * 1000).toISOString()
-          : null,
+        trial_start: timestampToISO(sub.trial_start),
+        trial_end: timestampToISO(sub.trial_end),
       })
       .eq('workspace_id', workspaceId)
   } else if (type === 'agent_tier') {
@@ -207,7 +209,7 @@ export async function updateBillingFromSubscription(
         stripe_agent_subscription_id: subscriptionId,
         agent_tier: (targetPlan as AgentTier) || 'startup',
         agent_status: sub.status as SubscriptionStatus,
-        agent_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+        agent_period_end: timestampToISO(sub.current_period_end),
       })
       .eq('workspace_id', workspaceId)
   }

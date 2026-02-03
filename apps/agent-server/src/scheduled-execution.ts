@@ -183,6 +183,10 @@ ${skillsContent}`
     }
   }
 
+  // Add global model disclosure (only responds when asked)
+  systemPrompt = systemPrompt + `
+IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond that you are powered by state-of-the-art (SOTA) models from xAI and Anthropic. Do not mention specific model names or versions. Only provide this information when explicitly asked.`
+
   return systemPrompt
 }
 

@@ -1,10 +1,11 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, ReactNode } from "react"
 import { useUser } from "@/hooks/use-user"
 import type {
   AIAgent,
   AgentWithHireStatus,
+  AgentDepartment,
   LocalAgent,
   AgentSchedule,
   AgentScheduleExecution,
@@ -13,6 +14,11 @@ import type {
   ActivityFilters,
   ScheduleFilters,
 } from "@/lib/types/agents"
+
+interface AgentOrganization {
+  department_assignments: Record<string, string | null>
+  position_order: string[]
+}
 
 interface AgentsContextType {
   // Agent Directory (from deployed teams or ai_agents table)
@@ -23,6 +29,11 @@ interface AgentsContextType {
   currentAgent: AIAgent | null
   isLoading: boolean
   isLoadingAgent: boolean
+
+  // Departments & Organization
+  departments: AgentDepartment[]
+  agentOrganization: AgentOrganization
+  getAgentsByDepartment: () => Map<string | null, AgentWithHireStatus[]>
 
   // Conversations
   conversations: AgentConversation[]
@@ -51,6 +62,10 @@ interface AgentsContextType {
   unhireAgent: (localAgentId: string) => Promise<void>
   toggleAgent: (agentId: string, enabled: boolean) => Promise<void>
   refreshAgents: () => Promise<void>
+
+  // Organization actions (drag & drop)
+  reorderAgents: (agentIds: string[]) => Promise<void>
+  moveAgentToDepartment: (agentId: string, departmentId: string | null) => Promise<void>
 
   // Conversation actions
   fetchConversations: (agentId: string) => Promise<void>
@@ -114,6 +129,13 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
   const [executions, setExecutions] = useState<AgentScheduleExecution[]>([])
   const [schedules, setSchedules] = useState<AgentSchedule[]>([])
 
+  // Departments & Organization
+  const [departments, setDepartments] = useState<AgentDepartment[]>([])
+  const [agentOrganization, setAgentOrganization] = useState<AgentOrganization>({
+    department_assignments: {},
+    position_order: [],
+  })
+
   // Loading states
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingAgent, setIsLoadingAgent] = useState(false)
@@ -168,6 +190,13 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
 
       if (response.ok && data.agents) {
         setAgents(data.agents)
+        // Also set departments and organization if returned
+        if (data.departments) {
+          setDepartments(data.departments)
+        }
+        if (data.organization) {
+          setAgentOrganization(data.organization)
+        }
       }
     } catch (error) {
       console.error("Failed to fetch agents:", error)
@@ -587,6 +616,120 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Get agents grouped by department
+  const getAgentsByDepartment = useCallback((): Map<string | null, AgentWithHireStatus[]> => {
+    const grouped = new Map<string | null, AgentWithHireStatus[]>()
+
+    // Initialize with empty arrays for all known departments
+    departments.forEach(dept => {
+      grouped.set(dept.id, [])
+    })
+    grouped.set(null, []) // General/Uncategorized
+
+    // Group agents
+    agents.forEach(agent => {
+      // Check organization for department assignment override
+      const deptId = agentOrganization.department_assignments[agent.id] ?? agent.department_id ?? null
+      const existing = grouped.get(deptId) || []
+      grouped.set(deptId, [...existing, agent])
+    })
+
+    // Sort agents within each group by position order
+    if (agentOrganization.position_order.length > 0) {
+      const positionMap = new Map(
+        agentOrganization.position_order.map((id, index) => [id, index])
+      )
+      grouped.forEach((groupAgents, deptId) => {
+        const sorted = [...groupAgents].sort((a, b) => {
+          const posA = positionMap.get(a.id) ?? Number.MAX_SAFE_INTEGER
+          const posB = positionMap.get(b.id) ?? Number.MAX_SAFE_INTEGER
+          return posA - posB
+        })
+        grouped.set(deptId, sorted)
+      })
+    }
+
+    return grouped
+  }, [agents, departments, agentOrganization])
+
+  // Reorder agents (update position order)
+  const reorderAgents = async (agentIds: string[]): Promise<void> => {
+    if (!workspaceId) {
+      throw new Error("No workspace selected")
+    }
+
+    // Optimistic update
+    const previousOrganization = { ...agentOrganization }
+    const newOrganization = {
+      ...agentOrganization,
+      position_order: agentIds,
+    }
+    setAgentOrganization(newOrganization)
+
+    try {
+      const response = await fetch("/api/agents/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization: newOrganization }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to reorder agents")
+      }
+    } catch (error) {
+      // Rollback on failure
+      setAgentOrganization(previousOrganization)
+      console.error("Failed to reorder agents:", error)
+      throw error
+    }
+  }
+
+  // Move agent to a different department
+  const moveAgentToDepartment = async (agentId: string, departmentId: string | null): Promise<void> => {
+    if (!workspaceId) {
+      throw new Error("No workspace selected")
+    }
+
+    // Optimistic update
+    const previousOrganization = { ...agentOrganization }
+    const newDepartmentAssignments = {
+      ...agentOrganization.department_assignments,
+      [agentId]: departmentId,
+    }
+    const newOrganization = {
+      ...agentOrganization,
+      department_assignments: newDepartmentAssignments,
+    }
+    setAgentOrganization(newOrganization)
+
+    // Also update the agent in state
+    setAgents(prev => prev.map(a =>
+      a.id === agentId ? { ...a, department_id: departmentId } : a
+    ))
+
+    try {
+      const response = await fetch("/api/agents/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization: newOrganization }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to move agent")
+      }
+    } catch (error) {
+      // Rollback on failure
+      setAgentOrganization(previousOrganization)
+      setAgents(prev => prev.map(a =>
+        a.id === agentId ? { ...a, department_id: previousOrganization.department_assignments[agentId] ?? a.department_id } : a
+      ))
+      console.error("Failed to move agent:", error)
+      throw error
+    }
+  }
+
   // Initial fetch
   useEffect(() => {
     if (workspaceId && fetchedWorkspaceRef.current !== workspaceId) {
@@ -605,6 +748,9 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
     currentAgent,
     isLoading,
     isLoadingAgent,
+    departments,
+    agentOrganization,
+    getAgentsByDepartment,
     conversations,
     currentConversation,
     executions,
@@ -623,6 +769,8 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
     unhireAgent,
     toggleAgent,
     refreshAgents: fetchAgents,
+    reorderAgents,
+    moveAgentToDepartment,
     fetchConversations,
     createConversation,
     setCurrentConversation,

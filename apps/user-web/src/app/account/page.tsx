@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Loader2, Trash2, Upload, Building2, Shield, Crown, UserIcon, Bell, CreditCard, RotateCcw } from "lucide-react"
+import { Loader2, Trash2, Upload, Building2, Shield, Crown, UserIcon, Bell, CreditCard, RotateCcw, Globe } from "lucide-react"
 import type { IndustryType } from "@/lib/types"
 import { INDUSTRY_TYPE_LABELS, INDUSTRY_TYPE_DESCRIPTIONS } from "@/lib/types"
 import {
@@ -40,6 +40,7 @@ import {
   type ProductId,
 } from "@/components/team"
 import { NotificationsContent } from "@/components/notifications/notifications-content"
+import { TimezoneSelect } from "@/components/team/settings/timezone-select"
 
 // Section Header Component
 function SectionHeader({
@@ -123,6 +124,8 @@ function AccountPageContent() {
   const [phone, setPhone] = useState("")
   const [companyName, setCompanyName] = useState("")
   const [industryType, setIndustryType] = useState<IndustryType>("general")
+  const [workspaceTimezone, setWorkspaceTimezone] = useState("UTC")
+  const [timezoneLoading, setTimezoneLoading] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
@@ -164,6 +167,13 @@ function AccountPageContent() {
       if (invitesRes.ok) {
         const invites = await invitesRes.json()
         setPendingInvites(invites)
+      }
+
+      // Fetch workspace settings including timezone
+      const workspaceRes = await fetch(`/api/team/workspace?workspaceId=${workspaceId}`)
+      if (workspaceRes.ok) {
+        const workspace = await workspaceRes.json()
+        setWorkspaceTimezone(workspace.timezone || "UTC")
       }
     } catch (error) {
       console.error("Failed to fetch team data:", error)
@@ -231,6 +241,33 @@ function AccountPageContent() {
       throw new Error(data.error || "Failed to remove member")
     }
     setTeamMembers((prev) => prev.filter((m) => m.id !== memberId))
+  }
+
+  const handleTimezoneChange = async (newTimezone: string) => {
+    if (!workspaceId || currentUserRole !== "owner") return
+
+    setWorkspaceTimezone(newTimezone)
+    setTimezoneLoading(true)
+
+    try {
+      const res = await fetch("/api/team/workspace", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, timezone: newTimezone }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        console.error("Failed to update timezone:", data.error)
+        // Revert on error
+        fetchTeamData()
+      }
+    } catch (error) {
+      console.error("Error updating timezone:", error)
+      fetchTeamData()
+    } finally {
+      setTimezoneLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -574,6 +611,28 @@ function AccountPageContent() {
                       ))}
                     </SelectContent>
                   </Select>
+                </FormRow>
+
+                <FormRow
+                  label="Workspace Timezone"
+                  description={
+                    currentUserRole === "owner"
+                      ? "Affects all scheduled agent tasks for your team"
+                      : "Set by workspace owner. Affects all scheduled agent tasks."
+                  }
+                >
+                  <div className="max-w-xs">
+                    <TimezoneSelect
+                      value={workspaceTimezone}
+                      onValueChange={handleTimezoneChange}
+                      disabled={currentUserRole !== "owner" || timezoneLoading}
+                    />
+                    {currentUserRole !== "owner" && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Only workspace owners can change the timezone
+                      </p>
+                    )}
+                  </div>
                 </FormRow>
 
                 {profileMessage && (

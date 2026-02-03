@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
 import { getSession } from "@dreamteam/auth/session"
 import { getNextRunTime, isValidCron } from "@/lib/cron-utils"
+import { mapToolNamesToCategories } from "@/lib/agent-tool-mapping"
+import { resolveWorkspaceAgent } from "@/lib/workspace-agent"
 
 // GET /api/agents/schedules/[id] - Get a single schedule with agent details
 export async function GET(
@@ -31,27 +33,26 @@ export async function GET(
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 })
     }
 
-    // Verify user has access to the agent (via workspace membership)
-    const { data: hiredAgent } = await supabase
-      .from("agents")
-      .select("workspace_id")
-      .eq("ai_agent_id", schedule.agent_id)
+    const workspaceId = schedule.workspace_id as string | null
+    if (!workspaceId) {
+      return NextResponse.json(
+        { error: "Schedule missing workspace context" },
+        { status: 400 }
+      )
+    }
+
+    const { data: membership } = await supabase
+      .from("workspace_members")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("profile_id", session.id)
       .single()
 
-    if (hiredAgent) {
-      const { data: membership } = await supabase
-        .from("workspace_members")
-        .select("id")
-        .eq("workspace_id", hiredAgent.workspace_id)
-        .eq("profile_id", session.id)
-        .single()
-
-      if (!membership) {
-        return NextResponse.json(
-          { error: "Not authorized to view this schedule" },
-          { status: 403 }
-        )
-      }
+    if (!membership) {
+      return NextResponse.json(
+        { error: "Not authorized to view this schedule" },
+        { status: 403 }
+      )
     }
 
     return NextResponse.json({ schedule })
@@ -89,24 +90,18 @@ export async function POST(
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 })
     }
 
-    // Verify user has access to the agent (via workspace membership)
-    const { data: hiredAgent } = await supabase
-      .from("agents")
-      .select("id, workspace_id, tools, system_prompt, reports_to, style_presets, custom_instructions")
-      .eq("ai_agent_id", schedule.agent_id)
-      .single()
-
-    if (!hiredAgent) {
+    const workspaceId = schedule.workspace_id as string | null
+    if (!workspaceId) {
       return NextResponse.json(
-        { error: "Agent not found in workspace" },
-        { status: 404 }
+        { error: "Schedule missing workspace context" },
+        { status: 400 }
       )
     }
 
     const { data: membership } = await supabase
       .from("workspace_members")
       .select("id")
-      .eq("workspace_id", hiredAgent.workspace_id)
+      .eq("workspace_id", workspaceId)
       .eq("profile_id", session.id)
       .single()
 
@@ -114,6 +109,19 @@ export async function POST(
       return NextResponse.json(
         { error: "Not authorized to run this schedule" },
         { status: 403 }
+      )
+    }
+
+    const resolvedAgent = await resolveWorkspaceAgent({
+      workspaceId,
+      aiAgentId: schedule.agent_id,
+      supabase,
+    })
+
+    if (!resolvedAgent.isEnabled) {
+      return NextResponse.json(
+        { error: "Agent not enabled in this workspace" },
+        { status: 404 }
       )
     }
 
@@ -134,95 +142,9 @@ export async function POST(
       ?.map((t: { tool: { name: string } | null }) => t.tool?.name)
       .filter(Boolean) as string[]) || []
 
-    // Map granular tool names (project_list, task_create) to category names (projects, projectTasks)
-    // that buildAgentTools expects. Only categories with factories will work:
-    // projects, projectTasks, teamMembers, transactions, budgets, accounts, goals,
-    // webSearch, dataExport, leads, opportunities, tasks, knowledge, memory
-    const toolCategoryMap: Record<string, string> = {
-      // Project tools → projects
-      project_list: "projects",
-      project_get: "projects",
-      project_create: "projects",
-      project_update: "projects",
-      project_delete: "projects",
-      project_archive: "projects",
-      project_add_member: "projects",
-      project_remove_member: "projects",
-      project_get_members: "projects",
-      project_get_progress: "projects",
-      project_get_activity: "projects",
-      // Task tools → projectTasks
-      task_list: "projectTasks",
-      task_get: "projectTasks",
-      task_create: "projectTasks",
-      task_update: "projectTasks",
-      task_delete: "projectTasks",
-      task_assign: "projectTasks",
-      task_unassign: "projectTasks",
-      task_change_status: "projectTasks",
-      task_add_dependency: "projectTasks",
-      task_remove_dependency: "projectTasks",
-      task_add_label: "projectTasks",
-      task_remove_label: "projectTasks",
-      task_get_by_assignee: "projectTasks",
-      task_get_overdue: "projectTasks",
-      task_get_my_tasks: "projectTasks",
-      task_add_comment: "projectTasks",
-      task_get_comments: "projectTasks",
-      // Team member tools → teamMembers
-      team_member_list: "teamMembers",
-      team_member_get: "teamMembers",
-      team_member_get_workload: "teamMembers",
-      team_member_get_availability: "teamMembers",
-      // CRM tools
-      lead_list: "leads",
-      lead_get: "leads",
-      lead_create: "leads",
-      lead_update: "leads",
-      opportunity_list: "opportunities",
-      opportunity_get: "opportunities",
-      opportunity_create: "opportunities",
-      opportunity_update: "opportunities",
-      // Finance tools
-      transaction_list: "transactions",
-      transaction_get: "transactions",
-      budget_list: "budgets",
-      budget_get: "budgets",
-      account_list: "accounts",
-      account_get: "accounts",
-      goal_list: "goals",
-      goal_get: "goals",
-      // Other tools
-      web_search: "webSearch",
-      data_export: "dataExport",
-      knowledge_search: "knowledge",
-      knowledge_create: "knowledge",
-      memory_store: "memory",
-      memory_recall: "memory",
-    }
-
-    // Convert granular names to categories and dedupe
-    const mappedCategories = [...new Set(
-      rawToolNames.map(name => toolCategoryMap[name] || name)
-    )]
-
-    // If agent has project/task tools, also enable teamMembers for capacity checks
-    // This ensures operations agents can query workloads even without explicit team_member_* tools
-    const hasProjectTools = mappedCategories.includes("projects") || mappedCategories.includes("projectTasks")
-    if (hasProjectTools && !mappedCategories.includes("teamMembers")) {
-      mappedCategories.push("teamMembers")
-    }
-
-    // Filter to only categories that have factories in buildAgentTools
-    const validCategories = [
-      "transactions", "budgets", "accounts", "goals", "webSearch", "dataExport",
-      "leads", "opportunities", "tasks", "knowledge",
-      "projects", "projectTasks", "teamMembers", "memory"
-    ]
-    const toolCategories = mappedCategories.filter(cat => validCategories.includes(cat))
+    const toolCategories = mapToolNamesToCategories(rawToolNames)
 
     console.log("[ScheduleRun] Raw tool names:", rawToolNames.slice(0, 10))
-    console.log("[ScheduleRun] Mapped categories (before filter):", mappedCategories)
     console.log("[ScheduleRun] Final tool categories:", toolCategories)
 
     // Import and run the execution
@@ -249,13 +171,16 @@ export async function POST(
     // Execute the task
     try {
       const systemPrompt =
-        hiredAgent.system_prompt ||
+        resolvedAgent.legacyAgent?.system_prompt ||
+        resolvedAgent.deploymentAgent?.system_prompt ||
         schedule.ai_agent?.system_prompt ||
         "You are a helpful AI assistant."
 
       // Get provider and model from AI agent config
-      const provider = (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) || "anthropic"
-      const model = schedule.ai_agent?.model || undefined
+      const provider = (resolvedAgent.deploymentAgent?.provider as "anthropic" | "xai" | undefined) ||
+        (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) ||
+        "anthropic"
+      const model = resolvedAgent.deploymentAgent?.model || schedule.ai_agent?.model || undefined
 
       // #region agent log
       fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'schedules/[id]/route:manual-run',message:'Manual schedule run with provider',data:{scheduleId:id,scheduleName:schedule.name,rawProvider:schedule.ai_agent?.provider,resolvedProvider:provider,model,hasXaiKey:!!process.env.XAI_API_KEY,hasAnthropicKey:!!process.env.ANTHROPIC_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'manual-run',hypothesisId:'D-manual-run'})}).catch(()=>{});
@@ -271,12 +196,12 @@ export async function POST(
         taskPrompt: schedule.task_prompt,
         systemPrompt,
         tools: toolCategories,  // Use mapped category names that buildAgentTools expects
-        workspaceId: hiredAgent.workspace_id,
+        workspaceId,
         supabase,
         provider,
         model,
-        stylePresets: hiredAgent.style_presets as Record<string, unknown> | null,
-        customInstructions: hiredAgent.custom_instructions as string | null,
+        stylePresets: resolvedAgent.legacyAgent?.style_presets as Record<string, unknown> | null,
+        customInstructions: resolvedAgent.legacyAgent?.custom_instructions as string | null,
       })
 
       // Update execution as completed
@@ -299,20 +224,20 @@ export async function POST(
       let recipientIds: string[] = []
       let recipientSource: string = 'none'
 
-      if (hiredAgent.reports_to && hiredAgent.reports_to.length > 0) {
-        recipientIds = hiredAgent.reports_to
+      if (resolvedAgent.legacyAgent?.reports_to && resolvedAgent.legacyAgent.reports_to.length > 0) {
+        recipientIds = resolvedAgent.legacyAgent.reports_to
         recipientSource = 'reports_to'
       } else if (schedule.created_by) {
         recipientIds = [schedule.created_by]
         recipientSource = 'schedule_created_by'
       } else {
         // Fallback to workspace admins
-        recipientIds = await getWorkspaceAdminIds(hiredAgent.workspace_id, supabase)
+        recipientIds = await getWorkspaceAdminIds(workspaceId, supabase)
         recipientSource = 'workspace_admins'
 
         // Final fallback: workspace owner specifically
         if (recipientIds.length === 0) {
-          const ownerId = await getWorkspaceOwnerId(hiredAgent.workspace_id, supabase)
+          const ownerId = await getWorkspaceOwnerId(workspaceId, supabase)
           if (ownerId) {
             recipientIds = [ownerId]
             recipientSource = 'workspace_owner'
@@ -335,9 +260,11 @@ export async function POST(
 
       for (const recipientId of recipientIds) {
         const msgResult = await sendAgentMessage({
-          agentId: hiredAgent.id,
+          agentId: resolvedAgent.legacyAgent?.id,
+          agentProfileId: resolvedAgent.agentProfileId ?? undefined,
+          aiAgentId: schedule.agent_id,
           recipientProfileId: recipientId,
-          workspaceId: hiredAgent.workspace_id,
+          workspaceId,
           content,
           supabase,
         })
@@ -397,7 +324,7 @@ export async function PATCH(
     // Get the schedule
     const { data: schedule, error: fetchError } = await supabase
       .from("agent_schedules")
-      .select("id, agent_id")
+      .select("id, agent_id, workspace_id")
       .eq("id", id)
       .single()
 
@@ -405,27 +332,26 @@ export async function PATCH(
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 })
     }
 
-    // Verify user has access to the agent (via workspace membership)
-    const { data: hiredAgent } = await supabase
-      .from("agents")
-      .select("workspace_id")
-      .eq("ai_agent_id", schedule.agent_id)
+    const workspaceId = schedule.workspace_id as string | null
+    if (!workspaceId) {
+      return NextResponse.json(
+        { error: "Schedule missing workspace context" },
+        { status: 400 }
+      )
+    }
+
+    const { data: membership } = await supabase
+      .from("workspace_members")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("profile_id", session.id)
       .single()
 
-    if (hiredAgent) {
-      const { data: membership } = await supabase
-        .from("workspace_members")
-        .select("id")
-        .eq("workspace_id", hiredAgent.workspace_id)
-        .eq("profile_id", session.id)
-        .single()
-
-      if (!membership) {
-        return NextResponse.json(
-          { error: "Not authorized to update this schedule" },
-          { status: 403 }
-        )
-      }
+    if (!membership) {
+      return NextResponse.json(
+        { error: "Not authorized to update this schedule" },
+        { status: 403 }
+      )
     }
 
     // Update the schedule
@@ -478,7 +404,7 @@ export async function PUT(
     // Get the schedule
     const { data: schedule, error: fetchError } = await supabase
       .from("agent_schedules")
-      .select("id, agent_id, created_by")
+      .select("id, agent_id, created_by, workspace_id")
       .eq("id", id)
       .single()
 
@@ -486,17 +412,11 @@ export async function PUT(
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 })
     }
 
-    // Verify user has access to the agent (via workspace membership)
-    const { data: hiredAgent } = await supabase
-      .from("agents")
-      .select("workspace_id, created_by")
-      .eq("ai_agent_id", schedule.agent_id)
-      .single()
-
-    if (!hiredAgent) {
+    const workspaceId = schedule.workspace_id as string | null
+    if (!workspaceId) {
       return NextResponse.json(
-        { error: "Agent not found in workspace" },
-        { status: 404 }
+        { error: "Schedule missing workspace context" },
+        { status: 400 }
       )
     }
 
@@ -504,7 +424,7 @@ export async function PUT(
     const { data: membership } = await supabase
       .from("workspace_members")
       .select("role")
-      .eq("workspace_id", hiredAgent.workspace_id)
+      .eq("workspace_id", workspaceId)
       .eq("profile_id", session.id)
       .single()
 
@@ -583,7 +503,7 @@ export async function DELETE(
     // Get the schedule
     const { data: schedule, error: fetchError } = await supabase
       .from("agent_schedules")
-      .select("id, agent_id, created_by")
+      .select("id, agent_id, created_by, workspace_id")
       .eq("id", id)
       .single()
 
@@ -591,17 +511,11 @@ export async function DELETE(
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 })
     }
 
-    // Verify user has access to the agent (via workspace membership)
-    const { data: hiredAgent } = await supabase
-      .from("agents")
-      .select("workspace_id")
-      .eq("ai_agent_id", schedule.agent_id)
-      .single()
-
-    if (!hiredAgent) {
+    const workspaceId = schedule.workspace_id as string | null
+    if (!workspaceId) {
       return NextResponse.json(
-        { error: "Agent not found in workspace" },
-        { status: 404 }
+        { error: "Schedule missing workspace context" },
+        { status: 400 }
       )
     }
 
@@ -609,7 +523,7 @@ export async function DELETE(
     const { data: membership } = await supabase
       .from("workspace_members")
       .select("role")
-      .eq("workspace_id", hiredAgent.workspace_id)
+      .eq("workspace_id", workspaceId)
       .eq("profile_id", session.id)
       .single()
 

@@ -21,3 +21,7 @@ export {
   type Customizations,
 } from './auto-deploy'
 
+// Schedule templates
+export { cloneScheduleTemplatesForDeployment } from './schedule-templates'
+export { ensureAgentResourcesForDeployment } from './agent-resources'
+export { provisionDeploymentResources } from './deployment-resources'

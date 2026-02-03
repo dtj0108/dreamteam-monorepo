@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, ChevronDown, Clock } from "lucide-react";
+import { Check, ChevronDown, Clock, Loader2 } from "lucide-react";
 import { Header } from "@/components/marketing/header-navigation/header";
 import { DreamTeamLogo } from "@/components/foundations/logo/dreamteam-logo";
 import { Button } from "@/components/base/buttons/button";
@@ -80,29 +80,8 @@ const footerNavList = [
     },
 ];
 
-// Workspace plans (Monthly + Annual)
-const workspacePlans = [
-    {
-        id: "monthly",
-        name: "Monthly",
-        price: 49,
-        period: "/month",
-        subtext: "Billed monthly",
-        popular: false,
-        savings: "Cancel anytime",
-    },
-    {
-        id: "annual",
-        name: "Annual",
-        price: 39,
-        period: "/month",
-        subtext: "$468/year, billed annually",
-        popular: true,
-        savings: "Save 20% vs monthly",
-    },
-];
-
-const workspaceFeatures = [
+// Default workspace features (used when API fails to load)
+const defaultWorkspaceFeatures = [
     "All 5 products (Finance, Sales, Team, Projects, Knowledge)",
     "Unlimited accounts & transactions",
     "Analytics & reporting",
@@ -110,70 +89,6 @@ const workspaceFeatures = [
     "Up to 10 users included",
     "+$10/mo per additional user",
     "Priority support",
-];
-
-// Agent tiers with organizational expansion model
-const agentTiers = [
-    {
-        id: "startup",
-        name: "Lean Startup",
-        price: 3000,
-        priceDisplay: "$3K",
-        agentCount: 7,
-        humanEquivalent: "$840K",
-        tagline: "You + a few killers in one room",
-        description: "What should I do, and how do I actually do it?",
-        popular: false,
-        departments: [
-            { name: "Leadership", agents: ["Founder Agent"] },
-            { name: "Execution", agents: ["Operations Agent"] },
-            { name: "Sales", agents: ["Sales Agent"] },
-            { name: "Marketing", agents: ["Marketing Agent"] },
-            { name: "Finance", agents: ["Finance Agent"] },
-            { name: "Systems", agents: ["Systems Agent"] },
-            { name: "People", agents: ["Performance Agent"] },
-        ],
-    },
-    {
-        id: "teams",
-        name: "Department Teams",
-        price: 5000,
-        priceDisplay: "$5K",
-        agentCount: 18,
-        humanEquivalent: "$2.2M",
-        tagline: "Now you've got specialists",
-        description: "How do I make this run smoother and make more money?",
-        popular: true,
-        departments: [
-            { name: "Leadership", agents: ["Vision Agent", "Decision Agent", "Planning Agent"] },
-            { name: "Execution", agents: ["Task Breakdown Agent", "Process Agent", "Accountability Agent"] },
-            { name: "Sales", agents: ["Script Agent", "Objection Agent", "Follow-Up Agent"] },
-            { name: "Marketing", agents: ["Messaging Agent", "Content Agent", "Funnel Agent"] },
-            { name: "Finance", agents: ["Cash Flow Agent", "Pricing Agent"] },
-            { name: "Systems", agents: ["Automation Agent", "Tooling Agent"] },
-            { name: "People", agents: ["Focus Agent", "Energy Agent"] },
-        ],
-    },
-    {
-        id: "enterprise",
-        name: "Enterprise Dream Team",
-        price: 10000,
-        priceDisplay: "$10K",
-        agentCount: 38,
-        humanEquivalent: "$4.6M",
-        tagline: "This is unfair",
-        description: "How do I build something big without burning out?",
-        popular: false,
-        departments: [
-            { name: "Leadership", agents: ["CEO Agent", "Strategy Agent", "Risk Agent", "Priority Agent", "Long-Term Vision Agent"] },
-            { name: "Execution", agents: ["Program Manager Agent", "Workflow Architect Agent", "Bottleneck Detector Agent", "SOP Agent", "QA Agent", "Execution Monitor Agent"] },
-            { name: "Sales", agents: ["Sales Strategist Agent", "Pipeline Agent", "Objection Intelligence Agent", "Deal Review Agent", "Follow-Up Automation Agent", "Revenue Forecast Agent"] },
-            { name: "Marketing", agents: ["Brand Agent", "Growth Experiments Agent", "Content Strategy Agent", "Distribution Agent", "Funnel Optimization Agent", "Analytics Agent"] },
-            { name: "Finance", agents: ["CFO Agent", "Forecasting Agent", "Unit Economics Agent", "Capital Allocation Agent", "Exit / M&A Agent"] },
-            { name: "Systems", agents: ["Automation Architect Agent", "AI Workflow Agent", "Data Agent", "Integration Agent", "Scalability Agent"] },
-            { name: "People", agents: ["Hiring Agent", "Org Design Agent", "Leadership Coach Agent", "Burnout Prevention Agent", "Talent Optimization Agent"] },
-        ],
-    },
 ];
 
 // Expandable Department Component
@@ -374,43 +289,39 @@ export function PricingContent() {
         fetchPlans();
     }, []);
 
-    // Transform API plans to display format (with fallback to hardcoded)
-    const displayWorkspacePlans = fetchedWorkspacePlans.length > 0
-        ? fetchedWorkspacePlans.map(plan => ({
-            id: plan.slug,
-            name: plan.name,
-            price: plan.price_monthly ? plan.price_monthly / 100 : 0,
-            period: "/month" as const,
-            subtext: plan.slug === 'annual'
-                ? `$${plan.price_yearly ? plan.price_yearly / 100 : 0}/year, billed annually`
-                : "Billed monthly",
-            popular: plan.display_config.badge_text === 'Best Value',
-            savings: plan.display_config.savings_text || (plan.slug === 'monthly' ? "Cancel anytime" : ""),
-            isComingSoon: plan.is_coming_soon,
-            features: plan.features,
-        }))
-        : workspacePlans.map(p => ({ ...p, isComingSoon: false, features: workspaceFeatures }));
+    // Transform API plans to display format
+    const displayWorkspacePlans = fetchedWorkspacePlans.map(plan => ({
+        id: plan.slug,
+        name: plan.name,
+        price: plan.price_monthly ? plan.price_monthly / 100 : 0,
+        period: "/month" as const,
+        subtext: plan.slug === 'annual'
+            ? `$${plan.price_yearly ? plan.price_yearly / 100 : 0}/year, billed annually`
+            : "Billed monthly",
+        popular: plan.display_config.badge_text === 'Best Value',
+        savings: plan.display_config.savings_text || (plan.slug === 'monthly' ? "Cancel anytime" : ""),
+        isComingSoon: plan.is_coming_soon,
+        features: plan.features,
+    }));
 
-    const displayAgentTiers = fetchedAgentTiers.length > 0
-        ? fetchedAgentTiers.map(plan => ({
-            id: plan.slug,
-            name: plan.name,
-            price: plan.price_monthly ? plan.price_monthly / 100 : 0,
-            priceDisplay: plan.price_monthly ? `$${Math.round(plan.price_monthly / 100 / 1000)}K` : "$0",
-            agentCount: plan.display_config.agent_count || 0,
-            humanEquivalent: plan.display_config.human_equivalent || "",
-            tagline: plan.display_config.tagline || "",
-            description: plan.description || "",
-            popular: plan.display_config.badge_text === 'Most Popular',
-            departments: plan.display_config.departments || [],
-            isComingSoon: plan.is_coming_soon,
-        }))
-        : agentTiers.map(t => ({ ...t, isComingSoon: false }));
+    const displayAgentTiers = fetchedAgentTiers.map(plan => ({
+        id: plan.slug,
+        name: plan.name,
+        price: plan.price_monthly ? plan.price_monthly / 100 : 0,
+        priceDisplay: plan.price_monthly ? `$${Math.round(plan.price_monthly / 100 / 1000)}K` : "$0",
+        agentCount: plan.display_config.agent_count || 0,
+        humanEquivalent: plan.display_config.human_equivalent || "",
+        tagline: plan.display_config.tagline || "",
+        description: plan.description || "",
+        popular: plan.display_config.badge_text === 'Most Popular',
+        departments: plan.display_config.departments || [],
+        isComingSoon: plan.is_coming_soon,
+    }));
 
-    // Use fetched features or fallback
+    // Use fetched features or fallback to defaults
     const displayWorkspaceFeatures = fetchedWorkspacePlans.length > 0 && fetchedWorkspacePlans[0]?.features.length > 0
         ? fetchedWorkspacePlans[0].features
-        : workspaceFeatures;
+        : defaultWorkspaceFeatures;
 
     return (
         <div className="min-h-screen bg-bg-primary">
@@ -452,7 +363,29 @@ export function PricingContent() {
 
                     {/* Two Workspace Cards */}
                     <div className="mx-auto grid max-w-3xl grid-cols-1 gap-6 md:grid-cols-2">
-                        {displayWorkspacePlans.map((plan) => (
+                        {!plansLoaded ? (
+                            // Loading skeletons
+                            <>
+                                {[1, 2].map((i) => (
+                                    <div key={i} className="relative flex flex-col rounded-2xl p-6 bg-bg-primary ring-1 ring-border-secondary shadow-md animate-pulse">
+                                        <div className="h-6 w-24 bg-gray-200 rounded mb-2" />
+                                        <div className="h-4 w-32 bg-gray-200 rounded mb-4" />
+                                        <div className="h-10 w-20 bg-gray-200 rounded mb-4" />
+                                        <div className="h-10 w-full bg-gray-200 rounded mb-5" />
+                                        <div className="space-y-2">
+                                            {[1, 2, 3, 4, 5].map((j) => (
+                                                <div key={j} className="h-4 bg-gray-200 rounded w-full" />
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </>
+                        ) : displayWorkspacePlans.length === 0 ? (
+                            // No plans loaded - show message
+                            <div className="col-span-2 text-center py-8 text-text-tertiary">
+                                <p>Pricing plans are being configured. Please check back soon.</p>
+                            </div>
+                        ) : displayWorkspacePlans.map((plan) => (
                             <div
                                 key={plan.id}
                                 className={cx(
@@ -549,7 +482,7 @@ export function PricingContent() {
                     </div>
 
                     {/* Agent Count Comparison */}
-                    {displayAgentTiers.length >= 3 && (
+                    {plansLoaded && displayAgentTiers.length >= 3 && (
                         <div className="mb-10 flex items-center justify-center gap-2 text-center">
                             <span className="text-2xl font-bold text-text-primary">{displayAgentTiers[0]?.agentCount || 7}</span>
                             <span className="text-text-tertiary">→</span>
@@ -565,9 +498,34 @@ export function PricingContent() {
 
                     {/* Agent Tier Cards */}
                     <div className="grid gap-6 lg:grid-cols-3">
-                        {displayAgentTiers.map((tier) => (
-                            <AgentTierCard key={tier.id} tier={tier} />
-                        ))}
+                        {!plansLoaded ? (
+                            // Loading skeletons for agent tiers
+                            <>
+                                {[1, 2, 3].map((i) => (
+                                    <div key={i} className="relative flex flex-col rounded-2xl p-6 bg-bg-primary ring-1 ring-border-secondary shadow-md animate-pulse">
+                                        <div className="h-6 w-32 bg-gray-200 rounded mb-4" />
+                                        <div className="h-10 w-20 bg-gray-200 rounded mb-2" />
+                                        <div className="h-8 w-16 bg-gray-200 rounded mb-4" />
+                                        <div className="h-20 bg-gray-200 rounded mb-4" />
+                                        <div className="flex-1 space-y-2">
+                                            {[1, 2, 3, 4, 5, 6, 7].map((j) => (
+                                                <div key={j} className="h-4 bg-gray-200 rounded w-full" />
+                                            ))}
+                                        </div>
+                                        <div className="h-10 w-full bg-gray-200 rounded mt-4" />
+                                    </div>
+                                ))}
+                            </>
+                        ) : displayAgentTiers.length === 0 ? (
+                            // No plans loaded - show message
+                            <div className="col-span-3 text-center py-8 text-text-tertiary">
+                                <p>Agent tiers are being configured. Please check back soon.</p>
+                            </div>
+                        ) : (
+                            displayAgentTiers.map((tier) => (
+                                <AgentTierCard key={tier.id} tier={tier} />
+                            ))
+                        )}
                     </div>
                 </div>
             </section>

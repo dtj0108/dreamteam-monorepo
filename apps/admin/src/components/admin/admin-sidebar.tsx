@@ -26,6 +26,9 @@ import {
   Brain,
   MessageCircleQuestion,
   Clock,
+  DollarSign,
+  Activity,
+  AlertTriangle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -55,6 +58,12 @@ const agentBuilderItems = [
   { href: '/admin/mcp', label: 'MCP Integrations', icon: Plug },
   { href: '/admin/teachings', label: 'Teachings', icon: GraduationCap },
   { href: '/admin/teaching-patterns', label: 'Learning Patterns', icon: Zap },
+]
+
+const billingItems = [
+  { href: '/admin/billing', label: 'Overview', icon: DollarSign },
+  { href: '/admin/billing/events', label: 'Events', icon: Activity },
+  { href: '/admin/billing/alerts', label: 'Alerts', icon: AlertTriangle },
 ]
 
 interface AdminSidebarProps {
@@ -114,6 +123,34 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
           <div className="space-y-1">
             {agentBuilderItems.map((item) => {
               const isActive = pathname.startsWith(item.href)
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-muted'
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Billing Analytics
+          </p>
+          <div className="space-y-1">
+            {billingItems.map((item) => {
+              const isActive = pathname === item.href ||
+                (item.href !== '/admin/billing' && pathname.startsWith(item.href))
 
               return (
                 <Link

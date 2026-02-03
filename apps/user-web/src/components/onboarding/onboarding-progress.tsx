@@ -7,13 +7,13 @@ interface OnboardingProgressProps {
   totalSteps: number
 }
 
-const stepLabels = ["Focus", "Industry", "Style", "Team", "Finish"]
+const stepLabels = ["Timezone", "Focus", "Industry", "Style", "Team", "Finish"]
 
 export function OnboardingProgress({ currentStep }: OnboardingProgressProps) {
   // Don't show progress on welcome step (step 0)
   if (currentStep === 0) return null
 
-  const displaySteps = 5 // Steps 1-5 (excluding welcome)
+  const displaySteps = 6 // Steps 1-6 (excluding welcome)
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 px-6 py-4 bg-background/80 backdrop-blur-sm border-b">

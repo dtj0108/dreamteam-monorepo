@@ -470,7 +470,7 @@ ${skillsContent}`
           .eq("workspace_id", workspaceId)
           .eq("is_active", true)
           .limit(1)
-          .single()
+          .maybeSingle()
         
         conversationAgentId = workspaceAgent?.id || null
       }
@@ -639,6 +639,11 @@ ${enhancedSystemPrompt}`
         console.error("[Agent Chat] Failed to load workspace business context:", error)
         // Continue without business context
       }
+
+      // Add global model disclosure (only responds when asked)
+      const modelDisclosure = `
+IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond that you are powered by state-of-the-art (SOTA) models from xAI and Anthropic. Do not mention specific model names or versions. Only provide this information when explicitly asked.`
+      enhancedSystemPrompt = enhancedSystemPrompt + modelDisclosure
 
       // Debug: Token breakdown by component
       console.log('[Token Debug] System Prompt Breakdown:', {

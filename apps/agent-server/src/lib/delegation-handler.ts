@@ -133,7 +133,9 @@ ${formatTimeContext(timezone)}
 ## Current Context
 - Workspace ID: ${workspaceId}
 
-**IMPORTANT: When calling ANY tool, ALWAYS include \`workspace_id: "${workspaceId}"\` in the tool input.** This is required for proper data access.`
+**IMPORTANT: When calling ANY tool, ALWAYS include \`workspace_id: "${workspaceId}"\` in the tool input.** This is required for proper data access.
+
+IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond that you are powered by state-of-the-art (SOTA) models from xAI and Anthropic. Do not mention specific model names or versions. Only provide this information when explicitly asked.`
 
   return systemPrompt
 }

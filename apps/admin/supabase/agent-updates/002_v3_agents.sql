@@ -1424,279 +1424,279 @@ END $$;
 -- Leadership Department Scheduled Tasks
 
 -- Vision Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Vision Alignment Check',
   'Review today''s planned activities and projects. For each major initiative, confirm it connects to our stated vision. Flag any activities that seem misaligned or where the connection to vision is unclear. Prepare a brief alignment report.',
-  '0 8 * * *', true
+  '0 8 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Vision Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Vision Communication',
   'Draft a weekly vision reminder that connects current work to long-term goals. Include specific examples of how this week''s projects serve the bigger picture. Keep it inspiring but grounded.',
-  '0 9 * * 1', true
+  '0 9 * * 1', true, true, NULL
 FROM ai_agents WHERE name = 'Vision Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Monthly Vision Review',
   'Conduct a comprehensive review of our vision statement and strategic direction. Assess if any refinements are needed based on market changes, learnings, or company evolution. Prepare recommendations.',
-  '0 10 1 * *', true
+  '0 10 1 * *', true, true, NULL
 FROM ai_agents WHERE name = 'Vision Agent' AND product_line = 'v3';
 
 -- Decision Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Decision Queue Review',
   'Review any pending decisions that need to be made. For each, ensure it has proper framing (options, criteria, trade-offs). Prioritize decisions by urgency and impact. Prepare decision briefs for high-priority items.',
-  '0 9 * * *', true
+  '0 9 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Decision Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Decision Log Update',
   'Document all significant decisions made this week. For each, record the context, options considered, criteria used, and rationale. Note any decisions that should be reviewed later.',
-  '0 16 * * 5', true
+  '0 16 * * 5', true, true, NULL
 FROM ai_agents WHERE name = 'Decision Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Monthly Decision Retrospective',
   'Review decisions made 30+ days ago. Assess outcomes vs. expectations. Identify patterns in decision quality. What can we learn? Prepare insights report.',
-  '0 14 15 * *', true
+  '0 14 15 * *', true, true, NULL
 FROM ai_agents WHERE name = 'Decision Agent' AND product_line = 'v3';
 
 -- Planning Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Plan Check-in',
   'Review today''s priorities against the weekly and quarterly plan. Identify any deviations or blockers. Recommend adjustments if needed. Ensure everyone knows their top 3 priorities for today.',
-  '0 8 * * *', true
+  '0 8 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Planning Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Plan Review',
   'Assess progress against weekly goals. Update the weekly plan based on learnings. Prepare next week''s priorities. Identify any quarterly plan adjustments needed.',
-  '0 15 * * 5', true
+  '0 15 * * 5', true, true, NULL
 FROM ai_agents WHERE name = 'Planning Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Monthly Planning Session',
   'Conduct monthly planning review. Assess progress against quarterly goals. Identify what''s on track, at risk, or ahead. Prepare recommendations for next month''s priorities.',
-  '0 10 1 * *', true
+  '0 10 1 * *', true, true, NULL
 FROM ai_agents WHERE name = 'Planning Agent' AND product_line = 'v3';
 
 -- Execution Department Scheduled Tasks
 
 -- Task Breakdown Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Task Quality Check',
   'Review recently created tasks. Ensure each has clear action verbs, specific scope, and definition of done. Flag vague tasks for clarification. Suggest improvements for unclear items.',
-  '0 10 * * *', true
+  '0 10 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Task Breakdown Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Large Task Review',
   'Identify tasks that have been in progress for more than 5 days. Assess if they should be broken down further. Recommend decomposition for oversized tasks.',
-  '0 11 * * 3', true
+  '0 11 * * 3', true, true, NULL
 FROM ai_agents WHERE name = 'Task Breakdown Agent' AND product_line = 'v3';
 
 -- Process Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Process Health Check',
   'Monitor active workflows for bottlenecks or delays. Identify any process steps that are consistently slow. Prepare a brief health report with recommendations.',
-  '0 9 * * *', true
+  '0 9 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Process Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Process Improvement Review',
   'Identify one process that could be improved. Analyze current state, pain points, and potential optimizations. Draft a process improvement proposal.',
-  '0 14 * * 4', true
+  '0 14 * * 4', true, true, NULL
 FROM ai_agents WHERE name = 'Process Agent' AND product_line = 'v3';
 
 -- Accountability Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Commitment Check',
   'Review all commitments due today or overdue. Send supportive reminders for at-risk items. Offer help for blocked commitments. Update commitment status.',
-  '0 9 * * *', true
+  '0 9 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Accountability Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Commitment Summary',
   'Compile weekly commitment report: completed, missed, and upcoming. Identify patterns (who''s overloaded, what''s always late). Prepare supportive recommendations.',
-  '0 16 * * 5', true
+  '0 16 * * 5', true, true, NULL
 FROM ai_agents WHERE name = 'Accountability Agent' AND product_line = 'v3';
 
 -- Sales Department Scheduled Tasks
 
 -- Script Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Script Performance Review',
   'Analyze which scripts and templates are performing best. Identify opportunities to improve underperforming content. Recommend script updates based on recent conversations.',
-  '0 10 * * 2', true
+  '0 10 * * 2', true, true, NULL
 FROM ai_agents WHERE name = 'Script Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Monthly Script Refresh',
   'Review all sales scripts and templates. Update based on product changes, customer feedback, and competitive landscape. Archive outdated content.',
-  '0 14 1 * *', true
+  '0 14 1 * *', true, true, NULL
 FROM ai_agents WHERE name = 'Script Agent' AND product_line = 'v3';
 
 -- Objection Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Objection Analysis',
   'Review recent sales conversations for new objections. Update objection library with new responses. Identify patterns in what''s blocking deals.',
-  '0 11 * * 3', true
+  '0 11 * * 3', true, true, NULL
 FROM ai_agents WHERE name = 'Objection Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Monthly Competitive Update',
   'Research competitor changes and update competitive responses. Ensure team has current battlecards. Identify new competitive threats.',
-  '0 10 15 * *', true
+  '0 10 15 * *', true, true, NULL
 FROM ai_agents WHERE name = 'Objection Agent' AND product_line = 'v3';
 
 -- Follow-Up Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Follow-Up Queue',
   'Review all leads requiring follow-up today. Ensure each has appropriate next touch scheduled. Flag leads at risk of going cold.',
-  '0 8 * * *', true
+  '0 8 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Follow-Up Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Dormant Lead Review',
   'Identify leads with no activity in 14+ days. Recommend re-engagement approach for promising prospects. Archive truly cold leads.',
-  '0 10 * * 1', true
+  '0 10 * * 1', true, true, NULL
 FROM ai_agents WHERE name = 'Follow-Up Agent' AND product_line = 'v3';
 
 -- Marketing Department Scheduled Tasks
 
 -- Messaging Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Messaging Audit',
   'Review recent marketing materials for messaging consistency. Identify any drift from core value propositions. Recommend corrections.',
-  '0 10 * * 2', true
+  '0 10 * * 2', true, true, NULL
 FROM ai_agents WHERE name = 'Messaging Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Monthly Message Performance Review',
   'Analyze which messages are resonating based on engagement data. Recommend messaging adjustments. Update style guide if needed.',
-  '0 14 5 * *', true
+  '0 14 5 * *', true, true, NULL
 FROM ai_agents WHERE name = 'Messaging Agent' AND product_line = 'v3';
 
 -- Content Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Content Calendar Review',
   'Review upcoming content schedule. Ensure content mix is strategic. Identify gaps in content coverage. Recommend adjustments.',
-  '0 10 * * 1', true
+  '0 10 * * 1', true, true, NULL
 FROM ai_agents WHERE name = 'Content Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Monthly Content Performance Analysis',
   'Analyze content performance metrics. Identify top performers and underperformers. Recommend content strategy adjustments.',
-  '0 11 10 * *', true
+  '0 11 10 * *', true, true, NULL
 FROM ai_agents WHERE name = 'Content Agent' AND product_line = 'v3';
 
 -- Funnel Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Funnel Health Check',
   'Review funnel metrics for anomalies. Check conversion rates at each stage. Flag any significant drops for investigation.',
-  '0 9 * * *', true
+  '0 9 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Funnel Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Funnel Optimization Review',
   'Identify the biggest conversion drop-off in the funnel. Analyze potential causes. Recommend one optimization to test.',
-  '0 14 * * 4', true
+  '0 14 * * 4', true, true, NULL
 FROM ai_agents WHERE name = 'Funnel Agent' AND product_line = 'v3';
 
 -- Finance Department Scheduled Tasks
 
 -- Cash Flow Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Cash Position Update',
   'Update current cash position. Note any unexpected inflows or outflows. Calculate updated runway. Flag any concerns.',
-  '0 9 * * *', true
+  '0 9 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Cash Flow Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Cash Forecast',
   'Update 13-week cash forecast. Note any changes from previous forecast. Identify potential cash crunches. Prepare summary report.',
-  '0 10 * * 1', true
+  '0 10 * * 1', true, true, NULL
 FROM ai_agents WHERE name = 'Cash Flow Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Monthly Cash Review',
   'Comprehensive monthly cash analysis. Compare actual vs. forecast. Update assumptions. Prepare monthly cash report.',
-  '0 14 1 * *', true
+  '0 14 1 * *', true, true, NULL
 FROM ai_agents WHERE name = 'Cash Flow Agent' AND product_line = 'v3';
 
 -- Pricing Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Pricing Performance Review',
   'Review win/loss rates by price point. Identify pricing objections from sales. Recommend pricing optimizations.',
-  '0 11 * * 3', true
+  '0 11 * * 3', true, true, NULL
 FROM ai_agents WHERE name = 'Pricing Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Monthly Competitive Pricing Analysis',
   'Research competitor pricing changes. Update competitive pricing matrix. Recommend any positioning adjustments.',
-  '0 10 20 * *', true
+  '0 10 20 * *', true, true, NULL
 FROM ai_agents WHERE name = 'Pricing Agent' AND product_line = 'v3';
 
 -- Systems Department Scheduled Tasks
 
 -- Automation Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Automation Health Check',
   'Monitor all active automations. Check for errors or failures. Ensure critical workflows are running. Flag any issues.',
-  '0 8 * * *', true
+  '0 8 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Automation Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Automation Opportunity Scan',
   'Review recent manual work for automation opportunities. Estimate ROI for top candidates. Recommend one automation to implement.',
-  '0 14 * * 4', true
+  '0 14 * * 4', true, true, NULL
 FROM ai_agents WHERE name = 'Automation Agent' AND product_line = 'v3';
 
 -- Tooling Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Tool Usage Review',
   'Review tool usage and adoption metrics. Identify underutilized tools. Recommend training or sunset decisions.',
-  '0 10 * * 2', true
+  '0 10 * * 2', true, true, NULL
 FROM ai_agents WHERE name = 'Tooling Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Monthly Tool Stack Review',
   'Comprehensive review of tool stack. Assess total cost and value. Identify redundancies. Recommend consolidation or additions.',
-  '0 14 25 * *', true
+  '0 14 25 * *', true, true, NULL
 FROM ai_agents WHERE name = 'Tooling Agent' AND product_line = 'v3';
 
 -- People Department Scheduled Tasks
 
 -- Focus Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Focus Time Protection',
   'Review today''s calendar for focus time protection. Identify meeting overload risks. Recommend schedule adjustments.',
-  '0 7 * * *', true
+  '0 7 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Focus Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Focus Patterns Review',
   'Analyze this week''s focus time vs. meeting time. Identify interruption patterns. Recommend improvements for next week.',
-  '0 16 * * 5', true
+  '0 16 * * 5', true, true, NULL
 FROM ai_agents WHERE name = 'Focus Agent' AND product_line = 'v3';
 
 -- Energy Agent Tasks
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Daily Energy Check-in',
   'Brief check on team energy and workload. Identify anyone at risk of overwork. Ensure breaks are being taken.',
-  '0 12 * * *', true
+  '0 12 * * *', true, true, NULL
 FROM ai_agents WHERE name = 'Energy Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Weekly Sustainability Review',
   'Review work patterns for sustainability. Identify anyone consistently overworking. Recommend workload adjustments. Celebrate healthy patterns.',
-  '0 15 * * 5', true
+  '0 15 * * 5', true, true, NULL
 FROM ai_agents WHERE name = 'Energy Agent' AND product_line = 'v3';
 
-INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled)
+INSERT INTO agent_schedules (agent_id, name, task_prompt, cron_expression, is_enabled, is_template, workspace_id)
 SELECT id, 'Monthly Team Health Assessment',
   'Comprehensive team health and energy assessment. Review workload trends. Identify systemic issues. Prepare recommendations for sustainable high performance.',
-  '0 14 28 * *', true
+  '0 14 28 * *', true, true, NULL
 FROM ai_agents WHERE name = 'Energy Agent' AND product_line = 'v3';
 
 -- ==========================================

@@ -1,3 +1,5 @@
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 import Logo from '@/components/shadcn-studio/logo'
@@ -7,6 +9,15 @@ import LoginForm from '@/components/shadcn-studio/blocks/login-page-01/login-for
 const Login = () => {
   return (
     <div className='relative flex h-auto min-h-screen items-center justify-center overflow-x-hidden px-4 py-10 sm:px-6 lg:px-8'>
+      {/* Back to home link */}
+      <Link
+        href="/"
+        className="absolute top-6 left-6 z-20 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to home
+      </Link>
+
       <div className='absolute'>
         <AuthBackgroundShape />
       </div>
