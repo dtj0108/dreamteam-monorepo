@@ -7,6 +7,8 @@ import { checkRateLimit, getRateLimitHeaders, rateLimitPresets } from "@dreamtea
 import { createAdminClient } from "@dreamteam/database/server"
 import { executeAgentTask } from "@/lib/agent-executor"
 import { sendAgentMessage, formatTaskCompletionMessage, getWorkspaceAdminIds, getWorkspaceOwnerId } from "@/lib/agent-messaging"
+import { mapToolNamesToCategories } from "@/lib/agent-tool-mapping"
+import { resolveWorkspaceAgent } from "@/lib/workspace-agent"
 
 // Allow up to 60 seconds for cron processing
 export const maxDuration = 60
@@ -105,24 +107,30 @@ export async function GET(request: NextRequest) {
     const schedule = schedules[0]
     console.log(`[Cron] TEST: Found schedule ${schedule.id} - ${schedule.name}`)
 
-    // Find local agent
-    const { data: localAgent, error: agentError } = await supabase
-      .from("agents")
-      .select("id, workspace_id, tools, system_prompt, reports_to")
-      .eq("ai_agent_id", schedule.agent_id)
-      .eq("is_active", true)
-      .single()
-
-    if (agentError || !localAgent) {
+    const workspaceId = schedule.workspace_id as string | null
+    if (!workspaceId) {
       return NextResponse.json({
         success: false,
-        error: "No active local agent found for this schedule",
-        agentError: agentError?.message,
+        error: "Schedule missing workspace context",
         schedule: { id: schedule.id, name: schedule.name, agent_id: schedule.agent_id },
       })
     }
 
-    console.log(`[Cron] TEST: Found local agent ${localAgent.id} in workspace ${localAgent.workspace_id}`)
+    const resolvedAgent = await resolveWorkspaceAgent({
+      workspaceId,
+      aiAgentId: schedule.agent_id,
+      supabase,
+    })
+
+    if (!resolvedAgent.isEnabled) {
+      return NextResponse.json({
+        success: false,
+        error: "Agent not enabled in this workspace",
+        schedule: { id: schedule.id, name: schedule.name, agent_id: schedule.agent_id },
+      })
+    }
+
+    console.log(`[Cron] TEST: Using workspace ${workspaceId} for schedule ${schedule.id}`)
 
     // Create execution record
     const { data: execution, error: insertError } = await supabase
@@ -147,21 +155,35 @@ export async function GET(request: NextRequest) {
 
     try {
       const systemPrompt =
-        localAgent.system_prompt ||
+        resolvedAgent.legacyAgent?.system_prompt ||
+        resolvedAgent.deploymentAgent?.system_prompt ||
         schedule.ai_agent?.system_prompt ||
         "You are a helpful AI assistant."
 
       // Get provider and model from AI agent config
-      const provider = (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) || "anthropic"
-      const model = schedule.ai_agent?.model || undefined
+      const provider = (resolvedAgent.deploymentAgent?.provider as "anthropic" | "xai" | undefined) ||
+        (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) ||
+        "anthropic"
+      const model = resolvedAgent.deploymentAgent?.model || schedule.ai_agent?.model || undefined
+
+      const { data: agentTools } = await supabase
+        .from("ai_agent_tools")
+        .select("tool:agent_tools(name)")
+        .eq("agent_id", schedule.agent_id)
+
+      const rawToolNames = (agentTools
+        ?.map((t: { tool: { name: string } | null }) => t.tool?.name)
+        .filter(Boolean) as string[]) || []
+
+      const toolCategories = mapToolNamesToCategories(rawToolNames)
 
       console.log(`[Cron] TEST: Executing task with provider=${provider}, model=${model}: ${schedule.task_prompt.slice(0, 50)}...`)
 
       const result = await executeAgentTask({
         taskPrompt: schedule.task_prompt,
         systemPrompt,
-        tools: localAgent.tools || [],
-        workspaceId: localAgent.workspace_id,
+        tools: toolCategories,
+        workspaceId,
         supabase,
         provider,
         model,
@@ -184,21 +206,21 @@ export async function GET(request: NextRequest) {
       // Now test the messaging part
       // Priority: agent.reports_to > schedule.created_by > workspace admins > workspace owner
       console.log(`[Cron] TEST: Starting message delivery...`)
-      console.log(`[Cron] TEST: localAgent.reports_to = ${JSON.stringify(localAgent.reports_to)}`)
+      console.log(`[Cron] TEST: resolvedAgent.reports_to = ${JSON.stringify(resolvedAgent.legacyAgent?.reports_to || [])}`)
       console.log(`[Cron] TEST: schedule.created_by = ${schedule.created_by}`)
 
       let recipientIds: string[] = []
       let recipientSource = 'none'
 
-      if (localAgent.reports_to && localAgent.reports_to.length > 0) {
-        recipientIds = localAgent.reports_to
+      if (resolvedAgent.legacyAgent?.reports_to && resolvedAgent.legacyAgent.reports_to.length > 0) {
+        recipientIds = resolvedAgent.legacyAgent.reports_to
         recipientSource = 'reports_to'
       } else if (schedule.created_by) {
         recipientIds = [schedule.created_by]
         recipientSource = 'created_by'
       } else {
         // Fallback to workspace admins
-        const workspaceAdmins = await getWorkspaceAdminIds(localAgent.workspace_id, supabase)
+        const workspaceAdmins = await getWorkspaceAdminIds(workspaceId, supabase)
         console.log(`[Cron] TEST: workspaceAdmins = ${JSON.stringify(workspaceAdmins)}`)
 
         if (workspaceAdmins.length > 0) {
@@ -206,7 +228,7 @@ export async function GET(request: NextRequest) {
           recipientSource = 'workspace_admins'
         } else {
           // Final fallback: workspace owner
-          const ownerId = await getWorkspaceOwnerId(localAgent.workspace_id, supabase)
+          const ownerId = await getWorkspaceOwnerId(workspaceId, supabase)
           if (ownerId) {
             recipientIds = [ownerId]
             recipientSource = 'workspace_owner'
@@ -231,9 +253,9 @@ export async function GET(request: NextRequest) {
             results: [],
           },
           debug: {
-            reportsTo: localAgent.reports_to,
+            reportsTo: resolvedAgent.legacyAgent?.reports_to || [],
             createdBy: schedule.created_by,
-            workspaceId: localAgent.workspace_id,
+            workspaceId,
           },
         })
       }
@@ -250,9 +272,11 @@ export async function GET(request: NextRequest) {
       for (const recipientId of recipientIds) {
         console.log(`[Cron] TEST: Sending message to recipient ${recipientId}`)
         const msgResult = await sendAgentMessage({
-          agentId: localAgent.id,
+          agentId: resolvedAgent.legacyAgent?.id,
+          agentProfileId: resolvedAgent.agentProfileId ?? undefined,
+          aiAgentId: schedule.agent_id,
           recipientProfileId: recipientId,
-          workspaceId: localAgent.workspace_id,
+          workspaceId,
           content,
           supabase,
         })

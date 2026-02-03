@@ -1,6 +1,37 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
+import { getWorkspaceDeployment } from "@dreamteam/database"
 import { getSession } from "@dreamteam/auth/session"
+
+// Type for deployed agent from active_config
+interface DeployedAgent {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  avatar_url: string | null
+  system_prompt: string
+  model: string
+  provider?: string
+  is_enabled: boolean
+  tools: unknown[]
+  skills: unknown[]
+  mind: unknown[]
+  rules: unknown[]
+  department_id?: string | null
+}
+
+interface DeployedTeamConfig {
+  team: {
+    id: string
+    name: string
+    slug: string
+    head_agent_id: string | null
+  }
+  agents: DeployedAgent[]
+  delegations: unknown[]
+  team_mind: unknown[]
+}
 
 // GET /api/team/agents/[id] - Get a specific agent
 export async function GET(
@@ -51,7 +82,53 @@ export async function GET(
       agent = agentByAiId
     }
 
+    // If still not found, check deployed team configurations
     if (!agent) {
+      // Get all workspaces the user is a member of
+      const { data: memberships } = await supabase
+        .from("workspace_members")
+        .select("workspace_id")
+        .eq("profile_id", session.id)
+
+      if (memberships && memberships.length > 0) {
+        for (const membership of memberships) {
+          const deployment = await getWorkspaceDeployment(membership.workspace_id)
+          if (deployment) {
+            const activeConfig = deployment.active_config as DeployedTeamConfig
+            const deployedAgent = activeConfig?.agents?.find((a: DeployedAgent) => a.id === id)
+            
+            if (deployedAgent) {
+              // Return a synthesized agent object from deployed config
+              const customizations = (deployment.customizations as Record<string, unknown>) || {}
+              const agentCustomizations = (customizations.agents as Record<string, Record<string, unknown>>) || {}
+              const agentCustom = agentCustomizations[id] || {}
+              
+              return NextResponse.json({
+                id: deployedAgent.id,
+                ai_agent_id: deployedAgent.id,
+                workspace_id: membership.workspace_id,
+                name: deployedAgent.name,
+                description: deployedAgent.description,
+                avatar_url: deployedAgent.avatar_url,
+                system_prompt: deployedAgent.system_prompt,
+                model: deployedAgent.model,
+                is_active: deployedAgent.is_enabled,
+                tools: deployedAgent.tools,
+                reports_to: (agentCustom.reports_to as string[]) || [],
+                reports_to_profiles: [],
+                style_presets: agentCustom.style_presets || null,
+                custom_instructions: agentCustom.custom_instructions || null,
+                business_context: agentCustom.business_context || null,
+                created_at: deployment.deployed_at,
+                updated_at: deployment.deployed_at,
+                // Mark as deployed agent
+                _isDeployedAgent: true,
+              })
+            }
+          }
+        }
+      }
+      
       return NextResponse.json({ error: "Agent not found" }, { status: 404 })
     }
 
@@ -107,15 +184,110 @@ export async function PUT(
     const body = await request.json()
     const { name, description, systemPrompt, tools, model, avatarUrl, isActive, reportsTo, stylePresets, customInstructions, businessContext } = body
 
-    // Get the agent first
-    const { data: agent, error: fetchError } = await supabase
+    // Get the agent first from agents table
+    let { data: agent, error: fetchError } = await supabase
       .from("agents")
       .select("workspace_id, created_by")
       .eq("id", id)
-      .single()
+      .maybeSingle()
 
-    if (fetchError || !agent) {
+    // If not found by id, try to find by ai_agent_id
+    if (!agent) {
+      const { data: agentByAiId } = await supabase
+        .from("agents")
+        .select("workspace_id, created_by, id")
+        .eq("ai_agent_id", id)
+        .eq("is_active", true)
+        .maybeSingle()
+      
+      agent = agentByAiId
+    }
+
+    // If still not found, check if it's a deployed agent and update customizations
+    if (!agent) {
+      // Get all workspaces the user is a member of
+      const { data: memberships } = await supabase
+        .from("workspace_members")
+        .select("workspace_id, role")
+        .eq("profile_id", session.id)
+
+      if (memberships && memberships.length > 0) {
+        for (const membership of memberships) {
+          const deployment = await getWorkspaceDeployment(membership.workspace_id)
+          if (deployment) {
+            const activeConfig = deployment.active_config as DeployedTeamConfig
+            const deployedAgent = activeConfig?.agents?.find((a: DeployedAgent) => a.id === id)
+            
+            if (deployedAgent) {
+              // Check if user is admin or owner
+              if (membership.role !== "admin" && membership.role !== "owner") {
+                return NextResponse.json(
+                  { error: "Not authorized to update this agent" },
+                  { status: 403 }
+                )
+              }
+              
+              // Update customizations in the deployment
+              const currentCustomizations = (deployment.customizations as Record<string, unknown>) || {}
+              const agentCustomizations = (currentCustomizations.agents as Record<string, Record<string, unknown>>) || {}
+              
+              // Build new agent customization
+              const newAgentCustom: Record<string, unknown> = { ...agentCustomizations[id] }
+              if (reportsTo !== undefined) newAgentCustom.reports_to = Array.isArray(reportsTo) ? reportsTo : []
+              if (stylePresets !== undefined) newAgentCustom.style_presets = stylePresets
+              if (customInstructions !== undefined) newAgentCustom.custom_instructions = customInstructions?.trim() || null
+              if (businessContext !== undefined) newAgentCustom.business_context = businessContext
+              
+              const newCustomizations = {
+                ...currentCustomizations,
+                agents: {
+                  ...agentCustomizations,
+                  [id]: newAgentCustom,
+                },
+              }
+              
+              // Save to database
+              const { error: updateError } = await supabase
+                .from("workspace_deployed_teams")
+                .update({ customizations: newCustomizations })
+                .eq("id", deployment.id)
+              
+              if (updateError) {
+                console.error("Error updating deployment customizations:", updateError)
+                return NextResponse.json({ error: updateError.message }, { status: 500 })
+              }
+              
+              // Return the updated agent
+              return NextResponse.json({
+                id: deployedAgent.id,
+                ai_agent_id: deployedAgent.id,
+                workspace_id: membership.workspace_id,
+                name: deployedAgent.name,
+                description: deployedAgent.description,
+                avatar_url: deployedAgent.avatar_url,
+                system_prompt: deployedAgent.system_prompt,
+                model: deployedAgent.model,
+                is_active: deployedAgent.is_enabled,
+                tools: deployedAgent.tools,
+                reports_to: newAgentCustom.reports_to || [],
+                reports_to_profiles: [],
+                style_presets: newAgentCustom.style_presets || null,
+                custom_instructions: newAgentCustom.custom_instructions || null,
+                business_context: newAgentCustom.business_context || null,
+                created_at: deployment.deployed_at,
+                updated_at: new Date().toISOString(),
+                _isDeployedAgent: true,
+              })
+            }
+          }
+        }
+      }
+      
       return NextResponse.json({ error: "Agent not found" }, { status: 404 })
+    }
+
+    if (fetchError) {
+      return NextResponse.json({ error: fetchError.message }, { status: 500 })
     }
 
     // Check if user is creator or admin
@@ -162,10 +334,13 @@ export async function PUT(
     if (customInstructions !== undefined) updateData.custom_instructions = customInstructions?.trim() || null
     if (businessContext !== undefined) updateData.business_context = businessContext
 
+    // Use the agent's actual ID (may differ from param if found by ai_agent_id)
+    const agentId = (agent as { id?: string }).id || id
+    
     const { data: updated, error: updateError } = await supabase
       .from("agents")
       .update(updateData)
-      .eq("id", id)
+      .eq("id", agentId)
       .select(`
         *,
         creator:created_by(id, name, avatar_url)

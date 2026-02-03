@@ -1,6 +1,6 @@
 // Auto-deploy hook for workspace creation
 import { createAdminClient } from '@/lib/supabase/admin'
-import { deployTeamToWorkspaces } from '@/lib/deployment'
+import { deployTeamWithAgentResources } from '@/lib/deployment'
 
 /**
  * Auto-deploy a team to a workspace based on its plan.
@@ -37,24 +37,36 @@ export async function autoDeployTeamForWorkspace(
 
   // Deploy the team to the workspace
   try {
-    const result = await deployTeamToWorkspaces(
+    const { data: workspace } = await supabase
+      .from('workspaces')
+      .select('owner_id')
+      .eq('id', workspaceId)
+      .single()
+
+    const channelCreatorByWorkspaceId = new Map<string, string>()
+    if (workspace?.owner_id) {
+      channelCreatorByWorkspaceId.set(workspaceId, workspace.owner_id)
+    }
+
+    const result = await deployTeamWithAgentResources(
       plan.team_id,
       [workspaceId],
-      createdByUserId || 'system'
+      createdByUserId || 'system',
+      channelCreatorByWorkspaceId
     )
 
-    if (result.success.includes(workspaceId)) {
+    if (result.deployments.some((d) => d.workspace_id === workspaceId)) {
       return {
         deployed: true,
         teamId: plan.team_id,
       }
-    } else {
-      const failure = result.failed.find((f) => f.workspaceId === workspaceId)
-      return {
-        deployed: false,
-        teamId: plan.team_id,
-        error: failure?.error || 'Unknown deployment error',
-      }
+    }
+
+    const failure = result.failed.find((f) => f.workspaceId === workspaceId)
+    return {
+      deployed: false,
+      teamId: plan.team_id,
+      error: failure?.error || 'Unknown deployment error',
     }
   } catch (error) {
     return {
@@ -93,7 +105,7 @@ export async function autoDeployTeamToAllPlanWorkspaces(
   // Get all workspaces with this plan
   const { data: workspaces, error: workspacesError } = await supabase
     .from('workspaces')
-    .select('id')
+    .select('id, owner_id')
     .eq('plan_id', planId)
 
   if (workspacesError || !workspaces || workspaces.length === 0) {
@@ -106,10 +118,23 @@ export async function autoDeployTeamToAllPlanWorkspaces(
 
   // Deploy to all workspaces
   const workspaceIds = workspaces.map((w) => w.id)
-  const result = await deployTeamToWorkspaces(plan.team_id, workspaceIds, deployedByUserId)
+  const channelCreatorByWorkspaceId = new Map<string, string>()
+  for (const workspace of workspaces) {
+    const record = workspace as { id: string; owner_id: string | null }
+    if (record.owner_id) {
+      channelCreatorByWorkspaceId.set(record.id, record.owner_id)
+    }
+  }
+
+  const result = await deployTeamWithAgentResources(
+    plan.team_id,
+    workspaceIds,
+    deployedByUserId,
+    channelCreatorByWorkspaceId
+  )
 
   return {
-    successCount: result.success.length,
+    successCount: result.deployments.length,
     failureCount: result.failed.length,
     errors: result.failed.map((f) => `${f.workspaceId}: ${f.error}`),
   }

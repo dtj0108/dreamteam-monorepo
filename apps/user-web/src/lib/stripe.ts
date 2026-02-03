@@ -55,58 +55,5 @@ export const STRIPE_PRICES = {
 export type WorkspacePlanType = 'monthly' | 'annual'
 export type AgentTierType = 'startup' | 'teams' | 'enterprise'
 
-// Plan display info
-export const WORKSPACE_PLAN_INFO = {
-  monthly: {
-    name: 'Monthly',
-    price: 49,
-    period: 'month',
-    description: 'Billed monthly',
-  },
-  annual: {
-    name: 'Annual',
-    price: 39,
-    period: 'month',
-    annualTotal: 468,
-    description: '$468/year, billed annually',
-    savings: 'Save 20% vs monthly',
-  },
-} as const
-
-export const AGENT_TIER_INFO = {
-  startup: {
-    name: 'Lean Startup',
-    price: 3000,
-    agents: 7,
-    tagline: 'You + a few killers in one room',
-    description: 'What should I do, and how do I actually do it?',
-  },
-  teams: {
-    name: 'Department Teams',
-    price: 5000,
-    agents: 18,
-    tagline: 'Now you\'ve got specialists',
-    description: 'How do I make this run smoother and make more money?',
-  },
-  enterprise: {
-    name: 'Enterprise Dream Team',
-    price: 10000,
-    agents: 38,
-    tagline: 'This is unfair',
-    description: 'How do I build something big without burning out?',
-  },
-} as const
-
-// Workspace plan features
-export const WORKSPACE_FEATURES = [
-  'All 5 products (Finance, Sales, Team, Projects, Knowledge)',
-  'Unlimited accounts & transactions',
-  'Analytics & reporting',
-  '100 GB storage',
-  'Up to 10 users included',
-  '+$10/mo per additional user',
-  'Priority support',
-] as const
-
 // Trial configuration
 export const TRIAL_DAYS = 14

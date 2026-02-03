@@ -1,37 +1,68 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
 import { useAgents } from "@/providers/agents-provider"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Switch } from "@/components/ui/switch"
-import {
-  MessageSquare,
-  Calendar,
-  CheckCircle2,
-  ArrowRight,
-  Plus,
-  Settings,
-  Users,
-} from "lucide-react"
+import { Plus, Users } from "lucide-react"
 import type { AgentWithHireStatus } from "@/lib/types/agents"
+
+// DnD Kit imports
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+} from "@dnd-kit/core"
+import {
+  sortableKeyboardCoordinates,
+  arrayMove,
+} from "@dnd-kit/sortable"
+
+// Components
+import { DepartmentSection } from "@/components/agents/department-section"
+import { AgentDragOverlay } from "@/components/agents/agent-drag-overlay"
 
 export default function HiredAgentsPage() {
   const {
-    agents,
     myAgents,
     planAgents,
     executions,
     schedules,
+    departments,
+    agentOrganization,
     isLoading,
     fetchActivity,
     fetchSchedules,
     toggleAgent,
+    reorderAgents,
+    moveAgentToDepartment,
+    getAgentsByDepartment,
   } = useAgents()
 
   const [togglingAgents, setTogglingAgents] = useState<Set<string>>(new Set())
+  const [activeAgent, setActiveAgent] = useState<AgentWithHireStatus | null>(null)
+  const [dragOverDepartment, setDragOverDepartment] = useState<string | null>(null)
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   // Fetch activity and schedules on mount
   useEffect(() => {
@@ -74,6 +105,127 @@ export default function HiredAgentsPage() {
   const agentsToShow = planAgents.length > 0 ? planAgents : myAgents
   const hasDeployedTeam = planAgents.length > 0
 
+  // Get agents grouped by department
+  const agentsByDepartment = useMemo(() => {
+    return getAgentsByDepartment()
+  }, [getAgentsByDepartment])
+
+  // Get list of departments that have agents or are drag targets
+  const activeDepartments = useMemo(() => {
+    const deptIds = new Set<string | null>()
+    agentsByDepartment.forEach((agents, deptId) => {
+      if (agents.length > 0 || deptId === null) {
+        deptIds.add(deptId)
+      }
+    })
+    // Add all known departments
+    departments.forEach(d => deptIds.add(d.id))
+    return Array.from(deptIds)
+  }, [agentsByDepartment, departments])
+
+  // Find which department an agent belongs to
+  const findAgentDepartment = (agentId: string): string | null => {
+    for (const [deptId, agents] of agentsByDepartment) {
+      if (agents.some(a => a.id === agentId)) {
+        return deptId
+      }
+    }
+    return null
+  }
+
+  // Drag handlers
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event
+    const agent = agentsToShow.find(a => a.id === active.id)
+    if (agent) setActiveAgent(agent)
+  }
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over } = event
+    if (!over) {
+      setDragOverDepartment(null)
+      return
+    }
+
+    const overId = over.id as string
+
+    // Check if we're over a department drop zone
+    if (overId.startsWith("department-")) {
+      const deptId = overId.replace("department-", "")
+      setDragOverDepartment(deptId === "general" ? null : deptId)
+    } else {
+      // We're over another agent - find its department
+      const deptId = findAgentDepartment(overId)
+      setDragOverDepartment(deptId)
+    }
+  }
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveAgent(null)
+    setDragOverDepartment(null)
+
+    if (!over) return
+
+    const activeId = active.id as string
+    const overId = over.id as string
+
+    const draggedAgent = agentsToShow.find(a => a.id === activeId)
+    if (!draggedAgent) return
+
+    // Determine target department
+    let targetDepartmentId: string | null = null
+
+    if (overId.startsWith("department-")) {
+      const deptId = overId.replace("department-", "")
+      targetDepartmentId = deptId === "general" ? null : deptId
+    } else {
+      // Dropped on another agent - find its department
+      targetDepartmentId = findAgentDepartment(overId)
+    }
+
+    // Get current department of dragged agent
+    const currentDepartmentId = findAgentDepartment(activeId)
+
+    // Check if we need to move to a different department
+    if (targetDepartmentId !== currentDepartmentId) {
+      try {
+        await moveAgentToDepartment(activeId, targetDepartmentId)
+      } catch (error) {
+        console.error("Failed to move agent:", error)
+      }
+      return
+    }
+
+    // Reorder within same department
+    if (!overId.startsWith("department-") && activeId !== overId) {
+      const departmentAgents = agentsByDepartment.get(currentDepartmentId) || []
+      const oldIndex = departmentAgents.findIndex(a => a.id === activeId)
+      const newIndex = departmentAgents.findIndex(a => a.id === overId)
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        // Create new order
+        const reorderedAgents = arrayMove(departmentAgents, oldIndex, newIndex)
+
+        // Build full position order (maintaining other departments)
+        const newPositionOrder: string[] = []
+        agentsByDepartment.forEach((agents, deptId) => {
+          if (deptId === currentDepartmentId) {
+            reorderedAgents.forEach(a => newPositionOrder.push(a.id))
+          } else {
+            agents.forEach(a => newPositionOrder.push(a.id))
+          }
+        })
+
+        try {
+          await reorderAgents(newPositionOrder)
+        } catch (error) {
+          console.error("Failed to reorder agents:", error)
+        }
+      }
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="p-6">
@@ -85,24 +237,34 @@ export default function HiredAgentsPage() {
             </div>
             <Skeleton className="h-10 w-36" />
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="rounded-lg border bg-card flex flex-col">
-                <div className="p-4 pb-3">
-                  <Skeleton className="size-14 rounded-xl mb-3" />
-                  <Skeleton className="h-5 w-32" />
-                </div>
-                <div className="px-4 pb-3 space-y-1.5 flex-1">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-4 w-24" />
-                </div>
-                <div className="p-4 pt-0">
-                  <Skeleton className="h-9 w-full" />
-                </div>
+          {/* Skeleton for department sections */}
+          {[1, 2].map((i) => (
+            <div key={i} className="rounded-xl border bg-card/50 p-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <Skeleton className="size-6" />
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-5 w-8" />
               </div>
-            ))}
-          </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {[1, 2, 3].map((j) => (
+                  <div key={j} className="rounded-lg border bg-card flex flex-col">
+                    <div className="p-4 pb-3">
+                      <Skeleton className="size-14 rounded-xl mb-3" />
+                      <Skeleton className="h-5 w-32" />
+                    </div>
+                    <div className="px-4 pb-3 space-y-1.5 flex-1">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                    <div className="p-4 pt-0">
+                      <Skeleton className="h-9 w-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     )
@@ -115,7 +277,7 @@ export default function HiredAgentsPage() {
           <h1 className="text-2xl font-bold tracking-tight">My Agents</h1>
           <p className="text-muted-foreground">
             {hasDeployedTeam
-              ? "Agents included in your plan - toggle to enable or disable"
+              ? "Agents included in your plan - drag to reorganize, toggle to enable or disable"
               : "Agents you've hired to help with your work"}
           </p>
         </div>
@@ -147,79 +309,68 @@ export default function HiredAgentsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {agentsToShow.map((agent) => {
-            const stats = getAgentStats(agent)
-            const isEnabled = agent.isHired
-            const isToggling = togglingAgents.has(agent.id)
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="space-y-6">
+            {/* Render department sections - known departments first */}
+            {departments.map((dept) => {
+              const deptAgents = agentsByDepartment.get(dept.id) || []
+              const isDropTarget = dragOverDepartment === dept.id
 
-            return (
-              <div
-                key={agent.id}
-                className={`rounded-lg border bg-card transition-all flex flex-col ${
-                  isEnabled ? "hover:shadow-md" : "opacity-60"
-                }`}
-              >
-                {/* Header with avatar and toggle */}
-                <div className="p-4 pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="size-14 rounded-xl bg-muted flex items-center justify-center text-2xl mb-3">
-                      {agent.avatar_url || "✨"}
-                    </div>
-                    {hasDeployedTeam && (
-                      <Switch
-                        checked={isEnabled}
-                        disabled={isToggling}
-                        onCheckedChange={(checked) => handleToggle(agent, checked)}
-                        aria-label={`${isEnabled ? "Disable" : "Enable"} ${agent.name}`}
-                      />
-                    )}
-                  </div>
-                  <h3 className="font-semibold truncate">{agent.name}</h3>
-                  {!isEnabled && (
-                    <span className="text-xs text-muted-foreground">Disabled</span>
-                  )}
-                </div>
+              // Only show departments that have agents or are being dragged over
+              if (deptAgents.length === 0 && !isDropTarget) return null
 
-                {/* Stats */}
-                <div className="px-4 pb-3 space-y-1.5 text-sm text-muted-foreground flex-1">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="size-4" />
-                    <span>{stats.conversations} conversations</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="size-4" />
-                    <span>{stats.completed} tasks completed</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="size-4" />
-                    <span>{stats.scheduled} scheduled</span>
-                  </div>
-                </div>
+              return (
+                <DepartmentSection
+                  key={dept.id}
+                  department={dept}
+                  agents={deptAgents}
+                  getAgentStats={getAgentStats}
+                  togglingAgents={togglingAgents}
+                  hasDeployedTeam={hasDeployedTeam}
+                  onToggle={handleToggle}
+                  isDragOver={isDropTarget}
+                />
+              )
+            })}
 
-                {/* Action buttons */}
-                <div className="p-4 pt-0 flex gap-2">
-                  <Button
-                    asChild
-                    variant="secondary"
-                    className="flex-1"
-                    disabled={!isEnabled}
-                  >
-                    <Link href={`/agents/${agent.localAgentId || agent.id}`}>
-                      Meet Agent
-                      <ArrowRight className="size-4 ml-2" />
-                    </Link>
-                  </Button>
-                  <Button asChild variant="outline" size="icon">
-                    <Link href={`/agents/configure/${agent.localAgentId || agent.id}`}>
-                      <Settings className="size-4" />
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+            {/* General section (no department) - always show at bottom */}
+            {(() => {
+              const generalAgents = agentsByDepartment.get(null) || []
+              const isDropTarget = dragOverDepartment === null && activeAgent !== null
+
+              // Show if has agents or is being dragged over
+              if (generalAgents.length === 0 && !isDropTarget) return null
+
+              return (
+                <DepartmentSection
+                  department={null}
+                  agents={generalAgents}
+                  getAgentStats={getAgentStats}
+                  togglingAgents={togglingAgents}
+                  hasDeployedTeam={hasDeployedTeam}
+                  onToggle={handleToggle}
+                  isDragOver={isDropTarget}
+                />
+              )
+            })()}
+          </div>
+
+          {/* Drag Overlay */}
+          <DragOverlay
+            dropAnimation={{
+              duration: 300,
+              easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
+            }}
+          >
+            {activeAgent ? <AgentDragOverlay agent={activeAgent} /> : null}
+          </DragOverlay>
+        </DndContext>
       )}
     </div>
   )

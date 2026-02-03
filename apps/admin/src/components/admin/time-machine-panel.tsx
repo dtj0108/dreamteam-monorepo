@@ -197,6 +197,7 @@ export function TimeMachinePanel() {
   const [simStartTime, setSimStartTime] = useState<string>('')
   const [simEndTime, setSimEndTime] = useState<string>('')
   const [useSimulatedTimeContext, setUseSimulatedTimeContext] = useState<boolean>(true)
+  const [batchSize, setBatchSize] = useState<number>(5)
 
   // Streaming simulation progress
   const [simulationProgress, setSimulationProgress] = useState<{
@@ -354,6 +355,7 @@ export function TimeMachinePanel() {
           start_time: new Date(simStartTime).toISOString(),
           end_time: new Date(simEndTime).toISOString(),
           use_simulated_time: useSimulatedTimeContext,
+          batch_size: batchSize,
         })
       })
 
@@ -650,6 +652,29 @@ export function TimeMachinePanel() {
               checked={useSimulatedTimeContext}
               onCheckedChange={setUseSimulatedTimeContext}
             />
+          </div>
+
+          {/* Batch Size Selector */}
+          <div className="flex items-center justify-between py-3 border-t">
+            <div className="space-y-0.5">
+              <Label htmlFor="batch-size" className="text-sm font-medium">
+                Parallel batch size
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Number of concurrent executions (higher = faster, but more load on agent server)
+              </p>
+            </div>
+            <Select value={batchSize.toString()} onValueChange={(v) => setBatchSize(parseInt(v, 10))}>
+              <SelectTrigger className="w-[100px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1 (Serial)</SelectItem>
+                <SelectItem value="5">5</SelectItem>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="20">20</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Run Simulation Button */}

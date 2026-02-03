@@ -5,6 +5,7 @@ import { AnimatePresence } from "motion/react"
 import { useOnboardingWizard } from "@/hooks/use-onboarding-wizard"
 import { OnboardingProgress } from "./onboarding-progress"
 import { WelcomeStep } from "./steps/welcome-step"
+import { TimezoneStep } from "./steps/timezone-step"
 import { PrimaryFocusStep } from "./steps/primary-focus-step"
 import { IndustryStep } from "./steps/industry-step"
 import { DecisionStyleStep } from "./steps/decision-style-step"
@@ -48,6 +49,16 @@ export function OnboardingWizard({ userName, initialCompanyName = "" }: Onboardi
           )}
 
           {wizard.currentStep === 1 && (
+            <TimezoneStep
+              key="timezone"
+              value={wizard.timezone}
+              onChange={wizard.setTimezone}
+              onContinue={wizard.nextStep}
+              onBack={wizard.prevStep}
+            />
+          )}
+
+          {wizard.currentStep === 2 && (
             <PrimaryFocusStep
               key="primary-focus"
               selectedValue={wizard.primaryFocus}
@@ -57,7 +68,7 @@ export function OnboardingWizard({ userName, initialCompanyName = "" }: Onboardi
             />
           )}
 
-          {wizard.currentStep === 2 && (
+          {wizard.currentStep === 3 && (
             <IndustryStep
               key="industry"
               selectedValue={wizard.industryType}
@@ -67,7 +78,7 @@ export function OnboardingWizard({ userName, initialCompanyName = "" }: Onboardi
             />
           )}
 
-          {wizard.currentStep === 3 && (
+          {wizard.currentStep === 4 && (
             <DecisionStyleStep
               key="decision-style"
               selectedValue={wizard.decisionStyle}
@@ -77,7 +88,7 @@ export function OnboardingWizard({ userName, initialCompanyName = "" }: Onboardi
             />
           )}
 
-          {wizard.currentStep === 4 && (
+          {wizard.currentStep === 5 && (
             <TeamSizeStep
               key="team-size"
               selectedValue={wizard.teamSize}
@@ -87,7 +98,7 @@ export function OnboardingWizard({ userName, initialCompanyName = "" }: Onboardi
             />
           )}
 
-          {wizard.currentStep === 5 && (
+          {wizard.currentStep === 6 && (
             <CompanyStep
               key="company"
               companyName={wizard.companyName}

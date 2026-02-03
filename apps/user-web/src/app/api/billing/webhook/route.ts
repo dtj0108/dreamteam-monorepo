@@ -22,6 +22,15 @@ import {
 } from '@/lib/addons-queries'
 import { type CreditBundle } from '@/types/addons'
 import { autoDeployTeamForPlan } from '@dreamteam/database'
+import {
+  logBillingEvent,
+  logSubscriptionCreated,
+  logSubscriptionUpdated,
+  logSubscriptionCanceled,
+  logPaymentSucceeded,
+  logPaymentFailed,
+  logAddonPurchased,
+} from '@/lib/billing-events'
 
 /**
  * POST /api/billing/webhook
@@ -85,6 +94,15 @@ export async function POST(request: NextRequest) {
             await addSMSCredits(purchase.workspace_id, bundleType, purchase.id)
             console.log(`SMS credits added for workspace ${purchase.workspace_id}: ${bundleType}`)
 
+            // Log billing event
+            await logAddonPurchased(
+              purchase.workspace_id,
+              'sms_credits',
+              bundleType,
+              session.amount_total || 0,
+              session.id
+            )
+
             // Save payment method from the completed checkout session
             const paymentIntentId = session.payment_intent as string
             console.log(`[webhook] Attempting to save payment method. PI: ${paymentIntentId}, workspace: ${purchase.workspace_id}`)
@@ -119,6 +137,15 @@ export async function POST(request: NextRequest) {
           if (purchase) {
             await addCallMinutes(purchase.workspace_id, bundleType, purchase.id)
             console.log(`Call minutes added for workspace ${purchase.workspace_id}: ${bundleType}`)
+
+            // Log billing event
+            await logAddonPurchased(
+              purchase.workspace_id,
+              'call_minutes',
+              bundleType,
+              session.amount_total || 0,
+              session.id
+            )
 
             // Save payment method from the completed checkout session
             const paymentIntentId = session.payment_intent as string
@@ -168,6 +195,16 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Log billing event for subscription creation
+        const fullSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+        await logSubscriptionCreated(
+          workspaceId,
+          fullSubscription,
+          event.id,
+          sessionType as 'workspace_plan' | 'agent_tier',
+          targetPlan || ''
+        )
+
         console.log(`Checkout completed for workspace ${workspaceId}: ${sessionType} -> ${targetPlan}`)
         break
       }
@@ -206,6 +243,22 @@ export async function POST(request: NextRequest) {
           await updateBillingFromSubscription(workspaceId, subscription.id, subscriptionType)
         }
 
+        // Log billing event for subscription update
+        const subWorkspaceId = workspaceId || (await supabase
+          .from('workspace_billing')
+          .select('workspace_id')
+          .or(`stripe_subscription_id.eq.${subscription.id},stripe_agent_subscription_id.eq.${subscription.id}`)
+          .single()).data?.workspace_id
+
+        if (subWorkspaceId) {
+          await logSubscriptionUpdated(
+            subWorkspaceId,
+            subscription,
+            event.id,
+            subscriptionType || 'workspace_plan'
+          )
+        }
+
         console.log(`Subscription updated: ${subscription.id} -> ${subscription.status}`)
         break
       }
@@ -235,6 +288,22 @@ export async function POST(request: NextRequest) {
           await handleSubscriptionCanceled(billing.workspace_id, type)
         } else {
           await handleSubscriptionCanceled(workspaceId, subscriptionType)
+        }
+
+        // Log billing event for subscription cancellation
+        const canceledWorkspaceId = workspaceId || (await supabase
+          .from('workspace_billing')
+          .select('workspace_id')
+          .or(`stripe_subscription_id.eq.${subscription.id},stripe_agent_subscription_id.eq.${subscription.id}`)
+          .single()).data?.workspace_id
+
+        if (canceledWorkspaceId) {
+          await logSubscriptionCanceled(
+            canceledWorkspaceId,
+            subscription,
+            event.id,
+            subscriptionType || 'workspace_plan'
+          )
         }
 
         console.log(`Subscription canceled: ${subscription.id}`)
@@ -278,6 +347,9 @@ export async function POST(request: NextRequest) {
           paid_at: new Date(),
         })
 
+        // Log billing event for successful payment
+        await logPaymentSucceeded(billing.workspace_id, invoice, event.id)
+
         console.log(`Invoice paid: ${invoice.id} for workspace ${billing.workspace_id}`)
         break
       }
@@ -309,8 +381,10 @@ export async function POST(request: NextRequest) {
           invoice_url: invoice.hosted_invoice_url || undefined,
         })
 
+        // Log billing event for failed payment (also creates alert)
+        await logPaymentFailed(billing.workspace_id, invoice, event.id)
+
         console.log(`Invoice payment failed: ${invoice.id} for workspace ${billing.workspace_id}`)
-        // TODO: Consider sending notification to workspace owner about failed payment
         break
       }
 
@@ -412,4 +486,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 })
   }
 }
-

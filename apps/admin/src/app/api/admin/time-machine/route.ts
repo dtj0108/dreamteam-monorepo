@@ -147,6 +147,7 @@ export async function GET(request: NextRequest) {
  *   start_time?: string,        // For simulate action
  *   end_time?: string,          // For simulate action
  *   use_simulated_time?: boolean // For simulate action - when true (default), agents see the simulated run time
+ *   batch_size?: number         // For simulate action - number of concurrent executions (default: 5)
  * }
  */
 export async function POST(request: NextRequest) {
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
     const body = await request.json()
-    const { action, schedule_ids, target_time, start_time, end_time, use_simulated_time } = body
+    const { action, schedule_ids, target_time, start_time, end_time, use_simulated_time, batch_size } = body
 
     if (!action) {
       return NextResponse.json({ error: 'action is required' }, { status: 400 })
@@ -166,7 +167,9 @@ export async function POST(request: NextRequest) {
     if (action === 'simulate') {
       // Default to true - agents see simulated time unless explicitly disabled
       const useSimTime = use_simulated_time !== false
-      return handleSimulateAction(request, user!, supabase, schedule_ids, start_time, end_time, useSimTime)
+      // Validate and constrain batch_size (default: 5, max: 20)
+      const batchSize = Math.min(Math.max(1, batch_size || 5), 20)
+      return handleSimulateAction(request, user!, supabase, schedule_ids, start_time, end_time, useSimTime, batchSize)
     }
 
     // Handle trigger_cron action (doesn't require schedule_ids)
@@ -462,7 +465,8 @@ async function handleSimulateAction(
   scheduleIds: string[] | undefined,
   startTime: string | undefined,
   endTime: string | undefined,
-  useSimulatedTime: boolean = true // When true, agents see the simulated run time instead of real time
+  useSimulatedTime: boolean = true, // When true, agents see the simulated run time instead of real time
+  batchSize: number = 5 // Number of concurrent executions
 ) {
   // Validate inputs
   if (!scheduleIds || !Array.isArray(scheduleIds) || scheduleIds.length === 0) {
@@ -576,21 +580,23 @@ async function handleSimulateAction(
   // Sort all runs chronologically
   allRuns.sort((a, b) => a.runTime.getTime() - b.runTime.getTime())
 
-  console.log(`[Time Machine] Simulation: ${allRuns.length} total runs across ${schedules.length} schedules`)
+  console.log(`[Time Machine] Simulation: ${allRuns.length} total runs across ${schedules.length} schedules (batch size: ${batchSize})`)
 
-  // Execute each run in order
-  const executionResults: Array<{
+  // Execute runs in parallel batches
+  type ExecutionResult = {
     scheduleId: string
     scheduleName: string
     runTime: string
     executionId: string | null
     status: 'dispatched' | 'failed' | 'skipped'
     error?: string
-  }> = []
+  }
 
+  const executionResults: ExecutionResult[] = []
   const cronSecret = process.env.CRON_SECRET
 
-  for (const run of allRuns) {
+  // Helper function to execute a single run
+  async function executeRun(run: ScheduledRun): Promise<ExecutionResult> {
     try {
       // Create execution record
       const { data: execution, error: execError } = await supabase
@@ -606,15 +612,14 @@ async function handleSimulateAction(
         .single()
 
       if (execError || !execution) {
-        executionResults.push({
+        return {
           scheduleId: run.scheduleId,
           scheduleName: run.scheduleName,
           runTime: run.runTime.toISOString(),
           executionId: null,
           status: 'failed',
           error: execError?.message || 'Failed to create execution record'
-        })
-        continue
+        }
       }
 
       // Dispatch to agent server
@@ -639,44 +644,51 @@ async function handleSimulateAction(
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-          executionResults.push({
+          return {
             scheduleId: run.scheduleId,
             scheduleName: run.scheduleName,
             runTime: run.runTime.toISOString(),
             executionId: execution.id,
             status: 'failed',
             error: errorData.error || `HTTP ${response.status}`
-          })
+          }
         } else {
-          executionResults.push({
+          return {
             scheduleId: run.scheduleId,
             scheduleName: run.scheduleName,
             runTime: run.runTime.toISOString(),
             executionId: execution.id,
             status: 'dispatched'
-          })
+          }
         }
       } catch (dispatchError) {
-        executionResults.push({
+        return {
           scheduleId: run.scheduleId,
           scheduleName: run.scheduleName,
           runTime: run.runTime.toISOString(),
           executionId: execution.id,
           status: 'failed',
           error: dispatchError instanceof Error ? dispatchError.message : 'Dispatch failed'
-        })
+        }
       }
     } catch (runError) {
       console.error(`[Time Machine] Error executing run:`, runError)
-      executionResults.push({
+      return {
         scheduleId: run.scheduleId,
         scheduleName: run.scheduleName,
         runTime: run.runTime.toISOString(),
         executionId: null,
         status: 'failed',
         error: runError instanceof Error ? runError.message : 'Unknown error'
-      })
+      }
     }
+  }
+
+  // Process runs in parallel batches
+  for (let i = 0; i < allRuns.length; i += batchSize) {
+    const batch = allRuns.slice(i, i + batchSize)
+    const batchResults = await Promise.all(batch.map(run => executeRun(run)))
+    executionResults.push(...batchResults)
   }
 
   // Log the simulation

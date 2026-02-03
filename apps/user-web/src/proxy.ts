@@ -13,6 +13,7 @@ const publicRoutes = [
   '/api/auth/verify-otp',
   '/api/auth/send-otp',
   '/api/auth/me',
+  '/api/auth/complete-signup', // Guest checkout signup completion (pay first, sign up after)
   '/api/team/invites/check', // Allow checking for invites during signup
   '/api/twilio/voice',      // Twilio webhook endpoints (must be public)
   '/api/twilio/sms',        // Twilio SMS webhook

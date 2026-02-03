@@ -179,11 +179,13 @@ export function TimezoneSelect({
         {timezoneGroups.map((group) => (
           <SelectGroup key={group.region}>
             <SelectLabel>{group.region}</SelectLabel>
-            {group.timezones.map((tz) => (
-              <SelectItem key={tz.id} value={tz.id}>
-                {tz.label} ({tz.offset})
-              </SelectItem>
-            ))}
+            {group.timezones
+              .filter((tz) => tz.id !== browserTimezone) // Skip browser TZ (already in Quick Select)
+              .map((tz) => (
+                <SelectItem key={tz.id} value={tz.id}>
+                  {tz.label} ({tz.offset})
+                </SelectItem>
+              ))}
           </SelectGroup>
         ))}
       </SelectContent>

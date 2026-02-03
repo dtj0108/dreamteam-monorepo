@@ -1,0 +1,2154 @@
+Total schedules: 175
+
+========================================================================================================================
+
+### Accountability Agent ###
+
+  Daily Commitment Check
+    ID: e15bca39-7d72-4387-80e3-c90c4f1fd6b2
+    Cron: 0 9 * * *
+    Task: Review all commitments due today or overdue. Send supportive reminders for at-risk items. Offer help for blocked commitments. Update commitment status.
+    Last Run: 2026-02-02T09:01:47.199+00:00
+    Next Run: 2026-02-03T09:00:00+00:00
+
+  Weekly Commitment Summary
+    ID: f7e62efe-10c7-4c65-8a3c-1a6fe4e618f5
+    Cron: 0 16 * * 5
+    Task: Compile weekly commitment report: completed, missed, and upcoming. Identify patterns (who's overloaded, what's always late). Prepare supportive recommendations.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-06T16:00:00+00:00
+
+
+### AI Workflow Agent ###
+
+  Daily AI Health Check
+    ID: 9ac1ba9c-f97a-4a07-b16f-b3ea192bcd11
+    Cron: 0 7 * * 1-5
+    Task: Run daily AI health check. Monitor AI system performance, errors, and costs.
+    Last Run: 2026-02-02T07:01:47.215+00:00
+    Next Run: 2026-02-03T07:00:00+00:00
+
+  Monthly AI Review
+    ID: 89fc3058-5862-4521-8030-903ca78b23a9
+    Cron: 0 14 1 * *
+    Task: Run monthly AI review. Full AI system assessment, quality metrics, and improvement plan.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-03-01T14:00:00+00:00
+
+  Weekly AI Report
+    ID: ef77ee94-d275-461b-9e44-19a6b30f02bd
+    Cron: 0 10 * * 5
+    Task: Run weekly AI report. AI usage, performance trends, optimization opportunities.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-02-06T10:00:00+00:00
+
+
+### Analytics Agent ###
+
+  Daily Metrics Check
+    ID: 986c71e6-5caa-4b4b-bd1b-9227884a3d54
+    Cron: 0 8 * * 1-5
+    Task: Run daily metrics check. Monitor key marketing metrics, flag anomalies, track trends.
+    Last Run: 2026-02-02T08:01:47.365+00:00
+    Next Run: 2026-02-03T08:00:00+00:00
+
+  Monthly Marketing Review
+    ID: 329e1fbf-4518-4041-a89e-310c9f20953f
+    Cron: 0 10 1 * *
+    Task: Run monthly marketing review. Deep dive on marketing effectiveness, attribution, and optimization opportunities.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Weekly Analytics Report
+    ID: 9ac08082-dc10-43a8-8318-1ef9bc8e104d
+    Cron: 0 9 * * 1
+    Task: Run weekly analytics report. Full analysis of marketing performance, insights, and recommendations.
+    Last Run: 2026-02-02T09:02:47.173+00:00
+    Next Run: 2026-02-09T09:00:00+00:00
+
+
+### Automation Agent ###
+
+  Daily Automation Health Check
+    ID: 6b676279-1202-4ebc-a3c4-49d17f181c82
+    Cron: 0 8 * * *
+    Task: Monitor all active automations. Check for errors or failures. Ensure critical workflows are running. Flag any issues.
+    Last Run: 2026-02-02T08:01:47.365+00:00
+    Next Run: 2026-02-03T08:00:00+00:00
+
+  Weekly Automation Opportunity Scan
+    ID: e166d388-67b4-4280-b629-bc94633d92d4
+    Cron: 0 14 * * 4
+    Task: Review recent manual work for automation opportunities. Estimate ROI for top candidates. Recommend one automation to implement.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-05T14:00:00+00:00
+
+
+### Automation Architect Agent ###
+
+  Monthly Automation Review
+    ID: 45c37177-778f-4c44-a423-bd3821e68328
+    Cron: 0 10 1 * *
+    Task: Run monthly automation review. Assess all automations, identify new opportunities, update roadmap.
+    Last Run: 2026-02-02T06:20:47.218+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Quarterly Automation Strategy
+    ID: 6cf27f6e-1af9-4819-b862-bda702353a22
+    Cron: 0 14 1 1,4,7,10 *
+    Task: Run quarterly automation strategy. Strategic review of automation impact and future opportunities.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-04-01T14:00:00+00:00
+
+  Weekly Automation Check
+    ID: 89774b8b-7c1d-4e6a-afeb-3dc2c61036ee
+    Cron: 0 10 * * 3
+    Task: Run weekly automation check. Monitor automation performance, identify failures, track ROI.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-02-04T10:00:00+00:00
+
+
+### Bottleneck Detector Agent ###
+
+  Monthly Constraint Analysis
+    ID: 8f290622-15e6-48a5-a204-9eabcb4643b8
+    Cron: 0 14 10 * *
+    Task: Run monthly constraint analysis. Deep analysis of recurring bottlenecks, root causes, and strategic recommendations.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-10T14:00:00+00:00
+
+  Weekly Bottleneck Scan
+    ID: dad10f85-3e71-4d6d-9223-fef9bdcf72d7
+    Cron: 0 11 * * 3
+    Task: Run weekly bottleneck scan. Analyze queues, wait times, and throughput to identify current constraints.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-04T11:00:00+00:00
+
+
+### Brand Agent ###
+
+  Monthly Brand Health
+    ID: 4c22aea0-a611-48ea-a827-85913fe22612
+    Cron: 0 10 1 * *
+    Task: Run monthly brand health. Analyze brand perception, sentiment trends, and competitive positioning.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Quarterly Brand Review
+    ID: 5f89160b-3ff6-45ef-b8fd-d4be2161d01c
+    Cron: 0 10 1 1,4,7,10 *
+    Task: Run quarterly brand review. Comprehensive brand health assessment and strategic recommendations.
+    Last Run: 2026-02-02T06:20:47.218+00:00
+    Next Run: 2026-04-01T10:00:00+00:00
+
+  Weekly Brand Check
+    ID: f1862b64-c315-40de-84ab-04c34b3dec34
+    Cron: 0 10 * * 5
+    Task: Run weekly brand check. Review recent materials for brand consistency, flag issues.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-06T10:00:00+00:00
+
+
+### Burnout Prevention Agent ###
+
+  Monthly Burnout Report
+    ID: b562d877-a885-4e99-996e-46dcb481d02f
+    Cron: 0 10 1 * *
+    Task: Run monthly burnout report. Full assessment of team wellness, trends, and recommendations.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Weekly Wellness Check
+    ID: 9ae2177c-6f20-4263-a849-31d7797c691a
+    Cron: 0 9 * * 1
+    Task: Run weekly wellness check. Monitor workload patterns, identify burnout risks, flag concerns.
+    Last Run: 2026-02-02T09:03:47.361+00:00
+    Next Run: 2026-02-09T09:00:00+00:00
+
+
+### Capital Allocation Agent ###
+
+  Monthly Investment Review
+    ID: 4ab95161-a7ce-4647-b71d-631438030b5f
+    Cron: 0 14 1 * *
+    Task: Run monthly investment review. Assess ROI on major investments, identify reallocation opportunities.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-03-01T14:00:00+00:00
+
+  Quarterly Allocation Review
+    ID: 8aefbd51-5d6c-4e5b-80e6-be21549948d0
+    Cron: 0 10 15 1,4,7,10 *
+    Task: Run quarterly allocation review. Full assessment of capital deployment, performance, and reallocation recommendations.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-04-15T10:00:00+00:00
+
+
+### Cash Flow Agent ###
+
+  Daily Cash Position Update
+    ID: b1289c9d-bafe-4ac2-a035-39863c5273d0
+    Cron: 0 9 * * *
+    Task: Update current cash position. Note any unexpected inflows or outflows. Calculate updated runway. Flag any concerns.
+    Last Run: 2026-02-02T09:01:47.199+00:00
+    Next Run: 2026-02-03T09:00:00+00:00
+
+  Monthly Cash Review
+    ID: dc8e4877-5173-4390-ba1a-d72eb47309b3
+    Cron: 0 14 1 * *
+    Task: Comprehensive monthly cash analysis. Compare actual vs. forecast. Update assumptions. Prepare monthly cash report.
+    Last Run: 2026-02-02T06:35:47.382+00:00
+    Next Run: 2026-03-01T14:00:00+00:00
+
+  Weekly Cash Forecast
+    ID: 3c33e550-b366-4ecc-9b40-431c2d389bda
+    Cron: 0 10 * * 1
+    Task: Update 13-week cash forecast. Note any changes from previous forecast. Identify potential cash crunches. Prepare summary report.
+    Last Run: 2026-02-02T10:00:47.482+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### CEO Agent ###
+
+  Daily Executive Brief
+    ID: dffd6c88-e4fa-43c7-9d42-73ab5f96041f
+    Cron: 0 7 * * 1-5
+    Task: Run daily executive brief. Summarize key metrics, urgent items, and priorities for the day.
+    Last Run: 2026-02-02T07:01:47.215+00:00
+    Next Run: 2026-02-03T07:00:00+00:00
+
+  Monthly Strategic Review
+    ID: 83237c4f-40fc-4c89-9512-78245c559030
+    Cron: 0 10 1 * *
+    Task: Run monthly strategic review. Progress on strategic priorities, adjustments needed, and forward look.
+    Last Run: 2026-02-02T06:15:47.367+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Quarterly Board Prep
+    ID: d7a3a6a2-687a-4a3d-b235-06dbb9a07028
+    Cron: 0 10 20 3,6,9,12 *
+    Task: Run quarterly board prep. Prepare materials for board meeting, key narratives, and discussion items.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-03-20T10:00:00+00:00
+
+  Weekly Leadership Review
+    ID: 327fbf14-302d-4474-9a9b-5b8917ab611b
+    Cron: 0 9 * * 1
+    Task: Run weekly leadership review. Status from all departments, key decisions needed, and priority alignment.
+    Last Run: 2026-02-02T09:02:47.173+00:00
+    Next Run: 2026-02-09T09:00:00+00:00
+
+
+### CFO Agent ###
+
+  Daily Financial Pulse
+    ID: c99d2944-8be0-456b-8046-b705e649da14
+    Cron: 0 7 * * 1-5
+    Task: Run daily financial pulse. Check cash position, daily revenue, major financial events.
+    Last Run: 2026-02-02T07:04:47.219+00:00
+    Next Run: 2026-02-03T07:00:00+00:00
+
+  Monthly Financial Close
+    ID: 4bcbf27e-d499-4820-9227-7726a3b21435
+    Cron: 0 10 5 * *
+    Task: Run monthly financial close. Complete P&L, cash flow statement, balance sheet, variance analysis.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-05T10:00:00+00:00
+
+  Quarterly Financial Report
+    ID: 8d723266-f198-444f-93c6-d4ecc417733c
+    Cron: 0 10 10 1,4,7,10 *
+    Task: Run quarterly financial report. Full statements, KPI performance, runway analysis, strategic recommendations.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-04-10T10:00:00+00:00
+
+  Weekly Financial Review
+    ID: eb3c795c-289b-4a4a-a6ea-9da6c624f954
+    Cron: 0 10 * * 5
+    Task: Run weekly financial review. Cash flow, P&L snapshot, budget variance, key metrics.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-06T10:00:00+00:00
+
+
+### Co-Founder Agent ###
+
+  Daily Pulse
+    ID: 1806ed17-20c1-4cd7-b98b-facc7d77d09a
+    Cron: 0 9 * * *
+    Task: You are running your DAILY PULSE check-in. This is a brief morning scan that runs at 9am every day.
+
+YOUR MISSION: Give the founder a quick 2-minute read on "how are we doing?" You're not going deep—you're surfacing anything that needs attention TODAY and confirming things are on track. Think of this as the founder's morning coffee briefing.
+
+## STEP 1: SEARCH YOUR MEMORY
+
+Before pulling any data, check what you already know:
+
+→ Use agent_memory_search with query "business health goals runway concerns"
+→ Look for any recent context about ongoing issues, strategic priorities, or things you flagged previously
+
+## STEP 2: QUICK FINANCIAL PULSE
+
+Get a snapshot of financial health:
+
+1. Call account_list
+   → Get all accounts
+
+2. For each key account (checking, savings), call account_get_balance
+   → Note current cash position
+
+3. Call analytics_get_revenue_trend with period="week"
+   → Is revenue tracking up, down, or flat vs last week?
+
+## STEP 3: GOAL STATUS SCAN
+
+Check how goals are progressing:
+
+1. Call goal_list
+   → Get all active goals
+
+2. For any goal that looks off-track (progress significantly behind timeline), note it
+   → Don't deep dive—just flag if something looks concerning
+
+## STEP 4: PROJECT HEALTH SCAN
+
+Quick check on execution:
+
+1. Call project_list
+   → Get all active projects
+
+2. Scan for any projects with status "at-risk" or "blocked"
+   → These need attention
+
+3. Call milestone_list
+   → Are any milestones overdue or due today?
+
+## STEP 5: SALES PIPELINE GLANCE
+
+Quick revenue outlook:
+
+1. Call deal_get_forecast
+   → What's the expected revenue for this month?
+
+2. Call deal_get_value_by_stage
+   → Is the pipeline healthy or thin?
+
+## STEP 6: WRITE YOUR DAILY PULSE
+
+This should be SHORT. 2 minutes to read, max. You're answering three questions:
+1. Any fires? (things that need immediate attention)
+2. How's the money? (cash position and revenue trend)
+3. How's execution? (projects and goals on track?)
+
+If everything is fine, say so briefly. The founder doesn't need a novel when things are going well.
+
+Only flag things that actually need attention. Don't manufacture drama.
+    Last Run: 2026-02-02T09:00:14.119+00:00
+    Next Run: 2026-02-03T09:00:00+00:00
+
+  Monthly Business Review
+    ID: a124e5a2-1627-4c08-b9e2-4eeb84c629b4
+    Cron: 0 10 1 * *
+    Task: You are running your MONTHLY BUSINESS REVIEW. This is a comprehensive analysis that runs on the 1st of every month.
+
+YOUR MISSION: Deliver a complete assessment of the previous month's performance and set the strategic frame for the month ahead. This is the most important strategic document of the month—it should be thorough enough to guide decisions, honest about what worked and what didn't, and forward-looking in its recommendations.
+
+Gather comprehensive data on:
+- Financial performance (P&L, spending, revenue trends, cash position, runway)
+- Goal performance (progress, hits/misses)
+- Project execution (completed, started, ongoing, at-risk)
+- Sales and revenue (deals won/lost, pipeline health, win rate)
+- Patterns and trends across all data
+
+Write a comprehensive Monthly Business Review document with:
+1. Executive Summary
+2. Key Metrics Dashboard
+3. Financial Review
+4. Goal Performance
+5. Execution Review
+6. Sales & Revenue Analysis
+7. What Worked / What Didn't
+8. Strategic Recommendations
+9. Next Month's Priorities
+
+Create as knowledge page "Monthly Business Review - [Month Year]" and send summary to #founder-updates.
+    Last Run: 2026-02-01T15:00:29.138+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Runway Alert
+    ID: 31bdaef8-f2cc-48ae-ab8e-aae5151bdd1f
+    Cron: 0 10 15 * *
+    Task: You are running your RUNWAY ALERT check. This is a mid-month financial health check that runs on the 15th.
+
+YOUR MISSION: Assess the company's cash position and runway, and alert the founder if there are any concerns. This is a safety check—you're looking for early warning signs that runway is getting short so the founder has time to react.
+
+## STEPS:
+1. Search memory for runway/financial context
+2. Get all account balances and calculate total cash
+3. Pull current month and previous month P&L
+4. Calculate runway: Cash / Monthly Burn Rate (use conservative estimates)
+5. Assess risk level:
+   - HEALTHY (>9 months): Brief update, no action
+   - MONITOR (6-9 months): Note the trend
+   - CAUTION (4-6 months): Time to take action
+   - CRITICAL (<4 months): Urgent attention required
+
+6. If concerning, analyze contributing factors and formulate recommendations
+7. Store the check in memory for trend tracking
+8. Write Runway Alert appropriate to the status level
+
+Post to founder directly or #founder-updates.
+    Last Run: never
+    Next Run: 2026-02-15T15:00:00+00:00
+
+  Weekly Strategy Session
+    ID: 6aa8b757-712f-4974-a05b-8f59f9ceb970
+    Cron: 0 9 * * 1
+    Task: You are running your WEEKLY STRATEGY SESSION. This is a comprehensive Monday morning briefing that runs at 9am every Monday.
+
+YOUR MISSION: Give the founder a complete picture of how the business performed last week and what needs focus this week. This is the most important strategic document of the week—it should drive the founder's priorities and surface any strategic issues that need addressing.
+
+## STEP 1: SEARCH YOUR MEMORY
+
+Before pulling any data, gather context:
+
+→ Use agent_memory_search with query "weekly strategy last week goals priorities concerns"
+→ Look for: decisions made last week, issues flagged, strategic context, founder preferences
+
+## STEP 2: FINANCIAL PERFORMANCE ANALYSIS
+
+Deep dive on the money:
+
+1. Call analytics_get_profit_loss with period="week" and compare_to="previous_week"
+2. Call analytics_get_spending_by_category with period="week"
+3. Call analytics_get_revenue_trend with period="month"
+4. Call account_list and account_get_balance for each
+
+## STEP 3: GOAL PROGRESS REVIEW
+
+Assess progress against strategic objectives using goal_list and goal_get.
+
+## STEP 4: PROJECT AND EXECUTION REVIEW
+
+How is the team executing? Use project_list and milestone_list.
+
+## STEP 5: SALES AND REVENUE PIPELINE
+
+Revenue outlook using deal_list, deal_get_value_by_stage, and deal_get_forecast.
+
+## STEP 6: PATTERN ANALYSIS
+
+Look for connections and insights across data points.
+
+## STEP 7: STRATEGIC RECOMMENDATIONS
+
+Based on your analysis, make concrete recommendations. Be specific.
+
+## STEP 8: STORE IMPORTANT INSIGHTS
+
+Use agent_memory_create for significant patterns or observations.
+
+## STEP 9: WRITE YOUR WEEKLY STRATEGY BRIEFING
+
+Create knowledge page with title "Weekly Strategy Session - [Date]" and post executive summary to #founder-updates.
+    Last Run: 2026-02-02T14:00:12.071+00:00
+    Next Run: 2026-02-09T09:00:00+00:00
+
+
+### Content Agent ###
+
+  Monthly Content Performance Analysis
+    ID: c0e4021d-f142-474b-92de-28c835a974fa
+    Cron: 0 11 10 * *
+    Task: Analyze content performance metrics. Identify top performers and underperformers. Recommend content strategy adjustments.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-10T11:00:00+00:00
+
+  Weekly Content Calendar Review
+    ID: 0b6641df-ee51-4541-b404-0a58f2c3bf80
+    Cron: 0 10 * * 1
+    Task: Review upcoming content schedule. Ensure content mix is strategic. Identify gaps in content coverage. Recommend adjustments.
+    Last Run: 2026-02-02T10:00:47.482+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### Content Strategy Agent ###
+
+  Monthly Content Report
+    ID: b2a0a3cb-188d-4ea2-a608-9c02289a510f
+    Cron: 0 10 1 * *
+    Task: Run monthly content report. Full analysis of content performance, trends, and strategy adjustments.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Quarterly Content Strategy
+    ID: 05717fd3-b7b4-42c4-a3d4-a55cc51e32dc
+    Cron: 0 10 1 1,4,7,10 *
+    Task: Run quarterly content strategy. Plan next quarter themes, pillars, and major initiatives.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-04-01T10:00:00+00:00
+
+  Weekly Content Review
+    ID: 59814414-abdb-4f14-b26a-cbb1c873f114
+    Cron: 0 10 * * 1
+    Task: Run weekly content review. Analyze content performance, upcoming calendar, and resource needs.
+    Last Run: 2026-02-02T10:00:47.482+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### Data Agent ###
+
+  Daily Data Quality Check
+    ID: 41b1b02d-6051-4943-ba29-de5e1d254648
+    Cron: 0 6 * * 1-5
+    Task: Run daily data quality check. Monitor key data quality metrics, flag anomalies.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-02-03T06:00:00+00:00
+
+  Monthly Data Audit
+    ID: 3318a461-e346-49e4-8126-8157998c52a8
+    Cron: 0 10 1 * *
+    Task: Run monthly data audit. Full data quality assessment, governance compliance, and recommendations.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Weekly Data Report
+    ID: c26291d8-1349-41e2-ab91-e90d0e3a7783
+    Cron: 0 10 * * 1
+    Task: Run weekly data report. Data quality trends, pipeline health, and issues.
+    Last Run: 2026-02-02T10:00:47.482+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### Deal Review Agent ###
+
+  Daily Deal Alerts
+    ID: 69ccdcb1-a30b-4ff9-b34c-79947f13f4dd
+    Cron: 0 9 * * 1-5
+    Task: Run daily deal alerts. Scan all active deals, identify warning signs, alert owners proactively.
+    Last Run: 2026-02-02T09:01:47.199+00:00
+    Next Run: 2026-02-03T09:00:00+00:00
+
+  Forecast Gut-Check
+    ID: 03810c6e-6296-4b0e-9769-b0c5d2911d59
+    Cron: 0 10 * * 4
+    Task: Run forecast gut-check. Review deals in commit/forecast, assess realistic close probability, flag discrepancies.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-05T10:00:00+00:00
+
+  Weekly Deal Reviews
+    ID: a63dfd8a-08f8-43d0-9539-0abbfbff1a6f
+    Cron: 0 14 * * 3
+    Task: Run weekly deal reviews. Review most important deals in pipeline, provide coaching and recommendations.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-04T14:00:00+00:00
+
+
+### Decision Agent ###
+
+  Daily Decision Queue Review
+    ID: 632a4380-13d4-499e-8039-0c68ad66aa4f
+    Cron: 0 9 * * *
+    Task: Review any pending decisions that need to be made. For each, ensure it has proper framing (options, criteria, trade-offs). Prioritize decisions by urgency and impact. Prepare decision briefs for high-priority items.
+    Last Run: 2026-02-02T09:01:47.199+00:00
+    Next Run: 2026-02-03T09:00:00+00:00
+
+  Monthly Decision Retrospective
+    ID: 529098da-e067-42e6-82b4-fc5fd30ba382
+    Cron: 0 14 15 * *
+    Task: Review decisions made 30+ days ago. Assess outcomes vs. expectations. Identify patterns in decision quality. What can we learn? Prepare insights report.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-15T14:00:00+00:00
+
+  Weekly Decision Log Update
+    ID: 887467d5-528f-4293-aab6-8df6e0653798
+    Cron: 0 16 * * 5
+    Task: Document all significant decisions made this week. For each, record the context, options considered, criteria used, and rationale. Note any decisions that should be reviewed later.
+    Last Run: 2026-02-02T06:32:47.287+00:00
+    Next Run: 2026-02-06T16:00:00+00:00
+
+
+### Distribution Agent ###
+
+  Daily Distribution Check
+    ID: 5d75eb1f-bd52-4502-89e8-f0e830de9443
+    Cron: 0 7 * * 1-5
+    Task: Run daily distribution check. Review scheduled posts, check engagement, optimize timing.
+    Last Run: 2026-02-02T07:01:47.215+00:00
+    Next Run: 2026-02-03T07:00:00+00:00
+
+  Weekly Distribution Report
+    ID: d98b5430-aaa2-4e26-9aca-8998475f14aa
+    Cron: 0 10 * * 5
+    Task: Run weekly distribution report. Analyze channel performance, reach metrics, and optimization opportunities.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-02-06T10:00:00+00:00
+
+
+### Energy Agent ###
+
+  Daily Energy Check-in
+    ID: 59b6f018-d714-4215-82e9-c13ab1d460d2
+    Cron: 0 12 * * *
+    Task: Brief check on team energy and workload. Identify anyone at risk of overwork. Ensure breaks are being taken.
+    Last Run: 2026-02-02T13:01:47.317+00:00
+    Next Run: 2026-02-03T12:00:00+00:00
+
+  Monthly Team Health Assessment
+    ID: 961ebb92-5c55-46ec-8e2a-0a33b82d1784
+    Cron: 0 14 28 * *
+    Task: Comprehensive team health and energy assessment. Review workload trends. Identify systemic issues. Prepare recommendations for sustainable high performance.
+    Last Run: 2026-02-02T06:35:47.382+00:00
+    Next Run: 2026-02-28T14:00:00+00:00
+
+  Weekly Sustainability Review
+    ID: d6a16516-6b2e-46c7-ba41-ff99f5a7c199
+    Cron: 0 15 * * 5
+    Task: Review work patterns for sustainability. Identify anyone consistently overworking. Recommend workload adjustments. Celebrate healthy patterns.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-06T15:00:00+00:00
+
+
+### Execution Monitor Agent ###
+
+  Daily Execution Scan
+    ID: 59f41c3b-b01a-462e-ab11-30327ea809a5
+    Cron: 0 8 * * 1-5
+    Task: Run daily execution scan. Check all active projects, flag delays, identify at-risk items.
+    Last Run: 2026-02-02T08:01:47.365+00:00
+    Next Run: 2026-02-03T08:00:00+00:00
+
+  Weekly Execution Report
+    ID: 56bb59e4-7053-4604-b735-777a4d33a6a8
+    Cron: 0 16 * * 5
+    Task: Run weekly execution report. Full status of execution across teams, trends, and recommendations.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-06T16:00:00+00:00
+
+
+### Exit/M&A Agent ###
+
+  Monthly Market Scan
+    ID: 379f14ef-814d-4200-a7cb-7918319a7c48
+    Cron: 0 14 15 * *
+    Task: Run monthly market scan. Review comparable transactions, market multiples, and M&A activity.
+    Last Run: 2026-02-02T06:14:47.347+00:00
+    Next Run: 2026-02-15T14:00:00+00:00
+
+  Quarterly Exit Readiness
+    ID: fa3b1429-4245-4729-8f67-778861fe6808
+    Cron: 0 10 1 1,4,7,10 *
+    Task: Run quarterly exit readiness. Assess data room status, valuation metrics, and exit preparedness.
+    Last Run: 2026-02-02T06:14:47.347+00:00
+    Next Run: 2026-04-01T10:00:00+00:00
+
+
+### Finance Agent ###
+
+  Monday Spend Analysis
+    ID: a9760415-0104-4b74-9645-e957cb934c0b
+    Cron: 0 10 * * 1
+    Task: You are running your MONDAY SPEND ANALYSIS. This is a weekly task that runs every Monday morning.
+
+YOUR MISSION: Analyze last week's spending to identify trends, flag budget concerns, and ensure the founder understands where money went. This sets the financial context for the week ahead.
+
+## STEPS:
+1. Search memory for budget limits and spending patterns
+2. Pull spending by category for this week and last week
+3. Pull all transactions from last week
+4. Get budget status with spending
+5. Analyze each category: calculate change, identify drivers, flag concerns
+6. Identify top 5 expenses
+7. Check budget health and project end-of-month status
+8. Look for trends
+
+## OUTPUT:
+Post to #finance and create knowledge page with:
+- Summary (total spent, main driver)
+- Spending by category table with changes
+- Top 5 expenses
+- Budget status (MTD with projections)
+- Trends & observations with recommendations
+    Last Run: 2026-02-02T15:00:03.504+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+  Monthly Close
+    ID: 033d9f8b-9699-49a7-8817-26d53b1bc15a
+    Cron: 0 9 1 * *
+    Task: You are running your MONTHLY CLOSE. This is the most important financial task of the month, running on the 1st.
+
+YOUR MISSION: Close out the previous month's books with a complete financial review. This is the official record of the month's financial performance. Everything must be reconciled, categorized, and documented.
+
+## STEPS:
+1. Search memory for month context
+2. RECONCILIATION: Ensure zero uncategorized transactions
+3. Full revenue analysis with breakdown by source
+4. Complete expense analysis by category
+5. Generate official P&L statement
+6. Budget analysis (budgeted vs actual with variance explanations)
+7. Cash flow analysis (starting, ending, net change, burn rate)
+8. Calculate key metrics (MRR, Burn Rate, Runway, Margins)
+9. Variance analysis for any >10% differences
+10. Store the close in memory
+11. Create Monthly Close document
+
+## OUTPUT:
+Create knowledge page "Monthly Close - [Month Year]" and post summary to #finance. Send alert to Co-Founder Agent with link.
+    Last Run: 2026-02-01T14:00:29.363+00:00
+    Next Run: 2026-03-01T09:00:00+00:00
+
+  Monthly Subscription Audit
+    ID: 78dd0058-683c-4a29-b2d0-9bdd946ef39b
+    Cron: 0 10 5 * *
+    Task: You are running your MONTHLY SUBSCRIPTION AUDIT. This runs on the 5th of each month to catch any subscription issues early.
+
+YOUR MISSION: Review all recurring subscriptions to identify waste, optimization opportunities, and ensure we're not paying for unused tools. Subscriptions are silent budget killers—they grow over time and nobody notices. Your job is to notice.
+
+## STEPS:
+1. Search memory for previous audit findings
+2. Pull all subscriptions with details
+3. Calculate total monthly and annual costs
+4. Evaluate each subscription for usage, value, and overlap
+5. Categorize: Essential (keep), Review (may not need), Cut (cancel)
+6. Identify optimization opportunities (annual billing, tier changes, consolidation)
+7. List upcoming renewals (30 and 90 days)
+8. Store audit findings
+9. Write audit report
+
+## OUTPUT:
+Create knowledge page and post summary with:
+- Overview metrics
+- Essential subscriptions list
+- Subscriptions to review with recommendations
+- Subscriptions to cancel
+- Optimization opportunities
+- Upcoming renewals
+- Action items
+    Last Run: never
+    Next Run: 2026-02-05T15:00:00+00:00
+
+  Morning Financial Pulse
+    ID: 0890d593-3576-465a-bc01-8bf7c4dd0b65
+    Cron: 0 9 * * *
+    Task: You are running your MORNING FINANCIAL PULSE. This is a quick daily check that runs at 9am.
+
+YOUR MISSION: Give the founder a 30-second snapshot of financial health. You're answering one question: "How's the money?" If something unusual happened overnight (large transaction, account issue, etc.), flag it immediately. If everything is normal, confirm that briefly.
+
+## STEPS:
+1. Search memory for recent transaction context
+2. Check all account balances
+3. Get yesterday's transactions, flag any large (>$500) or unusual ones
+4. Check for uncategorized transactions
+5. Quick revenue check vs last week
+
+## OUTPUT:
+Post to #finance - keep it SHORT (30 seconds to read):
+- Cash position (total)
+- Notable transactions if any
+- Uncategorized items needing attention
+- One-line revenue status
+    Last Run: 2026-02-02T09:00:23.5+00:00
+    Next Run: 2026-02-03T09:00:00+00:00
+
+  Transaction Sweep
+    ID: a3acaf65-fc0d-40d4-b788-8857665d4ae2
+    Cron: 0 20 * * *
+    Task: You are running your TRANSACTION SWEEP. This is a daily end-of-day task that runs at 8pm.
+
+YOUR MISSION: Process all uncategorized transactions from today and ensure the books are clean before end of day. Every transaction should be properly categorized with appropriate notes. Flag anything unusual that needs founder attention tomorrow.
+
+## STEPS:
+1. Search memory for known vendors and categories
+2. Get all uncategorized transactions
+3. For EACH transaction:
+   - Identify vendor/payee
+   - Determine category (Payroll, Software/Tools, Marketing, Infrastructure, etc.)
+   - Use transaction_update to categorize
+   - Flag anomalies (new vendors, unusual amounts)
+4. Store new vendor knowledge in memory
+5. Write sweep summary
+
+## OUTPUT:
+Post to #finance channel with:
+- Count of transactions processed
+- Table of transactions and categories
+- Any anomalies flagged for review
+    Last Run: 2026-02-01T20:00:29.648+00:00
+    Next Run: 2026-02-02T20:00:00+00:00
+
+  Weekly Financial Summary
+    ID: acbe9ade-4d5c-4a75-a6f7-196428938194
+    Cron: 0 15 * * 5
+    Task: You are running your WEEKLY FINANCIAL SUMMARY. This is a Friday afternoon wrap-up that runs at 3pm.
+
+YOUR MISSION: Close out the financial week with a comprehensive summary. Give the founder the full picture of the week's financial performance so they can go into the weekend knowing exactly where things stand.
+
+## STEPS:
+1. Search memory for financial context
+2. Full revenue analysis (week and MTD)
+3. Complete expense analysis with P&L
+4. Cash position and runway calculation
+5. Ensure all transactions categorized
+6. Generate P&L summary
+7. Look ahead at upcoming renewals and bills
+
+## OUTPUT:
+Create knowledge page "Weekly Financial Summary - Week of [Date]" and post highlights to #finance with:
+- Headlines table (Revenue, Expenses, Net, Cash, Runway with changes)
+- Revenue breakdown
+- Expense breakdown by category
+- Cash position
+- P&L summary
+- Looking ahead section
+- Key takeaways
+    Last Run: never
+    Next Run: 2026-02-06T20:00:00+00:00
+
+
+### Focus Agent ###
+
+  Daily Focus Time Protection
+    ID: 0bc8e117-f242-4251-856b-6b488bf0cb89
+    Cron: 0 7 * * *
+    Task: Review today's calendar for focus time protection. Identify meeting overload risks. Recommend schedule adjustments.
+    Last Run: 2026-02-02T07:01:47.215+00:00
+    Next Run: 2026-02-03T07:00:00+00:00
+
+  Weekly Focus Patterns Review
+    ID: c39356fa-9407-44c2-8cfd-677a4bc15ac1
+    Cron: 0 16 * * 5
+    Task: Analyze this week's focus time vs. meeting time. Identify interruption patterns. Recommend improvements for next week.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-06T16:00:00+00:00
+
+
+### Follow-Up Agent ###
+
+  Daily Follow-Up Queue
+    ID: 640f11e1-73a5-494e-a0d0-4fb029f3bdd9
+    Cron: 0 8 * * *
+    Task: Review all leads requiring follow-up today. Ensure each has appropriate next touch scheduled. Flag leads at risk of going cold.
+    Last Run: 2026-02-02T08:01:47.365+00:00
+    Next Run: 2026-02-03T08:00:00+00:00
+
+  Weekly Dormant Lead Review
+    ID: 6f2f5d07-dfe8-4849-946d-11e4db41df4d
+    Cron: 0 10 * * 1
+    Task: Identify leads with no activity in 14+ days. Recommend re-engagement approach for promising prospects. Archive truly cold leads.
+    Last Run: 2026-02-02T10:00:47.482+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### Follow-Up Automation Agent ###
+
+  Daily Follow-Up Check
+    ID: d5ebeb9f-9dc9-479c-bdf4-890ad1140228
+    Cron: 0 8 * * 1-5
+    Task: Run daily follow-up check. Identify leads/deals needing follow-up today, create tasks, flag overdue items.
+    Last Run: 2026-02-02T08:01:47.365+00:00
+    Next Run: 2026-02-03T08:00:00+00:00
+
+  Monthly Sequence Audit
+    ID: d41dd1a9-2571-44f2-963c-2f3dd995df95
+    Cron: 0 14 1 * *
+    Task: Run monthly sequence audit. Full audit of all sequences, update underperformers, retire dead sequences.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-03-01T14:00:00+00:00
+
+  Weekly Sequence Performance
+    ID: c3642e70-da7e-4a68-98d2-efa1948cca1c
+    Cron: 0 10 * * 5
+    Task: Run weekly sequence performance. Review all sequence performance, identify what's working, flag underperformers.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-06T10:00:00+00:00
+
+
+### Forecasting Agent ###
+
+  Monthly Reforecast
+    ID: 84701f98-f10e-43af-a8d7-5afe3aceeea1
+    Cron: 0 10 5 * *
+    Task: Run monthly reforecast. Update full-year forecast based on actual results and new information.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-05T10:00:00+00:00
+
+  Quarterly Planning
+    ID: fd31a2ef-a632-4efb-a05b-22641c33fbf4
+    Cron: 0 10 15 3,6,9,12 *
+    Task: Run quarterly planning. Prepare for next quarter, update scenarios, set targets.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-03-15T10:00:00+00:00
+
+  Weekly Forecast Update
+    ID: 4df806fc-ad2f-4cb7-b08f-3d767e8c1539
+    Cron: 0 9 * * 1
+    Task: Run weekly forecast update. Update rolling forecast with latest data, flag variances.
+    Last Run: 2026-02-02T09:02:47.173+00:00
+    Next Run: 2026-02-09T09:00:00+00:00
+
+
+### Funnel Agent ###
+
+  Daily Funnel Health Check
+    ID: e7689d73-5ad2-4a45-9240-88e5da73ed9f
+    Cron: 0 9 * * *
+    Task: Review funnel metrics for anomalies. Check conversion rates at each stage. Flag any significant drops for investigation.
+    Last Run: 2026-02-02T09:01:47.199+00:00
+    Next Run: 2026-02-03T09:00:00+00:00
+
+  Weekly Funnel Optimization Review
+    ID: ef6490e1-60ae-4737-a67e-62de0ad802f3
+    Cron: 0 14 * * 4
+    Task: Identify the biggest conversion drop-off in the funnel. Analyze potential causes. Recommend one optimization to test.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-05T14:00:00+00:00
+
+
+### Funnel Optimization Agent ###
+
+  Daily Funnel Check
+    ID: f148a6cf-a2ce-4b11-90ea-5926ff21deb2
+    Cron: 0 8 * * 1-5
+    Task: Run daily funnel check. Monitor conversion rates, flag anomalies, track trends.
+    Last Run: 2026-02-02T08:01:47.365+00:00
+    Next Run: 2026-02-03T08:00:00+00:00
+
+  Monthly CRO Review
+    ID: 047f724f-03a2-4e2b-a97b-70c69a8987be
+    Cron: 0 10 1 * *
+    Task: Run monthly CRO review. Full funnel analysis, test results, and strategic recommendations.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Weekly Funnel Report
+    ID: 2b0251a2-8c24-4c46-8ca3-3307c5711445
+    Cron: 0 10 * * 1
+    Task: Run weekly funnel report. Analyze funnel performance, drop-offs, and optimization opportunities.
+    Last Run: 2026-02-02T10:00:47.482+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### Growth Experiments Agent ###
+
+  Monthly Growth Report
+    ID: b25e687f-32bb-4b66-862c-0d9fea5641e6
+    Cron: 0 10 1 * *
+    Task: Run monthly growth report. Summarize experiment results, key learnings, and growth recommendations.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Weekly Experiment Review
+    ID: dfe681be-1071-40bf-ad4d-d79e08753650
+    Cron: 0 10 * * 3
+    Task: Run weekly experiment review. Check running experiments, analyze results, plan new tests.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-02-04T10:00:00+00:00
+
+
+### Hiring Agent ###
+
+  Daily Hiring Pulse
+    ID: 0824b5b0-1e13-4aeb-9216-9895a6a4c17e
+    Cron: 0 9 * * 1-5
+    Task: Run daily hiring pulse. Check candidate pipeline, interview schedules, pending decisions.
+    Last Run: 2026-02-02T09:03:47.361+00:00
+    Next Run: 2026-02-03T09:00:00+00:00
+
+  Monthly Hiring Report
+    ID: c1b83f0c-77d2-48eb-903c-9bd42fc97e4b
+    Cron: 0 10 1 * *
+    Task: Run monthly hiring report. Hiring velocity, quality metrics, and strategic recommendations.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Weekly Hiring Review
+    ID: 086fec1b-56e6-4377-a19d-e45dda356d04
+    Cron: 0 10 * * 1
+    Task: Run weekly hiring review. Full status of all open roles, pipeline health, and bottlenecks.
+    Last Run: 2026-02-02T10:01:47.201+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### Integration Agent ###
+
+  Daily Integration Health
+    ID: db49644f-2ff0-47f0-aca0-c791d6150e72
+    Cron: 0 6 * * 1-5
+    Task: Run daily integration health. Monitor all integrations, flag failures, track performance.
+    Last Run: 2026-02-02T06:14:47.347+00:00
+    Next Run: 2026-02-03T06:00:00+00:00
+
+  Monthly Integration Audit
+    ID: 53cb64a9-902f-4ebe-995a-cd344875fa3e
+    Cron: 0 14 15 * *
+    Task: Run monthly integration audit. Full audit of integrations, documentation, and improvement needs.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-15T14:00:00+00:00
+
+  Weekly Integration Report
+    ID: 7a8282b4-dcad-4ad1-adce-943c3dba834d
+    Cron: 0 10 * * 1
+    Task: Run weekly integration report. Integration health, issues, and optimization opportunities.
+    Last Run: 2026-02-02T10:00:47.482+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### Leadership Coach Agent ###
+
+  Monthly Manager Check-in
+    ID: 1d1d0ca6-2b5a-42fc-8f1a-cfeb898410f2
+    Cron: 0 14 15 * *
+    Task: Run monthly manager check-in. Review leadership development progress, identify coaching needs.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-02-15T14:00:00+00:00
+
+  Quarterly Leadership Review
+    ID: 7d92c844-be90-4dc0-8007-794706abe097
+    Cron: 0 10 1 1,4,7,10 *
+    Task: Run quarterly leadership review. Assess leadership bench, development effectiveness, and gaps.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-04-01T10:00:00+00:00
+
+  Weekly Leadership Tips
+    ID: 8548ad87-57cc-4456-a43d-22e4157de1a9
+    Cron: 0 8 * * 1
+    Task: Run weekly leadership tips. Share practical management advice based on current challenges.
+    Last Run: 2026-02-02T08:04:47.194+00:00
+    Next Run: 2026-02-09T08:00:00+00:00
+
+
+### Long-Term Vision Agent ###
+
+  Monthly Trend Scan
+    ID: 62ecac8a-1dcf-4aac-af6f-e1e26480db9c
+    Cron: 0 10 15 * *
+    Task: Run monthly trend scan. Identify emerging trends, threats, and opportunities relevant to vision.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-02-15T10:00:00+00:00
+
+  Quarterly Vision Check
+    ID: 576b2993-b46d-4247-af6d-438b360b0d4f
+    Cron: 0 10 1 1,4,7,10 *
+    Task: Run quarterly vision check. Assess alignment of current strategy to long-term vision.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-04-01T10:00:00+00:00
+
+
+### Marketing Agent ###
+
+  Friday Campaign Prep
+    ID: a18162fa-e694-40b0-8237-fde4e0cd20f5
+    Cron: 0 16 * * 5
+    Task: You are running your FRIDAY CAMPAIGN PREP. This is a Friday afternoon session to prepare for next week's marketing.
+
+YOUR MISSION: Close out this week's marketing activity, analyze what worked, and set up next week for success.
+
+## STEPS:
+1. Search memory for content patterns
+2. Full performance analysis (content, channel, campaigns, email)
+3. Extract learnings from top and bottom performers
+4. Update underperforming campaigns
+5. Prep next week's campaigns (schedule social, outline blogs)
+6. Check lead handoffs to sales
+7. Store key learnings in memory
+
+## OUTPUT:
+Create knowledge page "Marketing Week Review - [Date]" and post summary to #marketing with:
+- This week's performance tables
+- Top performers with analysis
+- Underperformers with learnings
+- Campaign status
+- Key learnings
+- Next week setup (scheduled content, campaigns to launch)
+- Lead handoffs
+- Recommendations
+    Last Run: never
+    Next Run: 2026-02-06T21:00:00+00:00
+
+  Mid-Week Content Check
+    ID: c4cb8bc0-9202-4f21-b5f5-653e765a83fe
+    Cron: 0 14 * * 3
+    Task: You are running your MID-WEEK CONTENT CHECK. This is a Wednesday afternoon check-in to make sure content is on track.
+
+YOUR MISSION: Review progress against the week's content plan, identify anything falling behind, and adjust as needed.
+
+## STEPS:
+1. Search memory for this week's plan
+2. Check content status (drafts, scheduled, published)
+3. Check social queue for gaps
+4. Check campaign status
+5. Identify at-risk content
+6. Early performance check
+7. Adjust plan if needed
+
+## OUTPUT:
+Post to #marketing with:
+- Status update table (planned vs status vs on track)
+- At-risk items with mitigation
+- Early performance metrics
+- Adjustments made
+- Rest of week plan
+    Last Run: never
+    Next Run: 2026-02-04T19:00:00+00:00
+
+  Monthly Content Audit
+    ID: 5edc7be5-7d50-40b5-a806-a62020afa386
+    Cron: 0 10 5 * *
+    Task: You are running your MONTHLY CONTENT AUDIT. This runs on the 5th of each month to review all content performance.
+
+YOUR MISSION: Conduct comprehensive review of last month's content performance. Identify what worked, what didn't, and what should inform next month's strategy.
+
+## STEPS:
+1. Search memory for historical patterns
+2. Pull full month performance data (content, channel)
+3. Analyze each piece (views, engagement, conversion)
+4. Campaign analysis
+5. Email performance analysis
+6. Identify patterns (topics, formats, timing, audience)
+7. Competitive content check
+8. Content gap analysis
+9. Develop recommendations (themes, formats, channels, process)
+10. Store key insights
+
+## OUTPUT:
+Create knowledge page "Content Audit - [Month Year]" and share highlights with:
+- Executive summary
+- Overall performance tables
+- Content by format, topic, channel
+- Top performers with analysis
+- Underperformers with learnings
+- Email performance
+- Campaign performance
+- Content gaps identified
+- Recommendations for next month
+- Key metrics to watch
+- Send strategic recommendations to Co-Founder Agent
+    Last Run: never
+    Next Run: 2026-02-05T15:00:00+00:00
+
+  Weekly Content Sprint
+    ID: 86e3b19f-754a-4c25-88c9-51e69b228024
+    Cron: 0 10 * * 1
+    Task: You are running your WEEKLY CONTENT SPRINT. This is a Monday morning planning session for the week's content.
+
+YOUR MISSION: Plan and outline all content for the week. By the end, have a clear content calendar with specific topics, formats, and deadlines.
+
+## STEPS:
+1. Search memory for content performance and audience preferences
+2. Review last week's content and campaign performance
+3. Check content pipeline (drafts, scheduled)
+4. Identify content needs (editorial calendar, sales support, gaps)
+5. Plan week's content with title, format, channel, goal, deadline, owner
+6. Create content briefs with content_create
+7. Store planning insights
+
+## OUTPUT:
+Post to #marketing with:
+- Content planned (blog posts, social posts, email)
+- Performance review from last week
+- This week's focus theme
+- Deadlines table
+    Last Run: 2026-02-02T15:00:03.504+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### Messaging Agent ###
+
+  Monthly Message Performance Review
+    ID: dbaeef62-c803-4ad0-8c84-0f1d5a966623
+    Cron: 0 14 5 * *
+    Task: Analyze which messages are resonating based on engagement data. Recommend messaging adjustments. Update style guide if needed.
+    Last Run: 2026-02-02T06:35:47.382+00:00
+    Next Run: 2026-02-05T14:00:00+00:00
+
+  Weekly Messaging Audit
+    ID: 95905850-5da5-4b6d-a049-0ac582e38806
+    Cron: 0 10 * * 2
+    Task: Review recent marketing materials for messaging consistency. Identify any drift from core value propositions. Recommend corrections.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-03T10:00:00+00:00
+
+
+### Objection Agent ###
+
+  Monthly Competitive Update
+    ID: 4284b363-ea00-4b21-b81d-063c6664c356
+    Cron: 0 10 15 * *
+    Task: Research competitor changes and update competitive responses. Ensure team has current battlecards. Identify new competitive threats.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-15T10:00:00+00:00
+
+  Weekly Objection Analysis
+    ID: 0d97d73d-95b6-425c-8052-2c7da0939cd6
+    Cron: 0 11 * * 3
+    Task: Review recent sales conversations for new objections. Update objection library with new responses. Identify patterns in what's blocking deals.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-04T11:00:00+00:00
+
+
+### Objection Intelligence Agent ###
+
+  Monthly Objection Report
+    ID: 38c9ec4a-7d6b-448e-9693-2281dcf18752
+    Cron: 0 10 1 * *
+    Task: Run monthly objection report. Full analysis of objection trends, response effectiveness, and recommendations.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Weekly Objection Review
+    ID: 2c34a8d6-4750-4fc9-8113-af1bd453b326
+    Cron: 0 11 * * 5
+    Task: Run weekly objection review. Analyze objections from the week, identify patterns, update responses.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-06T11:00:00+00:00
+
+
+### Operations Agent ###
+
+  End of Day Wrap
+    ID: 6b960c9c-3cf2-4d9b-b671-2d4e7a244a7a
+    Cron: 0 18 * * *
+    Task: You are running your END OF DAY WRAP. This is an evening task that runs at 6pm.
+
+YOUR MISSION: Close out the day by documenting what got done, what didn't, and what carries over to tomorrow. This ensures nothing falls through the cracks overnight and tomorrow's triage starts with accurate information.
+
+## STEPS:
+1. Search memory for today's planned priorities
+2. Check task completions today
+3. Check milestone progress
+4. Review today's priorities vs actual (completed, in progress, not started, blocked)
+5. Update project statuses
+6. Identify carryover items
+7. Flag overnight concerns
+8. Write end of day wrap
+
+## OUTPUT:
+Post to #general or ops channel with:
+- What got done (task count, priority status table)
+- Other completions
+- What carries over
+- Project status changes table
+- Flags for tomorrow
+- Wins today
+    Last Run: 2026-02-01T18:00:29.206+00:00
+    Next Run: 2026-02-02T18:00:00+00:00
+
+  Monthly Operations Review
+    ID: 5cb8b86c-77db-4e96-9ca8-612b092c1961
+    Cron: 0 10 1 * *
+    Task: You are running your MONTHLY OPERATIONS REVIEW. This runs on the 1st of each month.
+
+YOUR MISSION: Conduct a comprehensive review of the previous month's operational performance. Document what shipped, how projects progressed, execution metrics, and learnings. This is the official operational record for the month.
+
+## STEPS:
+1. Search memory for monthly context
+2. Calculate monthly metrics (tasks, completion rate, milestones)
+3. Detailed project analysis (completed, started, ongoing, at-risk)
+4. Blocker analysis (total, resolution time, patterns)
+5. Weekly velocity analysis
+6. Resource utilization
+7. Document what shipped and what didn't ship
+8. Identify process improvements
+9. Preview next month
+10. Store key insights in memory
+11. Write monthly operations review
+
+## OUTPUT:
+Create knowledge page "Operations Review - [Month Year]" and post summary to #general. Send to Co-Founder Agent with:
+- Executive summary
+- Month by the numbers table
+- Projects completed and in progress
+- Milestone analysis
+- Blocker analysis
+- Velocity trends
+- Resource analysis
+- What worked / what didn't
+- Process changes
+- Next month preview
+- Recommendations
+    Last Run: 2026-02-01T15:00:40.464+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Morning Triage
+    ID: 6daf6482-4a4f-4196-aa19-8efedd9d2542
+    Cron: 0 7 * * *
+    Task: You are running your MORNING TRIAGE. This is the first task of the day, running at 7am.
+
+YOUR MISSION: Prepare the team for a productive day by reviewing all active work, identifying blockers, and creating a clear daily standup. By the time people start work, they should know exactly what needs attention today.
+
+## STEPS:
+1. Search memory for blockers and priorities
+2. Get all overdue tasks - note how overdue and impact
+3. Review all active projects and categorize (On track, At risk, Blocked)
+4. Check today's milestones
+5. Identify blockers with specifics
+6. Create today's priority list
+7. Write morning standup
+
+## OUTPUT:
+Post to #general with:
+- How we're doing (project counts by status)
+- Today's priorities (overdue, due today, urgent)
+- Blockers needing help
+- Milestones today table
+- Coming up (tomorrow, this week)
+    Last Run: 2026-02-02T07:00:16.474+00:00
+    Next Run: 2026-02-03T07:00:00+00:00
+
+  Weekly Health Report
+    ID: 5aa85138-ebff-46c6-a4eb-a4da23b2da5a
+    Cron: 0 16 * * 5
+    Task: You are running your WEEKLY HEALTH REPORT. This is a Friday afternoon review of the week.
+
+YOUR MISSION: Provide a comprehensive assessment of operational health for the week. Document what shipped, what didn't, how projects are trending, and what needs attention next week. This is the official record of the week's execution.
+
+## STEPS:
+1. Search memory for weekly context
+2. Calculate execution metrics (completion rate, milestones hit)
+3. Full project status review
+4. Milestone analysis (hit vs missed)
+5. Blocker analysis (resolved, ongoing, new)
+6. Velocity trends
+7. Identify wins and concerns
+8. Preview next week
+9. Write weekly health report
+
+## OUTPUT:
+Create knowledge page "Weekly Health Report - Week of [Date]" and post summary to #general. Send to Co-Founder Agent with:
+- Executive summary
+- Week by the numbers table
+- Project health sections
+- Milestones this week table
+- Blockers analysis
+- Wins and concerns
+- Next week preview
+- Recommendations
+    Last Run: never
+    Next Run: 2026-02-06T21:00:00+00:00
+
+  Weekly Planning
+    ID: b340507e-8556-4802-8a53-a8c064356d19
+    Cron: 0 8 * * 1
+    Task: You are running your WEEKLY PLANNING. This is a Monday morning task that runs at 8am.
+
+YOUR MISSION: Set up the week for success by reviewing all active projects, setting weekly priorities, and ensuring the team knows what needs to happen this week. This is the most important planning session of the week.
+
+## STEPS:
+1. Search memory for weekly planning context
+2. Review last week (tasks completed, milestones hit/missed)
+3. Comprehensive project review with health status
+4. Identify this week's milestones
+5. Review resource allocation
+6. Set weekly priorities (must/should/could complete)
+7. Create action items with task_create
+8. Identify risks and dependencies
+9. Write weekly planning doc
+
+## OUTPUT:
+Create knowledge page "Weekly Plan - Week of [Date]" and post summary to #general with:
+- Last week recap
+- Active projects overview table
+- This week's milestones table
+- Week's priorities (must/should/could)
+- Resource allocation
+- Risks and dependencies
+- Team focus areas
+- Daily checkpoints
+    Last Run: 2026-02-02T13:00:12.83+00:00
+    Next Run: 2026-02-09T08:00:00+00:00
+
+
+### Org Design Agent ###
+
+  Monthly Headcount Analysis
+    ID: 093404d5-427c-41d7-8363-30811701be5e
+    Cron: 0 14 15 * *
+    Task: Run monthly headcount analysis. Review team sizes, growth projections, and capacity planning.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-02-15T14:00:00+00:00
+
+  Quarterly Org Review
+    ID: 929449fe-3f04-4955-b667-92db56d7ed7f
+    Cron: 0 10 1 1,4,7,10 *
+    Task: Run quarterly org review. Assess structure effectiveness, identify bottlenecks, recommend adjustments.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-04-01T10:00:00+00:00
+
+
+### Performance Agent ###
+
+  Daily Agent Digest
+    ID: 07f6990d-cd4a-4227-b1cd-9ddfcedf30b5
+    Cron: 0 19 * * *
+    Task: You are running your DAILY AGENT DIGEST. This is an evening task that runs at 7pm.
+
+YOUR MISSION: Review all AI agent activity for the day and provide a digest of what the agents accomplished. Keep the founder informed about AI team performance and surface any issues.
+
+## STEPS:
+1. Search memory for agent baseline metrics
+2. Get all agents
+3. For each agent, get today's execution history
+4. Identify issues (failed tasks, unusual performance)
+5. Identify wins (successful completions, notable outputs)
+6. Calculate overall metrics (tasks, success rate, execution time)
+
+## OUTPUT:
+Post to #agent-updates with:
+- Overview (task count, success rate)
+- Agent activity table
+- Notable activity
+- Issues if any (with error details and action needed)
+    Last Run: 2026-02-02T00:00:12.29+00:00
+    Next Run: 2026-02-02T19:00:00+00:00
+
+  Monthly Agent Optimization
+    ID: 3a878595-0baf-445d-b454-3403ea0a25c6
+    Cron: 0 10 15 * *
+    Task: You are running your MONTHLY AGENT OPTIMIZATION. This runs on the 15th of each month.
+
+YOUR MISSION: Mid-month check on agent performance to identify optimization opportunities and ensure agents are running effectively. This is proactive maintenance to catch issues before monthly review.
+
+## STEPS:
+1. Search memory for previous optimization suggestions
+2. Quick performance scan (month-to-date for each agent)
+3. Identify underperformers (<90% success or recurring failures)
+4. Check task effectiveness (running successfully? valuable? optimal timing?)
+5. Identify optimization opportunities (efficiency, effectiveness, gaps)
+6. Check resource utilization
+7. Review error patterns
+8. Create optimization plan (immediate, short-term, long-term)
+9. Implement quick wins (message Systems Agent if needed)
+10. Write optimization report
+
+## OUTPUT:
+Post summary to #agent-updates with:
+- Quick status overview
+- Agent health check table
+- Optimization opportunities identified
+- Issues addressed (resolved, monitoring)
+- Recommendations (immediate, this month, consider for next month)
+- Agents needing no action
+    Last Run: never
+    Next Run: 2026-02-15T15:00:00+00:00
+
+  Monthly Agent Performance Review
+    ID: f977504b-65ca-4215-9f4f-7aeaeab95c58
+    Cron: 0 10 2 * *
+    Task: You are running your MONTHLY AGENT PERFORMANCE REVIEW. This runs on the 2nd of each month.
+
+YOUR MISSION: Conduct comprehensive review of all AI agent performance for the previous month. This is the official monthly record of agent effectiveness.
+
+## STEPS:
+1. Search memory for historical context
+2. Get all agents
+3. Pull monthly execution data
+4. Deep analysis by agent (volume, quality, efficiency, value metrics)
+5. Aggregate team analysis
+6. Error and failure analysis (by type, agent, root cause)
+7. Efficiency analysis (time by agent, by task type)
+8. Value assessment (time saved, business impact, ROI)
+9. Comparative analysis (month over month)
+10. Optimization opportunities
+11. Store key findings
+
+## OUTPUT:
+Create knowledge page "Monthly Agent Performance Review - [Month Year]" and send to Co-Founder Agent with:
+- Executive summary
+- Month by the numbers
+- Agent rankings (by volume, success rate)
+- Detailed analysis per agent
+- Error analysis
+- Efficiency analysis
+- Value assessment with time savings
+- Recommendations (add tasks, modify tasks, monitor items)
+- Month-over-month trends
+- Conclusion
+    Last Run: 2026-02-02T15:00:03.504+00:00
+    Next Run: 2026-03-02T10:00:00+00:00
+
+  Weekly Agent Report
+    ID: c97d1715-5902-46b3-a26e-450fd4298880
+    Cron: 0 17 * * 5
+    Task: You are running your WEEKLY AGENT REPORT. This is a Friday afternoon review that runs at 5pm.
+
+YOUR MISSION: Provide comprehensive weekly report on all AI agent performance. This is the official record of agent team performance.
+
+## STEPS:
+1. Search memory for baseline metrics
+2. Get all agents with full details
+3. Pull weekly execution data for each agent
+4. Calculate metrics by agent (volume, success rate, execution time, errors)
+5. Aggregate team metrics
+6. Identify top performers
+7. Identify issues
+8. Trend analysis (week over week)
+9. Generate recommendations
+10. Store key findings
+
+## OUTPUT:
+Create knowledge page "Weekly Agent Report - Week of [Date]" and post summary. Send to Co-Founder Agent with:
+- Executive summary
+- Team metrics table
+- Agent performance by volume and success rate
+- Detailed breakdown per agent
+- Issues resolved and ongoing
+- Trends
+- Recommendations
+- Agent utilization
+- Next week preview
+    Last Run: never
+    Next Run: 2026-02-06T22:00:00+00:00
+
+
+### Pipeline Agent ###
+
+  Daily Pipeline Scan
+    ID: 6078d669-443b-46d4-b09e-e868402f32f6
+    Cron: 0 8 * * 1-5
+    Task: Run daily pipeline scan. Check for stalled deals, missing data, and qualification issues.
+    Last Run: 2026-02-02T08:01:47.365+00:00
+    Next Run: 2026-02-03T08:00:00+00:00
+
+  Monthly Pipeline Deep Dive
+    ID: 8a9504af-0409-406a-8248-d34696bcb999
+    Cron: 0 10 1 * *
+    Task: Run monthly pipeline deep dive. Full audit of qualification, historical trends, and recommendations.
+    Last Run: 2026-02-02T06:15:47.367+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Weekly Pipeline Review
+    ID: 0f87a6ac-0c1b-47fe-80ae-e76135a4f7f2
+    Cron: 0 9 * * 1
+    Task: Run weekly pipeline review. Analyze stage conversions, velocity trends, and coverage ratios.
+    Last Run: 2026-02-02T09:01:47.199+00:00
+    Next Run: 2026-02-09T09:00:00+00:00
+
+
+### Planning Agent ###
+
+  Daily Plan Check-in
+    ID: a3c61497-5d76-4b43-99ff-b7929ae94e58
+    Cron: 0 8 * * *
+    Task: Review today's priorities against the weekly and quarterly plan. Identify any deviations or blockers. Recommend adjustments if needed. Ensure everyone knows their top 3 priorities for today.
+    Last Run: 2026-02-02T08:01:47.365+00:00
+    Next Run: 2026-02-03T08:00:00+00:00
+
+  Monthly Planning Session
+    ID: 3a10c717-72f8-4b5b-9c5d-ffc948eabce2
+    Cron: 0 10 1 * *
+    Task: Conduct monthly planning review. Assess progress against quarterly goals. Identify what's on track, at risk, or ahead. Prepare recommendations for next month's priorities.
+    Last Run: 2026-02-02T06:32:47.287+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Weekly Plan Review
+    ID: d563953f-2554-4178-8ad9-5104ec428979
+    Cron: 0 15 * * 5
+    Task: Assess progress against weekly goals. Update the weekly plan based on learnings. Prepare next week's priorities. Identify any quarterly plan adjustments needed.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-06T15:00:00+00:00
+
+
+### Pricing Agent ###
+
+  Monthly Competitive Pricing Analysis
+    ID: e0cece3e-fc15-4e0d-ac22-df401815cd28
+    Cron: 0 10 20 * *
+    Task: Research competitor pricing changes. Update competitive pricing matrix. Recommend any positioning adjustments.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-20T10:00:00+00:00
+
+  Weekly Pricing Performance Review
+    ID: a9f34940-be0c-4962-9187-96cfba5abfaf
+    Cron: 0 11 * * 3
+    Task: Review win/loss rates by price point. Identify pricing objections from sales. Recommend pricing optimizations.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-04T11:00:00+00:00
+
+
+### Priority Agent ###
+
+  Monthly Priority Review
+    ID: c5062932-8bd2-433c-b1bf-2a3fb27465fb
+    Cron: 0 14 1 * *
+    Task: Run monthly priority review. Assess priority health, recommend adjustments, and communicate changes.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-03-01T14:00:00+00:00
+
+  Weekly Priority Check
+    ID: 24618e22-bf65-4853-8192-49d21db5b6af
+    Cron: 0 10 * * 1
+    Task: Run weekly priority check. Assess alignment of work to priorities, flag scope creep, and identify conflicts.
+    Last Run: 2026-02-02T10:00:47.482+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### Process Agent ###
+
+  Daily Process Health Check
+    ID: 1aa570a7-5dcb-4f2d-8627-e49ea2a9b7f8
+    Cron: 0 9 * * *
+    Task: Monitor active workflows for bottlenecks or delays. Identify any process steps that are consistently slow. Prepare a brief health report with recommendations.
+    Last Run: 2026-02-02T09:00:47.347+00:00
+    Next Run: 2026-02-03T09:00:00+00:00
+
+  Weekly Process Improvement Review
+    ID: f2e72563-fc4a-44bb-9ce1-3978a438f359
+    Cron: 0 14 * * 4
+    Task: Identify one process that could be improved. Analyze current state, pain points, and potential optimizations. Draft a process improvement proposal.
+    Last Run: 2026-02-02T06:32:47.287+00:00
+    Next Run: 2026-02-05T14:00:00+00:00
+
+
+### Program Manager Agent ###
+
+  Daily Standup Summary
+    ID: 99efc170-cbb2-4181-9302-3297b6809f45
+    Cron: 0 9 * * 1-5
+    Task: Run daily standup summary. Compile status from all teams, identify blockers, flag dependencies.
+    Last Run: 2026-02-02T09:00:47.347+00:00
+    Next Run: 2026-02-03T09:00:00+00:00
+
+  Monthly Program Report
+    ID: afe27ca3-1ef5-4add-bc10-dd01782f1c67
+    Cron: 0 14 1 * *
+    Task: Run monthly program report. Executive summary of all programs, achievements, challenges, next month outlook.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-03-01T14:00:00+00:00
+
+  Weekly Program Review
+    ID: 0e553952-5ace-4616-8d9d-8fe96318b5a3
+    Cron: 0 10 * * 1
+    Task: Run weekly program review. Full status of all programs, milestone tracking, risk assessment.
+    Last Run: 2026-02-02T10:00:47.482+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### QA Agent ###
+
+  Daily Quality Check
+    ID: f51e89d6-6162-4198-87d1-0c91e53297ee
+    Cron: 0 9 * * 1-5
+    Task: Run daily quality check. Review quality metrics, flag issues, track defect trends.
+    Last Run: 2026-02-02T09:01:47.199+00:00
+    Next Run: 2026-02-03T09:00:00+00:00
+
+  Monthly Quality Review
+    ID: 34b75d53-e49d-41ee-a74f-04c0f511bb46
+    Cron: 0 10 1 * *
+    Task: Run monthly quality review. Strategic assessment of quality trends, root causes, and improvement initiatives.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Weekly Quality Report
+    ID: a6d792ca-f97a-4fce-8271-ba428ad5f57e
+    Cron: 0 15 * * 5
+    Task: Run weekly quality report. Full quality status, trend analysis, improvement recommendations.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-02-06T15:00:00+00:00
+
+
+### Revenue Forecast Agent ###
+
+  Forecast Reality Check
+    ID: 19751ad6-a32a-4cdb-96e0-d2de1dbed215
+    Cron: 0 15 * * 3
+    Task: Run forecast reality check. Check forecast assumptions, validate deal probabilities, flag changes.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-04T15:00:00+00:00
+
+  Monthly Forecast Close
+    ID: 0dfe0371-b4c7-4a6b-acb8-a63c98d8cb98
+    Cron: 0 14 25 * *
+    Task: Run monthly forecast close. Produce final month forecast with maximum accuracy.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-25T14:00:00+00:00
+
+  Quarterly Forecast Analysis
+    ID: 58f12fd7-76c4-47d9-973c-776c52f2e16d
+    Cron: 0 10 1 1,4,7,10 *
+    Task: Run quarterly forecast analysis. Analyze last quarter accuracy, build next quarter forecast model.
+    Last Run: 2026-02-02T06:15:47.367+00:00
+    Next Run: 2026-04-01T10:00:00+00:00
+
+  Weekly Forecast Update
+    ID: b22bf5f3-3640-4849-a2dd-419619e85b23
+    Cron: 0 9 * * 1
+    Task: Run weekly forecast update. Analyze pipeline, assess probabilities, produce forecast with ranges.
+    Last Run: 2026-02-02T09:01:47.199+00:00
+    Next Run: 2026-02-09T09:00:00+00:00
+
+
+### Risk Agent ###
+
+  Monthly Risk Report
+    ID: a9fde0c2-39da-434e-82ce-3a717db8d6f2
+    Cron: 0 10 1 * *
+    Task: Run monthly risk report. Full risk register review, mitigation status, and risk trends.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Quarterly Risk Review
+    ID: 6274e897-2478-4ef9-832d-cc1a5d321032
+    Cron: 0 14 1 1,4,7,10 *
+    Task: Run quarterly risk review. Strategic risk assessment for leadership, major risks, and mitigation effectiveness.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-04-01T14:00:00+00:00
+
+  Weekly Risk Scan
+    ID: cef3d65b-acfb-4458-b81d-239bbf5f4c7e
+    Cron: 0 10 * * 3
+    Task: Run weekly risk scan. Scan for new and emerging risks, update risk register.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-02-04T10:00:00+00:00
+
+
+### Sales Agent ###
+
+  End of Day Sales Log
+    ID: 0fdcc2e7-c178-48f7-a4ec-bba45adb029c
+    Cron: 0 17 * * *
+    Task: You are running your END OF DAY SALES LOG. This is a daily task that runs at 5pm.
+
+YOUR MISSION: Close out the sales day properly. Make sure all activities are logged, update the pipeline to reflect reality, and set up tomorrow's priorities. Report on what happened today—wins, losses, and carryover.
+
+## STEPS:
+1. Get today's scheduled activities
+2. Get today's calls
+3. Get today's texts
+4. Get current deals
+5. Log any unlogged calls with activity_log_call
+6. Mark completed activities
+7. Create tomorrow's urgent follow-up tasks
+
+## OUTPUT:
+Write end-of-day summary with:
+- Activity counts (calls, emails, texts, meetings)
+- Wins
+- Key conversations summary
+- Pipeline movement
+- Logged & updated confirmation
+- Tomorrow's hot list
+- Carryover items
+    Last Run: 2026-02-01T17:00:29.34+00:00
+    Next Run: 2026-02-02T17:00:00+00:00
+
+  Friday Forecast
+    ID: 6e72e9b6-7504-4131-9759-2a90698fa120
+    Cron: 0 15 * * 5
+    Task: You are running your FRIDAY FORECAST. This is a weekly task that runs Friday at 3pm.
+
+YOUR MISSION: Provide an honest, accurate revenue forecast. Calculate weighted pipeline, identify likely closes vs at-risk, and give a realistic prediction for the month. This should be the source of truth for revenue expectations.
+
+## PROBABILITY WEIGHTS BY STAGE:
+- Discovery: 20%
+- Demo: 30%
+- Proposal: 50%
+- Negotiation: 75%
+- Verbal Commit: 90%
+
+## STEPS:
+1. Get forecast and pipeline by stage
+2. Get deals closing this month and next month
+3. Get this week's activity
+4. Calculate weighted pipeline
+5. Identify at-risk deals (no activity 14+ days, close date passed, stuck 30+ days)
+6. Write forecast
+
+## OUTPUT:
+Post forecast with:
+- Pipeline overview table (total, weighted, target, coverage)
+- Pipeline by stage table
+- This month's forecast (already closed + expected with confidence %)
+- Forecast range (conservative, expected, optimistic)
+- At-risk deals
+- This week's activity vs goals
+- Next week focus
+- Next month preview
+- Your honest prediction
+    Last Run: never
+    Next Run: 2026-02-06T20:00:00+00:00
+
+  Midday Pipeline Pulse
+    ID: d1a9991c-d17f-410d-8003-bab839d59da1
+    Cron: 0 13 * * *
+    Task: You are running your MIDDAY PIPELINE PULSE. This is a daily task that runs at 1pm.
+
+YOUR MISSION: Give a quick status check on the pipeline halfway through the day. Report on morning activity, current pipeline health, and flag any deals that are going quiet. Create follow-up tasks for deals with no activity in 14+ days.
+
+## STEPS:
+1. Get deals closing this week
+2. Get pipeline value by stage
+3. Get today's activities so far
+4. Get qualified leads
+5. Find deals with no activity in 14+ days and schedule follow-ups
+6. Identify leads ready to convert
+
+## OUTPUT:
+Post quick midday update with:
+- Morning activity summary
+- Pipeline snapshot (total and by stage)
+- Closing this week table
+- Deals going quiet (follow-ups scheduled)
+- Ready to convert (ask about creating opportunities)
+- Afternoon focus
+    Last Run: 2026-02-02T13:00:26.09+00:00
+    Next Run: 2026-02-03T13:00:00+00:00
+
+  Monthly Sales Ops Review
+    ID: a660b387-08c9-4f56-a1ba-97f949b48c30
+    Cron: 0 10 1 * *
+    Task: You are running your MONTHLY SALES OPS REVIEW. This is a monthly task that runs on the 1st at 10am.
+
+YOUR MISSION: Provide a comprehensive retrospective on last month's sales performance. Analyze wins and losses, calculate key metrics (win rate, cycle time, deal size), review lead flow and conversion rates, and identify what worked and what needs improvement.
+
+## STEPS:
+1. Get won deals from last month
+2. Get lost deals from last month (analyze why)
+3. Get current forecast and pipeline
+4. Get leads created and qualified last month
+5. Get all sales activity from last month
+6. Get contact database size
+7. Calculate: Win Rate, Average Deal Size, Sales Cycle, Lead Conversion, Activity Ratios
+8. Analyze wins and losses patterns
+9. Write review
+
+## OUTPUT:
+Create knowledge page "Monthly Sales Review - [Month]" with:
+- The headline (revenue vs target)
+- Wins analysis table
+- Losses analysis table with reasons
+- Pipeline health
+- Lead flow with conversion rates
+- Activity metrics vs goals
+- Sales velocity
+- What worked / what to improve
+- Next month focus
+    Last Run: 2026-02-01T15:00:56.998+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Morning Lead Review
+    ID: b246d0be-ea2d-4f24-811c-2acce3256520
+    Cron: 0 8 * * *
+    Task: You are running your MORNING LEAD REVIEW. This is a daily task that runs at 8am.
+
+YOUR MISSION: Prepare the founder for today's sales activities by reviewing the pipeline, identifying what needs attention, and creating follow-up tasks for any leads going cold. End with a clear, actionable briefing.
+
+## STEPS:
+1. Search memory for hot leads, priorities, stale deals
+2. Get today's scheduled activities
+3. Get overdue activities
+4. Get active leads
+5. Find leads with no activity in 7+ days
+6. Get deals in negotiation and closing this week
+7. For stale leads: create follow-up tasks and add "needs-attention" tag
+8. Store any pattern insights
+9. Write morning briefing
+
+## OUTPUT:
+Write like a sales coach with:
+- Today's calendar (time, contact, context, goal)
+- Hot deals to push
+- Leads going cold (follow-ups created)
+- Overdue items
+- One big focus recommendation
+    Last Run: 2026-02-02T08:00:14.848+00:00
+    Next Run: 2026-02-03T08:00:00+00:00
+
+  Wednesday Lead Scoring
+    ID: 1e91e392-0828-47cd-945c-e63a4917cf65
+    Cron: 0 11 * * 3
+    Task: You are running your WEDNESDAY LEAD SCORING. This is a weekly task that runs Wednesday at 11am.
+
+YOUR MISSION: Score and prioritize every active lead in the system. Categorize as Hot (80+), Warm (50-79), or Cold (<50) based on engagement and qualification. Update tags accordingly, move cold leads to nurture status, and identify leads ready to become opportunities.
+
+## SCORING SYSTEM:
+Positive signals (add points):
+- Activity in last 7 days: +20
+- Email opened/replied: +15
+- Meeting/demo held: +25
+- Budget confirmed: +20
+- Decision maker: +15
+- Timeline within 90 days: +15
+
+Negative signals (subtract):
+- No response 30+ days: -30
+- Missing BANT: -20
+- Competitor mentioned: -10
+
+## STEPS:
+1. Search memory for lead patterns
+2. Get all active leads with full details
+3. Score each lead
+4. Apply tags (hot-lead, warm-lead, cold-lead)
+5. Move cold leads with 30+ days no activity to nurture status
+6. Identify BANT-qualified leads ready to convert
+7. Write scoring report
+
+## OUTPUT:
+Post report with:
+- Summary stats
+- Hot leads table (priority focus)
+- Warm leads table
+- Cold leads table (moved to nurture)
+- Tags updated count
+- Ready to convert (ask for approval)
+- Pipeline health analysis
+    Last Run: never
+    Next Run: 2026-02-04T16:00:00+00:00
+
+  Weekly Pipeline Plan
+    ID: 136b8792-debb-4207-a600-cc9840ed4054
+    Cron: 0 9 * * 1
+    Task: You are running your WEEKLY PIPELINE PLAN. This is a weekly task that runs Monday at 9am.
+
+YOUR MISSION: Plan the entire sales week. Review all active deals, set realistic close date expectations, create follow-up sequences for new leads, and build a clear action plan. The founder should finish reading this knowing exactly what needs to happen this week and what revenue is likely to come in.
+
+## STEPS:
+1. Search memory for deal context
+2. Get ALL active deals
+3. Get full details on deals >$20K or in negotiation
+4. Get forecast and pipeline by stage
+5. Get all leads by status
+6. Get upcoming activities for the week
+7. Get leads created in last 7 days
+8. Create follow-up sequences for new leads (Day 1, 3, 7 tasks)
+9. Review and note close date adjustments needed
+
+## OUTPUT:
+Write comprehensive weekly plan with:
+- Week's targets (closes, pipeline generation)
+- Deals to close (name, value, status, actions, confidence, risks)
+- Deals to advance
+- New lead sequences created table
+- Activity targets by day
+- Close date adjustments
+- This week's focus (narrative)
+    Last Run: 2026-02-02T14:00:30.96+00:00
+    Next Run: 2026-02-09T09:00:00+00:00
+
+
+### Sales Strategist Agent ###
+
+  Monthly Strategy Review
+    ID: 2584c0b0-2423-47dd-a2d3-b43d9e93ae40
+    Cron: 0 14 15 * *
+    Task: Run monthly strategy review. Review top accounts, identify expansion opportunities, update battlecards.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-02-15T14:00:00+00:00
+
+  Weekly Competitive Intel
+    ID: ff790e7e-f271-4c36-9426-38d1c0f5460e
+    Cron: 0 10 * * 2
+    Task: Run weekly competitive intelligence update. Analyze competitor activity, win/loss patterns, and positioning opportunities.
+    Last Run: 2026-02-02T06:20:47.218+00:00
+    Next Run: 2026-02-03T10:00:00+00:00
+
+
+### Scalability Agent ###
+
+  Daily Performance Check
+    ID: 755e4ac7-1ab0-462b-98f8-a0f701d7d7ed
+    Cron: 0 7 * * 1-5
+    Task: Run daily performance check. Monitor key performance metrics, flag degradation.
+    Last Run: 2026-02-02T07:01:47.215+00:00
+    Next Run: 2026-02-03T07:00:00+00:00
+
+  Monthly Scalability Review
+    ID: 0df3d0d8-b1fd-4d69-960c-36c76d7e22ea
+    Cron: 0 10 1 * *
+    Task: Run monthly scalability review. Full assessment of system scalability, bottlenecks, and recommendations.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Quarterly Growth Planning
+    ID: eaac9dee-640f-4a2d-8693-438f94d1c231
+    Cron: 0 14 1 1,4,7,10 *
+    Task: Run quarterly growth planning. Plan infrastructure for next quarter growth, identify investments needed.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-04-01T14:00:00+00:00
+
+  Weekly Capacity Report
+    ID: ee53bf59-4e88-4589-9fcf-6c51bde41ece
+    Cron: 0 10 * * 5
+    Task: Run weekly capacity report. Current utilization, growth trends, and capacity concerns.
+    Last Run: 2026-02-02T06:14:47.347+00:00
+    Next Run: 2026-02-06T10:00:00+00:00
+
+
+### Script Agent ###
+
+  Monthly Script Refresh
+    ID: 387e233d-3517-410f-9edd-55388f011ac1
+    Cron: 0 14 1 * *
+    Task: Review all sales scripts and templates. Update based on product changes, customer feedback, and competitive landscape. Archive outdated content.
+    Last Run: 2026-02-02T06:32:47.287+00:00
+    Next Run: 2026-03-01T14:00:00+00:00
+
+  Weekly Script Performance Review
+    ID: c4b6c709-6796-4246-a48c-61b2c8f0937b
+    Cron: 0 10 * * 2
+    Task: Analyze which scripts and templates are performing best. Identify opportunities to improve underperforming content. Recommend script updates based on recent conversations.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-03T10:00:00+00:00
+
+
+### SOP Agent ###
+
+  Monthly SOP Audit
+    ID: 4f8d4315-3e70-4cc7-9c36-cb0cae3e5ee5
+    Cron: 0 10 15 * *
+    Task: Run monthly SOP audit. Full audit of all SOPs, coverage gaps, and maintenance needs.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-02-15T10:00:00+00:00
+
+  Quarterly SOP Report
+    ID: bc8b5bb9-2aaf-4db6-a3e4-2fd38cc2eab0
+    Cron: 0 10 1 1,4,7,10 *
+    Task: Run quarterly SOP report. Strategic review of documentation health, gaps, and improvement plan.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-04-01T10:00:00+00:00
+
+  Weekly SOP Review
+    ID: 94e000fc-ac39-406d-996b-78d4f25ded41
+    Cron: 0 14 * * 4
+    Task: Run weekly SOP review. Identify SOPs due for review, flag outdated content, track update status.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-02-05T14:00:00+00:00
+
+
+### Strategy Agent ###
+
+  Monthly Strategy Check
+    ID: 31ed4928-c5aa-40cc-830d-b426660a649b
+    Cron: 0 14 1 * *
+    Task: Run monthly strategy check. Assess progress on strategic initiatives, identify gaps.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-03-01T14:00:00+00:00
+
+  Quarterly Strategy Review
+    ID: e30a99fc-f744-412a-91f1-898589342913
+    Cron: 0 10 15 1,4,7,10 *
+    Task: Run quarterly strategy review. Full assessment of strategic position, competitive landscape, and recommendations.
+    Last Run: 2026-02-02T06:18:47.225+00:00
+    Next Run: 2026-04-15T10:00:00+00:00
+
+  Weekly Competitive Scan
+    ID: adad975a-3a6e-4524-ac73-e9ba82435fc3
+    Cron: 0 10 * * 2
+    Task: Run weekly competitive scan. Monitor competitor activity, market changes, and strategic implications.
+    Last Run: 2026-02-02T06:19:47.317+00:00
+    Next Run: 2026-02-03T10:00:00+00:00
+
+
+### Talent Optimization Agent ###
+
+  Monthly Talent Review
+    ID: 9b51b5c0-e52a-45f6-86b2-f4b1fe563d77
+    Cron: 0 10 1 * *
+    Task: Run monthly talent review. Track development progress, identify high-potentials, flag retention risks.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Quarterly Skills Analysis
+    ID: 820da591-d3c1-49c3-8f68-c6239f9ad77e
+    Cron: 0 14 1 1,4,7,10 *
+    Task: Run quarterly skills analysis. Assess skill gaps, training effectiveness, and capability building needs.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-04-01T14:00:00+00:00
+
+
+### Task Breakdown Agent ###
+
+  Daily Task Quality Check
+    ID: e5802c09-ac82-4b34-acad-b29272f20492
+    Cron: 0 10 * * *
+    Task: Review recently created tasks. Ensure each has clear action verbs, specific scope, and definition of done. Flag vague tasks for clarification. Suggest improvements for unclear items.
+    Last Run: 2026-02-02T10:00:47.482+00:00
+    Next Run: 2026-02-03T10:00:00+00:00
+
+  Weekly Large Task Review
+    ID: c75134ba-7fd1-4a6f-bc4f-a31f42cfcaa2
+    Cron: 0 11 * * 3
+    Task: Identify tasks that have been in progress for more than 5 days. Assess if they should be broken down further. Recommend decomposition for oversized tasks.
+    Last Run: 2026-02-02T06:35:47.382+00:00
+    Next Run: 2026-02-04T11:00:00+00:00
+
+
+### Tooling Agent ###
+
+  Monthly Tool Stack Review
+    ID: 6bacd1b6-7053-4306-b459-1cf71fa5a3e2
+    Cron: 0 14 25 * *
+    Task: Comprehensive review of tool stack. Assess total cost and value. Identify redundancies. Recommend consolidation or additions.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-25T14:00:00+00:00
+
+  Weekly Tool Usage Review
+    ID: 599166f0-52d5-4008-b43c-6b4ecf614f4a
+    Cron: 0 10 * * 2
+    Task: Review tool usage and adoption metrics. Identify underutilized tools. Recommend training or sunset decisions.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-02-03T10:00:00+00:00
+
+
+### Unit Economics Agent ###
+
+  Monthly Cohort Analysis
+    ID: eef64a28-1b70-4d9c-8932-b84abd46f8e1
+    Cron: 0 10 1 * *
+    Task: Run monthly cohort analysis. Analyze customer cohorts, LTV trends, and profitability by segment.
+    Last Run: 2026-02-02T06:17:47.347+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Quarterly Economics Report
+    ID: 62f54efb-6543-4c2c-977d-36dcf3fd9d9e
+    Cron: 0 14 1 1,4,7,10 *
+    Task: Run quarterly economics report. Comprehensive unit economics analysis with strategic recommendations.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-04-01T14:00:00+00:00
+
+  Weekly Unit Economics Check
+    ID: 72d94f5d-8ee6-414f-aa5c-82bc4658fc80
+    Cron: 0 10 * * 1
+    Task: Run weekly unit economics check. Monitor LTV, CAC, payback, and flag anomalies.
+    Last Run: 2026-02-02T10:00:47.482+00:00
+    Next Run: 2026-02-09T10:00:00+00:00
+
+
+### Vision Agent ###
+
+  Daily Vision Alignment Check
+    ID: d8d400ca-9c8b-4a74-a03e-202990b6e628
+    Cron: 0 8 * * *
+    Task: Review today's planned activities and projects. For each major initiative, confirm it connects to our stated vision. Flag any activities that seem misaligned or where the connection to vision is unclear. Prepare a brief alignment report.
+    Last Run: 2026-02-02T08:01:47.365+00:00
+    Next Run: 2026-02-03T08:00:00+00:00
+
+  Monthly Vision Review
+    ID: 6d5fc18c-c334-4b86-948c-4e52b120e18f
+    Cron: 0 10 1 * *
+    Task: Conduct a comprehensive review of our vision statement and strategic direction. Assess if any refinements are needed based on market changes, learnings, or company evolution. Prepare recommendations.
+    Last Run: 2026-02-02T06:33:47.293+00:00
+    Next Run: 2026-03-01T10:00:00+00:00
+
+  Weekly Vision Communication
+    ID: 606f5bbb-adec-4cca-a2a4-1d11791e3b64
+    Cron: 0 9 * * 1
+    Task: Draft a weekly vision reminder that connects current work to long-term goals. Include specific examples of how this week's projects serve the bigger picture. Keep it inspiring but grounded.
+    Last Run: 2026-02-02T09:02:47.173+00:00
+    Next Run: 2026-02-09T09:00:00+00:00
+
+
+### Workflow Architect Agent ###
+
+  Monthly Process Audit
+    ID: 5c07ab4b-df13-4598-b50a-ae396d491ed3
+    Cron: 0 10 15 * *
+    Task: Run monthly process audit. Full review of all workflows, identify optimization opportunities, update documentation.
+    Last Run: 2026-02-02T06:13:47.168+00:00
+    Next Run: 2026-02-15T10:00:00+00:00
+
+  Weekly Workflow Review
+    ID: 0eb2b5f2-091f-45ce-ae6f-cf9b74b48987
+    Cron: 0 14 * * 4
+    Task: Run weekly workflow review. Check workflow performance, identify friction points, suggest improvements.
+    Last Run: 2026-02-02T06:15:47.367+00:00
+    Next Run: 2026-02-05T14:00:00+00:00

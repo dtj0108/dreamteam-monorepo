@@ -1,5 +1,6 @@
 // Deployment helpers for workspace team deployment
 import { createAdminClient } from '@/lib/supabase/admin'
+import { provisionDeploymentResources } from '@dreamteam/database'
 import type {
   DeployedTeamConfig,
   DeployedAgent,
@@ -797,7 +798,7 @@ export async function addAgentToWorkspace(
 export async function createAgentChannel(
   workspaceId: string,
   agent: DeployedAgent,
-  creatorProfileId: string
+  creatorProfileId: string | null
 ): Promise<string> {
   const supabase = createAdminClient()
 
@@ -824,7 +825,7 @@ export async function createAgentChannel(
       description: `Communication channel for ${agent.name}`,
       is_agent_channel: true,
       linked_agent_id: agent.id,
-      created_by: creatorProfileId,
+      created_by: creatorProfileId || null,
     })
     .select('id')
     .single()
@@ -872,11 +873,15 @@ export async function addProfileToChannel(
 /**
  * Set up all agent resources (profiles, channels, memberships) for a deployment.
  * Called after deploying a team to a workspace.
+ *
+ * @param channelCreatorId - Optional profile ID to set as channel creator and member.
+ * @param extraChannelMemberIds - Optional additional members to add to each agent channel.
  */
 export async function setupAgentResources(
   workspaceId: string,
   config: DeployedTeamConfig,
-  deployedByUserId: string
+  channelCreatorId: string | null,
+  extraChannelMemberIds: string[] = []
 ): Promise<DeploymentAgentResources[]> {
   const resources: DeploymentAgentResources[] = []
   const agentProfileIds: string[] = []
@@ -900,7 +905,6 @@ export async function setupAgentResources(
   }
 
   // 2. Create agent channels for all enabled agents
-  // Use the deployer's profile ID as the channel creator
   for (let i = 0; i < config.agents.length; i++) {
     const agent = config.agents[i]
     if (!agent.is_enabled) continue
@@ -908,7 +912,7 @@ export async function setupAgentResources(
     const channelId = await createAgentChannel(
       workspaceId,
       agent,
-      deployedByUserId
+      channelCreatorId
     )
 
     // Update the resource with channel ID
@@ -922,8 +926,15 @@ export async function setupAgentResources(
       await addProfileToChannel(channelId, profileId)
     }
 
-    // Also add the deployer (admin) to the channel so they can observe
-    await addProfileToChannel(channelId, deployedByUserId)
+    if (channelCreatorId) {
+      await addProfileToChannel(channelId, channelCreatorId)
+    }
+
+    for (const memberId of extraChannelMemberIds) {
+      if (memberId && memberId !== channelCreatorId) {
+        await addProfileToChannel(channelId, memberId)
+      }
+    }
   }
 
   return resources
@@ -936,11 +947,14 @@ export async function setupAgentResources(
 export async function deployTeamWithAgentResources(
   teamId: string,
   workspaceIds: string[],
-  deployedByUserId: string
+  deployedByUserId: string,
+  channelCreatorByWorkspaceId?: Map<string, string>,
+  extraChannelMembersByWorkspaceId?: Map<string, string[]>
 ): Promise<{
   deployments: DeploymentResult[]
   failed: Array<{ workspaceId: string; error: string }>
 }> {
+  const supabase = createAdminClient()
   const deployments: DeploymentResult[] = []
   const failed: Array<{ workspaceId: string; error: string }> = []
 
@@ -957,12 +971,68 @@ export async function deployTeamWithAgentResources(
         continue
       }
 
-      // Set up agent profiles and channels
-      const agentResources = await setupAgentResources(
-        workspaceId,
-        deployment.active_config,
-        deployedByUserId
-      )
+      const channelCreatorId = channelCreatorByWorkspaceId?.get(workspaceId) || null
+      const extraMembers = extraChannelMembersByWorkspaceId?.get(workspaceId) || []
+      await provisionDeploymentResources(supabase, workspaceId, deployment.active_config, {
+        channelCreatorId,
+        createdByUserId: channelCreatorId || deployedByUserId,
+        retryOnce: true,
+      })
+
+      if (extraMembers.length > 0) {
+        const { data: agentChannels } = await supabase
+          .from('channels')
+          .select('id')
+          .eq('workspace_id', workspaceId)
+          .eq('is_agent_channel', true)
+
+        for (const channel of agentChannels || []) {
+          for (const memberId of extraMembers) {
+            if (memberId && memberId !== channelCreatorId) {
+              await addProfileToChannel(channel.id as string, memberId)
+            }
+          }
+        }
+      }
+
+      const { data: agentProfiles } = await supabase
+        .from('profiles')
+        .select('id, linked_agent_id, agent_slug, full_name')
+        .eq('agent_workspace_id', workspaceId)
+        .eq('is_agent', true)
+
+      const { data: agentChannels } = await supabase
+        .from('channels')
+        .select('id, linked_agent_id')
+        .eq('workspace_id', workspaceId)
+        .eq('is_agent_channel', true)
+
+      const profileByAgentId = new Map<string, { id: string; slug: string; name: string }>()
+      for (const profile of agentProfiles || []) {
+        if (profile.linked_agent_id) {
+          profileByAgentId.set(profile.linked_agent_id, {
+            id: profile.id,
+            slug: profile.agent_slug || '',
+            name: profile.full_name || '',
+          })
+        }
+      }
+
+      const channelByAgentId = new Map<string, string>()
+      for (const channel of agentChannels || []) {
+        if (channel.linked_agent_id) {
+          channelByAgentId.set(channel.linked_agent_id, channel.id)
+        }
+      }
+
+      const agentResources: DeploymentAgentResources[] = deployment.active_config.agents
+        .filter(agent => agent.is_enabled)
+        .map(agent => ({
+          profile_id: profileByAgentId.get(agent.id)?.id || '',
+          channel_id: channelByAgentId.get(agent.id) || '',
+          agent_slug: agent.slug,
+          agent_name: agent.name,
+        }))
 
       deployments.push({
         workspace_id: workspaceId,

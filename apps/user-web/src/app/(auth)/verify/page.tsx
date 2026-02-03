@@ -70,11 +70,18 @@ function VerifyForm() {
         body: JSON.stringify({ phone }),
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
-        throw new Error(data.error || "Failed to send code")
+        let errorMessage = "Failed to send code"
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.error || errorMessage
+        } catch {
+          errorMessage = `Server error: ${response.status} ${response.statusText}`
+        }
+        throw new Error(errorMessage)
       }
+
+      const data = await response.json()
 
       setCodeSent(true)
       startCountdown()
@@ -115,19 +122,26 @@ function VerifyForm() {
       const response = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          phone, 
+        body: JSON.stringify({
+          phone,
           code: otp,
           userId: userId || undefined,
           isSignup,
         }),
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
-        throw new Error(data.error || "Invalid code")
+        let errorMessage = "Invalid code"
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.error || errorMessage
+        } catch {
+          errorMessage = `Server error: ${response.status} ${response.statusText}`
+        }
+        throw new Error(errorMessage)
       }
+
+      const data = await response.json()
 
       // Redirect to onboarding on success (will redirect to / if already completed)
       router.push("/onboarding")

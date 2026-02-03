@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
+import { fetchPlanPricesFromStripe } from '@/lib/stripe-prices'
 
 // Plan type enum matching database
 type PlanType = 'workspace_plan' | 'agent_tier'
@@ -80,28 +81,48 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch plans' }, { status: 500 })
     }
 
+    // Fetch actual prices from Stripe if stripe_price_id is set
+    // This makes Stripe the single source of truth for pricing
+    let stripePrices: Map<string, { priceMonthly: number | null; priceYearly: number | null }> = new Map()
+
+    try {
+      const plansWithStripeIds = (plans || []).filter((p: NonNullable<typeof plans>[number]) => p.stripe_price_id || p.stripe_price_id_yearly)
+      if (plansWithStripeIds.length > 0) {
+        stripePrices = await fetchPlanPricesFromStripe(plansWithStripeIds)
+      }
+    } catch (stripeError) {
+      // Log error but continue with database prices as fallback
+      console.error('Failed to fetch Stripe prices, using database fallback:', stripeError)
+    }
+
     // Transform to public shape with defaults
-    const publicPlans: PublicPlan[] = (plans || []).map((plan: NonNullable<typeof plans>[number]) => ({
-      id: plan.id,
-      name: plan.name,
-      slug: plan.slug,
-      description: plan.description,
-      plan_type: plan.plan_type,
-      price_monthly: plan.price_monthly,
-      price_yearly: plan.price_yearly,
-      features: plan.features || [],
-      is_coming_soon: plan.is_coming_soon ?? false,
-      display_config: plan.display_config || {},
-      stripe_price_id: plan.stripe_price_id,
-      stripe_price_id_yearly: plan.stripe_price_id_yearly
-    }))
+    // Use Stripe prices when available, fall back to database prices
+    const publicPlans: PublicPlan[] = (plans || []).map((plan: NonNullable<typeof plans>[number]) => {
+      const stripePrice = stripePrices.get(plan.slug)
+      return {
+        id: plan.id,
+        name: plan.name,
+        slug: plan.slug,
+        description: plan.description,
+        plan_type: plan.plan_type,
+        // Prefer Stripe prices, fall back to database prices
+        price_monthly: stripePrice?.priceMonthly ?? plan.price_monthly,
+        price_yearly: stripePrice?.priceYearly ?? plan.price_yearly,
+        features: plan.features || [],
+        is_coming_soon: plan.is_coming_soon ?? false,
+        display_config: plan.display_config || {},
+        stripe_price_id: plan.stripe_price_id,
+        stripe_price_id_yearly: plan.stripe_price_id_yearly
+      }
+    })
 
     // Return with caching headers
+    // Cache for 5 minutes with 10 minute stale-while-revalidate (prices rarely change)
     return NextResponse.json(
       { plans: publicPlans },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300'
+          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
         }
       }
     )

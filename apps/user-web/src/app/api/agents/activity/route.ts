@@ -40,29 +40,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get hired agents for this workspace to filter executions
-    const { data: hiredAgents } = await supabase
-      .from("agents")
-      .select("ai_agent_id")
-      .eq("workspace_id", workspaceId)
-      .eq("is_active", true)
-      .not("ai_agent_id", "is", null)
-
-    const hiredAgentIds = (hiredAgents || []).map((a: { ai_agent_id: string }) => a.ai_agent_id)
-
-    if (hiredAgentIds.length === 0) {
-      return NextResponse.json({ executions: [], total: 0 })
-    }
-
     // Build query for agent_schedule_executions
     let query = supabase
       .from("agent_schedule_executions")
       .select(`
         *,
-        schedule:agent_schedules(id, name, cron_expression, task_prompt),
+        schedule:agent_schedules(id, name, cron_expression, task_prompt, workspace_id),
         agent:ai_agents(id, name, avatar_url)
       `, { count: "exact" })
-      .in("agent_id", hiredAgentIds)
+      .eq("schedule.workspace_id", workspaceId)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1)
 

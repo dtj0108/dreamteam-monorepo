@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
 import { getSession } from "@dreamteam/auth/session"
+import { mapToolNamesToCategories } from "@/lib/agent-tool-mapping"
+import { resolveWorkspaceAgent } from "@/lib/workspace-agent"
 
 // POST /api/admin/agents/[id]/schedules/[scheduleId]/run - Run a schedule immediately
 export async function POST(
@@ -15,7 +17,6 @@ export async function POST(
 
     const { id: agentId, scheduleId } = await params
     const body = await request.json().catch(() => ({}))
-    const workspaceId = body.workspace_id
 
     const supabase = createAdminClient()
 
@@ -24,7 +25,7 @@ export async function POST(
       .from("agent_schedules")
       .select(`
         *,
-        ai_agent:ai_agents(id, name, system_prompt)
+        ai_agent:ai_agents(id, name, system_prompt, provider, model)
       `)
       .eq("id", scheduleId)
       .eq("agent_id", agentId)
@@ -34,16 +35,23 @@ export async function POST(
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 })
     }
 
-    // Get the local agent (hired in workspace)
-    const { data: localAgent } = await supabase
-      .from("agents")
-      .select("id, workspace_id, tools, system_prompt, reports_to")
-      .eq("ai_agent_id", agentId)
-      .single()
-
-    if (!localAgent) {
+    const workspaceId = (schedule.workspace_id as string | null) || body.workspace_id
+    if (!workspaceId) {
       return NextResponse.json(
-        { error: "Agent not found in workspace" },
+        { error: "Schedule missing workspace context" },
+        { status: 400 }
+      )
+    }
+
+    const resolvedAgent = await resolveWorkspaceAgent({
+      workspaceId,
+      aiAgentId: agentId,
+      supabase,
+    })
+
+    if (!resolvedAgent.isEnabled) {
+      return NextResponse.json(
+        { error: "Agent not enabled in this workspace" },
         { status: 404 }
       )
     }
@@ -52,7 +60,7 @@ export async function POST(
     const { data: membership } = await supabase
       .from("workspace_members")
       .select("id")
-      .eq("workspace_id", localAgent.workspace_id)
+      .eq("workspace_id", workspaceId)
       .eq("profile_id", session.id)
       .single()
 
@@ -87,16 +95,37 @@ export async function POST(
     // Execute the task
     try {
       const systemPrompt =
-        localAgent.system_prompt ||
+        resolvedAgent.legacyAgent?.system_prompt ||
+        resolvedAgent.deploymentAgent?.system_prompt ||
         schedule.ai_agent?.system_prompt ||
         "You are a helpful AI assistant."
+
+      const provider = (resolvedAgent.deploymentAgent?.provider as "anthropic" | "xai" | undefined) ||
+        (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) ||
+        "anthropic"
+      const model = resolvedAgent.deploymentAgent?.model || schedule.ai_agent?.model || undefined
+
+      const { data: agentTools } = await supabase
+        .from("ai_agent_tools")
+        .select("tool:agent_tools(name)")
+        .eq("agent_id", agentId)
+
+      const rawToolNames = (agentTools
+        ?.map((t: { tool: { name: string } | null }) => t.tool?.name)
+        .filter(Boolean) as string[]) || []
+
+      const toolCategories = mapToolNamesToCategories(rawToolNames)
 
       const result = await executeAgentTask({
         taskPrompt: schedule.task_prompt,
         systemPrompt,
-        tools: localAgent.tools || [],
-        workspaceId: localAgent.workspace_id,
+        tools: toolCategories,
+        workspaceId,
         supabase,
+        provider,
+        model,
+        stylePresets: resolvedAgent.legacyAgent?.style_presets as Record<string, unknown> | null,
+        customInstructions: resolvedAgent.legacyAgent?.custom_instructions as string | null,
       })
 
       // Update execution as completed
@@ -118,20 +147,20 @@ export async function POST(
       let recipientIds: string[] = []
       let recipientSource: string = 'none'
 
-      if (localAgent.reports_to && localAgent.reports_to.length > 0) {
-        recipientIds = localAgent.reports_to
+      if (resolvedAgent.legacyAgent?.reports_to && resolvedAgent.legacyAgent.reports_to.length > 0) {
+        recipientIds = resolvedAgent.legacyAgent.reports_to
         recipientSource = 'reports_to'
       } else if (schedule.created_by) {
         recipientIds = [schedule.created_by]
         recipientSource = 'schedule_created_by'
       } else {
         // Fallback to workspace admins
-        recipientIds = await getWorkspaceAdminIds(localAgent.workspace_id, supabase)
+        recipientIds = await getWorkspaceAdminIds(workspaceId, supabase)
         recipientSource = 'workspace_admins'
 
         // Final fallback: workspace owner specifically
         if (recipientIds.length === 0) {
-          const ownerId = await getWorkspaceOwnerId(localAgent.workspace_id, supabase)
+          const ownerId = await getWorkspaceOwnerId(workspaceId, supabase)
           if (ownerId) {
             recipientIds = [ownerId]
             recipientSource = 'workspace_owner'
@@ -144,8 +173,7 @@ export async function POST(
         `[AdminScheduleRun] Recipient resolution for schedule ${scheduleId}: ` +
         `source=${recipientSource}, count=${recipientIds.length}, ids=${recipientIds.join(',')}`
       )
-      console.log(`[AdminScheduleRun] Local agent ID: ${localAgent.id}`)
-      console.log(`[AdminScheduleRun] Workspace ID: ${localAgent.workspace_id}`)
+      console.log(`[AdminScheduleRun] Workspace ID: ${workspaceId}`)
 
       // Format and send completion messages
       const content = formatTaskCompletionMessage({
@@ -163,9 +191,11 @@ export async function POST(
         console.log(`[AdminScheduleRun] Sending to recipient: ${recipientId}`)
 
         const msgResult = await sendAgentMessage({
-          agentId: localAgent.id,
+          agentId: resolvedAgent.legacyAgent?.id,
+          agentProfileId: resolvedAgent.agentProfileId ?? undefined,
+          aiAgentId: agentId,
           recipientProfileId: recipientId,
-          workspaceId: localAgent.workspace_id,
+          workspaceId,
           content,
           supabase,
         })

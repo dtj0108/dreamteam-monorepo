@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
     start_time?: string
     end_time?: string
     use_simulated_time?: boolean
+    batch_size?: number
   }
 
   try {
@@ -75,7 +76,9 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const { schedule_ids, start_time, end_time, use_simulated_time = true } = body
+  const { schedule_ids, start_time, end_time, use_simulated_time = true, batch_size: rawBatchSize } = body
+  // Validate and constrain batch_size (default: 5, max: 20)
+  const batchSize = Math.min(Math.max(1, rawBatchSize || 5), 20)
 
   // Validate inputs
   if (!schedule_ids || !Array.isArray(schedule_ids) || schedule_ids.length === 0) {
@@ -201,7 +204,7 @@ export async function POST(request: NextRequest) {
   // Sort all runs chronologically
   allRuns.sort((a, b) => a.runTime.getTime() - b.runTime.getTime())
 
-  console.log(`[Time Machine Stream] Simulation: ${allRuns.length} total runs across ${schedules.length} schedules`)
+  console.log(`[Time Machine Stream] Simulation: ${allRuns.length} total runs across ${schedules.length} schedules (batch size: ${batchSize})`)
 
   const cronSecret = process.env.CRON_SECRET
   const encoder = new TextEncoder()
@@ -217,14 +220,10 @@ export async function POST(request: NextRequest) {
 
       let dispatchedCount = 0
       let failedCount = 0
+      let completedCount = 0
 
-      // Process each run and stream progress
-      for (let i = 0; i < allRuns.length; i++) {
-        const run = allRuns[i]
-        const runStartTime = Date.now()
-
-        let result: StreamEvent['result']
-
+      // Helper function to execute a single run
+      async function executeRun(run: ScheduledRun): Promise<StreamEvent['result']> {
         try {
           // Create execution record
           const { data: execution, error: execError } = await supabase
@@ -240,8 +239,7 @@ export async function POST(request: NextRequest) {
             .single()
 
           if (execError || !execution) {
-            failedCount++
-            result = {
+            return {
               scheduleId: run.scheduleId,
               scheduleName: run.scheduleName,
               runTime: run.runTime.toISOString(),
@@ -249,63 +247,59 @@ export async function POST(request: NextRequest) {
               status: 'failed',
               error: execError?.message || 'Failed to create execution record'
             }
-          } else {
-            // Dispatch to agent server
-            try {
-              const response = await fetch(`${AGENT_SERVER_URL}/scheduled-execution`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(cronSecret ? { 'Authorization': `Bearer ${cronSecret}` } : {})
-                },
-                body: JSON.stringify({
-                  executionId: execution.id,
-                  agentId: run.agentId,
-                  taskPrompt: run.taskPrompt,
-                  workspaceId: run.workspaceId,
-                  outputConfig: run.outputConfig,
-                  ...(run.profileId ? { profileId: run.profileId } : {}),
-                  ...(use_simulated_time ? { simulatedTime: run.runTime.toISOString() } : {}),
-                }),
-              })
+          }
 
-              if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-                failedCount++
-                result = {
-                  scheduleId: run.scheduleId,
-                  scheduleName: run.scheduleName,
-                  runTime: run.runTime.toISOString(),
-                  executionId: execution.id,
-                  status: 'failed',
-                  error: errorData.error || `HTTP ${response.status}`
-                }
-              } else {
-                dispatchedCount++
-                result = {
-                  scheduleId: run.scheduleId,
-                  scheduleName: run.scheduleName,
-                  runTime: run.runTime.toISOString(),
-                  executionId: execution.id,
-                  status: 'dispatched'
-                }
-              }
-            } catch (dispatchError) {
-              failedCount++
-              result = {
+          // Dispatch to agent server
+          try {
+            const response = await fetch(`${AGENT_SERVER_URL}/scheduled-execution`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(cronSecret ? { 'Authorization': `Bearer ${cronSecret}` } : {})
+              },
+              body: JSON.stringify({
+                executionId: execution.id,
+                agentId: run.agentId,
+                taskPrompt: run.taskPrompt,
+                workspaceId: run.workspaceId,
+                outputConfig: run.outputConfig,
+                ...(run.profileId ? { profileId: run.profileId } : {}),
+                ...(use_simulated_time ? { simulatedTime: run.runTime.toISOString() } : {}),
+              }),
+            })
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+              return {
                 scheduleId: run.scheduleId,
                 scheduleName: run.scheduleName,
                 runTime: run.runTime.toISOString(),
                 executionId: execution.id,
                 status: 'failed',
-                error: dispatchError instanceof Error ? dispatchError.message : 'Dispatch failed'
+                error: errorData.error || `HTTP ${response.status}`
               }
+            } else {
+              return {
+                scheduleId: run.scheduleId,
+                scheduleName: run.scheduleName,
+                runTime: run.runTime.toISOString(),
+                executionId: execution.id,
+                status: 'dispatched'
+              }
+            }
+          } catch (dispatchError) {
+            return {
+              scheduleId: run.scheduleId,
+              scheduleName: run.scheduleName,
+              runTime: run.runTime.toISOString(),
+              executionId: execution.id,
+              status: 'failed',
+              error: dispatchError instanceof Error ? dispatchError.message : 'Dispatch failed'
             }
           }
         } catch (runError) {
           console.error(`[Time Machine Stream] Error executing run:`, runError)
-          failedCount++
-          result = {
+          return {
             scheduleId: run.scheduleId,
             scheduleName: run.scheduleName,
             runTime: run.runTime.toISOString(),
@@ -314,15 +308,35 @@ export async function POST(request: NextRequest) {
             error: runError instanceof Error ? runError.message : 'Unknown error'
           }
         }
+      }
 
-        // Stream progress event
-        sendEvent(controller, encoder, {
-          type: 'progress',
-          current: i + 1,
-          total: allRuns.length,
-          durationMs: Date.now() - runStartTime,
-          result
-        })
+      // Process runs in parallel batches, streaming progress for each completed run
+      for (let i = 0; i < allRuns.length; i += batchSize) {
+        const batch = allRuns.slice(i, i + batchSize)
+        const batchStartTime = Date.now()
+
+        // Execute batch in parallel
+        const batchResults = await Promise.all(batch.map(run => executeRun(run)))
+        const batchDuration = Date.now() - batchStartTime
+        const avgDurationPerRun = Math.round(batchDuration / batch.length)
+
+        // Stream progress event for each result in the batch
+        for (const result of batchResults) {
+          completedCount++
+          if (result?.status === 'dispatched') {
+            dispatchedCount++
+          } else {
+            failedCount++
+          }
+
+          sendEvent(controller, encoder, {
+            type: 'progress',
+            current: completedCount,
+            total: allRuns.length,
+            durationMs: avgDurationPerRun,
+            result
+          })
+        }
       }
 
       // Log the simulation

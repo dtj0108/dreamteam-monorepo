@@ -37,43 +37,70 @@ export async function GET() {
     }
 
     // Determine current workspace: cookie > default_workspace_id
+    // But validate that the user is actually a member of the cookie workspace
     const cookieStore = await cookies()
     const cookieWorkspaceId = cookieStore.get('current_workspace_id')?.value
-    const currentWorkspaceId = cookieWorkspaceId || profileData?.default_workspace_id
-
+    
     // Get workspace details and membership
+    let currentWorkspaceId: string | null = null
     let workspaceName: string | null = null
     let workspaceRole: string = 'member'
     let allowedProducts: string[] = ['finance', 'sales', 'team', 'projects', 'knowledge', 'agents'] // Default to all
 
-    if (currentWorkspaceId) {
-      // Get workspace name (using admin to bypass RLS)
-      const { data: workspace } = await adminSupabase
-        .from('workspaces')
-        .select('name, owner_id')
-        .eq('id', currentWorkspaceId)
+    // If there's a cookie workspace, validate user is a member
+    if (cookieWorkspaceId) {
+      const { data: cookieMembership } = await adminSupabase
+        .from('workspace_members')
+        .select('role, allowed_products')
+        .eq('workspace_id', cookieWorkspaceId)
+        .eq('profile_id', user.id)
         .single()
 
-      workspaceName = workspace?.name || null
+      if (cookieMembership) {
+        // User is a member of the cookie workspace, use it
+        currentWorkspaceId = cookieWorkspaceId
+        workspaceRole = cookieMembership.role || 'member'
+        
+        if (workspaceRole === 'owner') {
+          allowedProducts = ['finance', 'sales', 'team', 'projects', 'knowledge', 'agents']
+        } else {
+          allowedProducts = cookieMembership.allowed_products || ['finance', 'sales', 'team', 'projects', 'knowledge', 'agents']
+        }
+      }
+      // If not a member, fall through to use default_workspace_id
+    }
 
-      // Get membership details including role (using admin to bypass RLS)
-      const { data: membership } = await adminSupabase
+    // Fall back to default workspace if cookie workspace was invalid or not set
+    if (!currentWorkspaceId && profileData?.default_workspace_id) {
+      currentWorkspaceId = profileData.default_workspace_id
+      
+      const { data: defaultMembership } = await adminSupabase
         .from('workspace_members')
         .select('role, allowed_products')
         .eq('workspace_id', currentWorkspaceId)
         .eq('profile_id', user.id)
         .single()
 
-      if (membership) {
-        workspaceRole = membership.role || 'member'
-
-        // Owners always have access to all products
+      if (defaultMembership) {
+        workspaceRole = defaultMembership.role || 'member'
+        
         if (workspaceRole === 'owner') {
           allowedProducts = ['finance', 'sales', 'team', 'projects', 'knowledge', 'agents']
         } else {
-          allowedProducts = membership.allowed_products || ['finance', 'sales', 'team', 'projects', 'knowledge', 'agents']
+          allowedProducts = defaultMembership.allowed_products || ['finance', 'sales', 'team', 'projects', 'knowledge', 'agents']
         }
       }
+    }
+
+    // Get workspace name if we have a valid workspace
+    if (currentWorkspaceId) {
+      const { data: workspace } = await adminSupabase
+        .from('workspaces')
+        .select('name')
+        .eq('id', currentWorkspaceId)
+        .single()
+
+      workspaceName = workspace?.name || null
     }
 
     return NextResponse.json({

@@ -3,6 +3,7 @@
  * Used when a user subscribes to a plan to automatically deploy the plan's team
  */
 import { createAdminClient } from './server'
+import { provisionDeploymentResources } from './deployment-resources'
 
 // ============================================
 // TYPES (minimal subset needed for deployment)
@@ -45,7 +46,7 @@ interface DeployedAgent {
   avatar_url: string | null
   system_prompt: string
   model: string
-  provider: string
+  provider?: string  // Optional: AI provider (e.g., 'anthropic', 'openai', 'xai')
   is_enabled: boolean
   tools: DeployedTool[]
   skills: DeployedSkill[]
@@ -81,6 +82,23 @@ interface Customizations {
   agent_overrides: Record<string, Partial<DeployedAgent>>
 }
 
+type SupabaseError = {
+  message?: string
+  details?: string
+  hint?: string
+  code?: string
+}
+
+function logSupabaseError(context: string, error?: SupabaseError | null) {
+  if (!error) return
+  console.error(`[auto-deploy] ${context} failed`, {
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    code: error.code,
+  })
+}
+
 // ============================================
 // BUILD CONFIG SNAPSHOT
 // ============================================
@@ -100,6 +118,7 @@ async function buildConfigSnapshot(teamId: string): Promise<DeployedTeamConfig> 
     .single()
 
   if (teamError || !team) {
+    logSupabaseError('Team lookup', teamError)
     throw new Error(`Team not found: ${teamId}`)
   }
 
@@ -125,6 +144,7 @@ async function buildConfigSnapshot(teamId: string): Promise<DeployedTeamConfig> 
     .order('display_order')
 
   if (agentsError) {
+    logSupabaseError('Team agents lookup', agentsError)
     throw new Error(`Failed to load team agents: ${agentsError.message}`)
   }
 
@@ -149,7 +169,7 @@ async function buildConfigSnapshot(teamId: string): Promise<DeployedTeamConfig> 
       const agent = agentData
 
       // Get agent tools
-      const { data: agentTools } = await supabase
+      const { data: agentTools, error: toolsError } = await supabase
         .from('ai_agent_tools')
         .select(`
           tool:agent_tools(
@@ -174,7 +194,7 @@ async function buildConfigSnapshot(teamId: string): Promise<DeployedTeamConfig> 
         })
 
       // Get agent skills
-      const { data: agentSkills } = await supabase
+      const { data: agentSkills, error: skillsError } = await supabase
         .from('ai_agent_skills')
         .select(`
           skill:agent_skills(
@@ -198,7 +218,7 @@ async function buildConfigSnapshot(teamId: string): Promise<DeployedTeamConfig> 
         })
 
       // Get agent mind (from agent_mind table if exists)
-      const { data: agentMind } = await supabase
+      const { data: agentMind, error: mindError } = await supabase
         .from('agent_mind')
         .select('id, name, slug, content, category')
         .eq('agent_id', agent.id)
@@ -213,7 +233,7 @@ async function buildConfigSnapshot(teamId: string): Promise<DeployedTeamConfig> 
       }))
 
       // Get agent rules
-      const { data: agentRules } = await supabase
+      const { data: agentRules, error: rulesError } = await supabase
         .from('agent_rules')
         .select('id, rule_type, rule_content, priority')
         .eq('agent_id', agent.id)
@@ -260,6 +280,7 @@ async function buildConfigSnapshot(teamId: string): Promise<DeployedTeamConfig> 
     .eq('team_id', teamId)
 
   if (delegationsError) {
+    logSupabaseError('Team delegations lookup', delegationsError)
     throw new Error(`Failed to load team delegations: ${delegationsError.message}`)
   }
 
@@ -314,6 +335,52 @@ async function buildConfigSnapshot(teamId: string): Promise<DeployedTeamConfig> 
     delegations,
     team_mind,
   }
+}
+
+async function insertDeploymentWithRetry(
+  supabase: ReturnType<typeof createAdminClient>,
+  payload: {
+    workspace_id: string
+    source_team_id: string
+    source_version: number
+    base_config: DeployedTeamConfig
+    customizations: Customizations
+    active_config: DeployedTeamConfig
+    deployed_by: string | null
+    status: 'active'
+    previous_deployment_id: string | null
+  },
+  maxRetries = 1
+) {
+  let lastError: { message?: string } | null = null
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const { data, error } = await supabase
+      .from('workspace_deployed_teams')
+      .insert(payload)
+      .select('id')
+      .single()
+
+    if (!error && data) {
+      return { data, error: null }
+    }
+
+    lastError = error
+    const message = error?.message || ''
+
+    // Retry once on transient network failures
+    if (attempt < maxRetries && message.includes('fetch failed')) {
+      const delayMs = 500 * (attempt + 1)
+      console.warn(`[auto-deploy] Deployment insert fetch failed (attempt ${attempt + 1}), retrying in ${delayMs}ms`)
+      logSupabaseError('Deployment insert (fetch failed)', error as SupabaseError)
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+      continue
+    }
+
+    break
+  }
+
+  return { data: null, error: lastError }
 }
 
 // ============================================
@@ -402,6 +469,7 @@ export async function autoDeployTeamForPlan(
       .single()
 
     if (planError || !plan) {
+      logSupabaseError('Plan lookup', planError)
       console.log(`[auto-deploy] Plan not found: ${planSlug}`)
       return { deployed: false, error: `Plan not found: ${planSlug}` }
     }
@@ -416,14 +484,33 @@ export async function autoDeployTeamForPlan(
     // 2. Check if workspace already has an active deployment
     const { data: existingDeployment } = await supabase
       .from('workspace_deployed_teams')
-      .select('id, source_team_id')
+      .select('id, source_team_id, active_config')
       .eq('workspace_id', workspaceId)
       .eq('status', 'active')
       .single()
 
+    const { data: workspace, error: workspaceError } = await supabase
+      .from('workspaces')
+      .select('owner_id')
+      .eq('id', workspaceId)
+      .single()
+
+    if (workspaceError) {
+      logSupabaseError('Workspace lookup', workspaceError)
+    }
+
+    const ownerId = workspace?.owner_id || undefined
+
     // If already deployed with the same team, skip
     if (existingDeployment && existingDeployment.source_team_id === teamId) {
       console.log(`[auto-deploy] Workspace ${workspaceId} already has team ${teamId} deployed`)
+      const existingConfig = existingDeployment.active_config as DeployedTeamConfig | null
+      const configToUse = existingConfig || await buildConfigSnapshot(teamId)
+      await provisionDeploymentResources(supabase, workspaceId, configToUse, {
+        channelCreatorId: ownerId || createdByUserId || null,
+        createdByUserId: createdByUserId || ownerId,
+        retryOnce: true,
+      })
       return { deployed: true, teamId, deploymentId: existingDeployment.id }
     }
 
@@ -438,6 +525,12 @@ export async function autoDeployTeamForPlan(
 
     // 4. Build config snapshot
     const baseConfig = await buildConfigSnapshot(teamId)
+    console.log('[auto-deploy] base_config summary:', {
+      agents: baseConfig.agents.length,
+      enabledAgents: baseConfig.agents.filter(agent => agent.is_enabled).length,
+      delegations: baseConfig.delegations.length,
+      teamMind: baseConfig.team_mind.length,
+    })
 
     // 5. Mark existing deployment as replaced (if any)
     if (existingDeployment) {
@@ -479,20 +572,18 @@ export async function autoDeployTeamForPlan(
       agent_overrides: {},
     }
 
-    // Resolve creator for schedule authorization (fallback to workspace owner)
+    // Resolve owner for channel creation and schedule attribution
     let resolvedCreatedByUserId = createdByUserId
     if (!resolvedCreatedByUserId) {
-      const { data: workspace } = await supabase
-        .from('workspaces')
-        .select('owner_id')
-        .eq('id', workspaceId)
-        .single()
-      resolvedCreatedByUserId = workspace?.owner_id || undefined
+      resolvedCreatedByUserId = ownerId
     }
 
-    const { data: deployment, error: insertError } = await supabase
-      .from('workspace_deployed_teams')
-      .insert({
+    const baseConfigSize = JSON.stringify(baseConfig).length
+    console.log(`[auto-deploy] base_config size: ${baseConfigSize} bytes`)
+
+    const { data: deployment, error: insertError } = await insertDeploymentWithRetry(
+      supabase,
+      {
         workspace_id: workspaceId,
         source_team_id: teamId,
         source_version: sourceVersion,
@@ -502,22 +593,20 @@ export async function autoDeployTeamForPlan(
         deployed_by: resolvedCreatedByUserId || null,
         status: 'active',
         previous_deployment_id: existingDeployment?.id || null,
-      })
-      .select('id')
-      .single()
+      },
+      1
+    )
 
     if (insertError) {
-      console.error(`[auto-deploy] Failed to create deployment:`, insertError)
+      logSupabaseError('Deployment insert', insertError as SupabaseError)
       return { deployed: false, error: insertError.message }
     }
 
-    // Clone schedule templates for all agents in the team
-    await cloneScheduleTemplatesForDeployment(
-      supabase,
-      baseConfig.agents.map(a => a.id),
-      workspaceId,
-      resolvedCreatedByUserId
-    )
+    await provisionDeploymentResources(supabase, workspaceId, baseConfig, {
+      channelCreatorId: ownerId || resolvedCreatedByUserId || null,
+      createdByUserId: resolvedCreatedByUserId,
+      retryOnce: true,
+    })
 
     console.log(`[auto-deploy] Successfully deployed team ${teamId} to workspace ${workspaceId}`)
     return { deployed: true, teamId, deploymentId: deployment.id }
@@ -632,96 +721,6 @@ export async function toggleAgentEnabled(
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
     }
-  }
-}
-
-/**
- * Clone schedule templates for all agents in a deployment.
- * Called after team deployment to ensure all agents have their scheduled tasks.
- */
-async function cloneScheduleTemplatesForDeployment(
-  supabase: ReturnType<typeof createAdminClient>,
-  agentIds: string[],
-  workspaceId: string,
-  createdByUserId?: string
-): Promise<void> {
-  if (agentIds.length === 0) return
-
-  try {
-    // Fetch all schedule templates for these agents in one query
-    const { data: templates, error: fetchError } = await supabase
-      .from('agent_schedules')
-      .select('*')
-      .in('agent_id', agentIds)
-      .eq('is_template', true)
-
-    if (fetchError) {
-      console.error('[auto-deploy] Error fetching schedule templates:', fetchError)
-      return
-    }
-
-    if (!templates?.length) {
-      console.log('[auto-deploy] No schedule templates to clone')
-      return
-    }
-
-    // Check for existing workspace schedules to avoid duplicates
-    const { data: existingSchedules } = await supabase
-      .from('agent_schedules')
-      .select('agent_id, name')
-      .eq('workspace_id', workspaceId)
-      .eq('is_template', false)
-
-    const existingKeys = new Set(
-      (existingSchedules || []).map((s: { agent_id: string; name: string }) => `${s.agent_id}:${s.name}`)
-    )
-
-    // Clone templates that don't already exist for this workspace
-    const schedulesToCreate = templates
-      .filter((t: { agent_id: string; name: string }) => !existingKeys.has(`${t.agent_id}:${t.name}`))
-      .map((template: {
-        agent_id: string
-        name: string
-        description: string | null
-        cron_expression: string
-        timezone: string | null
-        task_prompt: string
-        requires_approval: boolean
-        output_config: unknown
-      }) => ({
-        agent_id: template.agent_id,
-        workspace_id: workspaceId,
-        name: template.name,
-        description: template.description,
-        cron_expression: template.cron_expression,
-        timezone: template.timezone || 'UTC',
-        task_prompt: template.task_prompt,
-        requires_approval: template.requires_approval,
-        output_config: template.output_config,
-        is_enabled: true,
-        is_template: false,
-        // Set next_run_at to 1 minute from now - the scheduler will calculate the actual time
-        next_run_at: new Date(Date.now() + 60 * 1000).toISOString(),
-        created_by: createdByUserId || null,
-      }))
-
-    if (schedulesToCreate.length === 0) {
-      console.log('[auto-deploy] All schedule templates already cloned for workspace')
-      return
-    }
-
-    const { error: insertError } = await supabase
-      .from('agent_schedules')
-      .insert(schedulesToCreate)
-
-    if (insertError) {
-      console.error('[auto-deploy] Error cloning schedule templates:', insertError)
-    } else {
-      console.log(`[auto-deploy] Cloned ${schedulesToCreate.length} schedule templates for workspace ${workspaceId}`)
-    }
-  } catch (error) {
-    // Log but don't fail the deployment if schedule cloning fails
-    console.error('[auto-deploy] Error in cloneScheduleTemplatesForDeployment:', error)
   }
 }
 

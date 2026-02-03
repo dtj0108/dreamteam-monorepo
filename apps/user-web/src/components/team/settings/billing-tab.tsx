@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog"
 import { useBilling, type ProrationPreview } from "@/hooks/use-billing"
 import { usePlans, Plan } from "@/hooks/use-plans"
-import { AGENT_TIER_INFO, WORKSPACE_PLAN_INFO, type AgentTier, getPaymentMethodInfo } from "@/types/billing"
+import { type AgentTier, getPaymentMethodInfo } from "@/types/billing"
 import { AgentTierConfirmDialog, type AgentTierPricing } from "@/components/billing/agent-tier-confirm-dialog"
 
 interface BillingTabProps {
@@ -71,7 +71,14 @@ const getStatusBadge = (status: string | null | undefined, plan?: string) => {
   }
 }
 
-// Helper to get agent tier info from database plans or fallback to hardcoded
+// Default fallback values for agent tiers (used when database has no data)
+const DEFAULT_AGENT_TIERS: Record<'startup' | 'teams' | 'enterprise', { name: string; agents: number; tagline: string }> = {
+  startup: { name: 'Lean Startup', agents: 7, tagline: 'You + a few killers in one room' },
+  teams: { name: 'Department Teams', agents: 18, tagline: "Now you've got specialists" },
+  enterprise: { name: 'Enterprise Dream Team', agents: 38, tagline: 'This is unfair' },
+}
+
+// Helper to get agent tier info from database plans or fallback to defaults
 function getAgentTierInfo(
   tier: 'startup' | 'teams' | 'enterprise',
   agentTiers: Plan[]
@@ -81,14 +88,21 @@ function getAgentTierInfo(
     return {
       name: plan.name,
       price: plan.price_monthly ?? 0,
-      agents: plan.display_config.agent_count ?? AGENT_TIER_INFO[tier].agents,
-      tagline: plan.display_config.tagline ?? AGENT_TIER_INFO[tier].tagline,
+      agents: plan.display_config.agent_count ?? DEFAULT_AGENT_TIERS[tier].agents,
+      tagline: plan.display_config.tagline ?? DEFAULT_AGENT_TIERS[tier].tagline,
     }
   }
-  return AGENT_TIER_INFO[tier]
+  // Fallback to defaults with 0 price (requires database configuration)
+  return { ...DEFAULT_AGENT_TIERS[tier], price: 0 }
 }
 
-// Helper to get workspace plan prices from database or fallback to hardcoded
+// Default fallback prices for workspace plans (in dollars)
+const DEFAULT_WORKSPACE_PRICES = {
+  monthly: 49,
+  annual: 39,
+}
+
+// Helper to get workspace plan prices from database or fallback to defaults
 function getWorkspacePlanPrices(workspacePlans: Plan[]): {
   monthlyPrice: number
   annualPrice: number
@@ -99,10 +113,10 @@ function getWorkspacePlanPrices(workspacePlans: Plan[]): {
   return {
     monthlyPrice: monthlyPlan?.price_monthly
       ? monthlyPlan.price_monthly / 100
-      : WORKSPACE_PLAN_INFO.monthly.price,
+      : DEFAULT_WORKSPACE_PRICES.monthly,
     annualPrice: annualPlan?.price_monthly
       ? annualPlan.price_monthly / 100
-      : WORKSPACE_PLAN_INFO.annual.price,
+      : DEFAULT_WORKSPACE_PRICES.annual,
   }
 }
 

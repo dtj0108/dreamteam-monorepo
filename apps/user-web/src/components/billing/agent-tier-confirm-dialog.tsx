@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Bot, Loader2, ArrowRight, CreditCard, Sparkles, AlertTriangle } from 'lucide-react'
-import { type AgentTier, AGENT_TIER_INFO, formatPrice, formatCardBrand } from '@/types/billing'
+import { type AgentTier, formatPrice, formatCardBrand } from '@/types/billing'
 
 export interface AgentTierPricing {
   name: string
