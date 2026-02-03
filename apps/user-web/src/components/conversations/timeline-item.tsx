@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Mail, Phone, MessageSquare, PhoneIncoming, PhoneOutgoing, ChevronDown, ChevronUp, Play, Pause } from "lucide-react"
+import { Loader2, Mail, Phone, MessageSquare, PhoneIncoming, PhoneOutgoing, ChevronDown, ChevronUp } from "lucide-react"
+import { RecordingPlayer } from "@/components/sales/recording-player"
 import { TimelineItem as TimelineItemType } from "@/app/api/conversations/[contactId]/timeline/route"
 
 interface TimelineItemProps {
@@ -18,7 +19,6 @@ export function TimelineItem({ item, contactName, grantId }: TimelineItemProps) 
   const [expanded, setExpanded] = useState(false)
   const [emailBody, setEmailBody] = useState<string | null>(null)
   const [loadingBody, setLoadingBody] = useState(false)
-  const [playingRecording, setPlayingRecording] = useState<string | null>(null)
 
   const formatDate = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -202,30 +202,11 @@ export function TimelineItem({ item, contactName, grantId }: TimelineItemProps) 
               <p className="text-xs text-muted-foreground mb-2">Recordings</p>
               <div className="space-y-2">
                 {item.recordings.map((recording) => (
-                  <div key={recording.id} className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 w-8 p-0"
-                      onClick={() => {
-                        if (playingRecording === recording.id) {
-                          setPlayingRecording(null)
-                        } else {
-                          setPlayingRecording(recording.id)
-                          // In a real implementation, we would play the audio
-                        }
-                      }}
-                    >
-                      {playingRecording === recording.id ? (
-                        <Pause className="h-3 w-3" />
-                      ) : (
-                        <Play className="h-3 w-3" />
-                      )}
-                    </Button>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDuration(recording.duration_seconds)}
-                    </span>
-                  </div>
+                  <RecordingPlayer
+                    key={recording.id}
+                    recordingId={recording.id}
+                    duration={recording.duration_seconds}
+                  />
                 ))}
               </div>
             </div>

@@ -183,10 +183,10 @@ export async function POST(request: Request) {
         // Our system: negative amount = expense, positive = income
         // So we negate to match our convention
 
-        // Check if transaction already exists
+        // Check if transaction already exists (include category_id to check if uncategorized)
         const { data: existing } = await supabase
           .from('transactions')
-          .select('id')
+          .select('id, category_id')
           .eq('plaid_transaction_id', tx.transactionId)
           .single()
 
@@ -197,18 +197,28 @@ export async function POST(request: Request) {
         const categoryId = findCategoryId(tx.category, transactionAmount)
 
         if (existing) {
-          // Update existing transaction (only update category if it was previously uncategorized)
+          // Update existing transaction
+          // Also set category if it was previously uncategorized and we have a suggestion
+          const updateData: Record<string, unknown> = {
+            amount: transactionAmount,
+            date: tx.date,
+            description: tx.merchantName || tx.name,
+            plaid_pending: tx.pending,
+            plaid_merchant_name: tx.merchantName,
+            plaid_category: tx.category,
+            plaid_payment_channel: tx.paymentChannel,
+          }
+
+          // Only set category if transaction is uncategorized and we have a mapping
+          if (!existing.category_id && categoryId) {
+            updateData.category_id = categoryId
+            totalCategorized++
+            console.log(`Auto-categorized existing transaction: ${tx.merchantName || tx.name}`)
+          }
+
           const { error: updateError } = await supabase
             .from('transactions')
-            .update({
-              amount: transactionAmount,
-              date: tx.date,
-              description: tx.merchantName || tx.name,
-              plaid_pending: tx.pending,
-              plaid_merchant_name: tx.merchantName,
-              plaid_category: tx.category,
-              plaid_payment_channel: tx.paymentChannel,
-            })
+            .update(updateData)
             .eq('id', existing.id)
 
           if (!updateError) {

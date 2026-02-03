@@ -115,7 +115,7 @@ export function TeamSidebar({
                     >
                       <Icon className="size-4 shrink-0" />
                       <span className="truncate flex-1">{channel.name}</span>
-                      {channel.unreadCount && channel.unreadCount > 0 && (
+                      {(channel.unreadCount ?? 0) > 0 && (
                         <span
                           className={cn(
                             "text-xs px-1.5 py-0.5 rounded-full",
@@ -197,7 +197,7 @@ export function TeamSidebar({
                         </div>
                       </div>
                       <span className="truncate flex-1">{dm.participant.name}</span>
-                      {dm.unreadCount && dm.unreadCount > 0 && (
+                      {(dm.unreadCount ?? 0) > 0 && (
                         <span
                           className={cn(
                             "text-xs px-1.5 py-0.5 rounded-full",
