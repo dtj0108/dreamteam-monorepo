@@ -17,9 +17,13 @@ export interface CallItem {
   created_at: string
   lead_id?: string
   contact_id?: string
+  notes?: string
+  disposition?: string
   recordings?: Array<{
     id: string
     duration_seconds: number
+    transcription?: string
+    transcription_status?: string
   }>
 }
 

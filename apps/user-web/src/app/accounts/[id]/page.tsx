@@ -149,13 +149,20 @@ export default function AccountDetailPage() {
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between">
-              <div>
-                <CardTitle className="text-2xl">{account.name}</CardTitle>
-                <CardDescription>
-                  {ACCOUNT_TYPE_LABELS[account.type]}
-                  {account.institution && ` • ${account.institution}`}
-                  {account.last_four && ` ••••${account.last_four}`}
-                </CardDescription>
+              <div className="flex items-start gap-3">
+                <Button variant="ghost" size="icon" className="shrink-0 -ml-2" asChild>
+                  <Link href="/accounts">
+                    <ArrowLeft className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <div>
+                  <CardTitle className="text-2xl">{account.name}</CardTitle>
+                  <CardDescription>
+                    {ACCOUNT_TYPE_LABELS[account.type]}
+                    {account.institution && ` • ${account.institution}`}
+                    {account.last_four && ` ••••${account.last_four}`}
+                  </CardDescription>
+                </div>
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-right">
