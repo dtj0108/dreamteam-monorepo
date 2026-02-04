@@ -183,22 +183,14 @@ export default function SchedulesPage() {
     <div className="flex-1 overflow-y-auto">
       <div className="p-6 max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <Calendar className="size-6" />
-              Schedules
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              View and manage agent scheduled tasks
-            </p>
-          </div>
-          {myAgents.length > 0 && (
-            <Button onClick={() => setShowCreateDialog(true)}>
-              <Plus className="size-4 mr-2" />
-              Create Schedule
-            </Button>
-          )}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Calendar className="size-6" />
+            Autonomous Actions
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            View and manage agent autonomous actions
+          </p>
         </div>
 
         {/* Filter Bar */}
@@ -207,7 +199,7 @@ export default function SchedulesPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search schedules..."
+              placeholder="Search actions..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               className="w-64 pl-9"
@@ -291,6 +283,14 @@ export default function SchedulesPage() {
               Clear
             </Button>
           )}
+
+          {/* New Action Button */}
+          {myAgents.length > 0 && (
+            <Button onClick={() => setShowCreateDialog(true)} className="ml-auto">
+              <Plus className="size-4 mr-2" />
+              New Action
+            </Button>
+          )}
         </div>
 
         {isLoadingSchedules ? (
@@ -358,7 +358,7 @@ export default function SchedulesPage() {
                         colSpan={columns.length}
                         className="h-24 text-center"
                       >
-                        No schedules found.
+                        No actions found.
                       </TableCell>
                     </TableRow>
                   )}
@@ -370,7 +370,7 @@ export default function SchedulesPage() {
         ) : hasActiveFilters ? (
           <div className="text-center py-12">
             <Search className="size-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium">No schedules match your filters</h3>
+            <h3 className="text-lg font-medium">No actions match your filters</h3>
             <p className="text-muted-foreground mt-1">
               Try adjusting your filters or{" "}
               <button
@@ -384,16 +384,16 @@ export default function SchedulesPage() {
         ) : (
           <div className="text-center py-12">
             <Calendar className="size-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium">No schedules yet</h3>
+            <h3 className="text-lg font-medium">No autonomous actions yet</h3>
             <p className="text-muted-foreground mt-1">
               {myAgents.length > 0
-                ? "Create a schedule to have your agents perform tasks automatically"
-                : "Scheduled tasks from your hired agents will appear here"}
+                ? "Create an autonomous action to have your agents perform tasks automatically"
+                : "Autonomous actions from your hired agents will appear here"}
             </p>
             {myAgents.length > 0 && (
               <Button className="mt-4" onClick={() => setShowCreateDialog(true)}>
                 <Plus className="size-4 mr-2" />
-                Create Schedule
+                New Action
               </Button>
             )}
           </div>
@@ -405,6 +405,7 @@ export default function SchedulesPage() {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onSuccess={() => fetchSchedules(filters)}
+        defaultAgentId={filters.agentId}
       />
     </div>
   )

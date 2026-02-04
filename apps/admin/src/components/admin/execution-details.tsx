@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -101,6 +102,10 @@ export function ExecutionDetails({ execution, rawApiResponse }: ExecutionDetails
   const [copied, setCopied] = useState(false)
   const result = execution.result as Record<string, unknown> | null
   const toolCalls = execution.tool_calls as Record<string, unknown>[] | null
+  const scheduleName = execution.schedule?.name || 'Unknown Schedule'
+  const agentName = execution.agent?.name || 'Unknown Agent'
+  const workspaceName = execution.schedule?.workspace?.name || 'Unknown Workspace'
+  const jsonPayload = rawApiResponse || execution
 
   // Try to extract message and todos from result
   const message = result?.message as string | undefined
@@ -114,6 +119,52 @@ export function ExecutionDetails({ execution, rawApiResponse }: ExecutionDetails
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-lg font-semibold">{scheduleName}</p>
+          <p className="text-sm text-muted-foreground">
+            {agentName} • {workspaceName}
+          </p>
+          <p className="text-xs text-muted-foreground font-mono">Execution {execution.id}</p>
+        </div>
+        <div className="flex flex-row flex-wrap items-center gap-2">
+          {getStatusBadge(execution.status)}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => copyToClipboard(jsonPayload)}
+          >
+            {copied ? (
+              <Check className="mr-1 h-4 w-4" />
+            ) : (
+              <Copy className="mr-1 h-4 w-4" />
+            )}
+            {copied ? 'Copied!' : 'Copy JSON'}
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Task</CardTitle>
+          <CardAction>
+            {execution.schedule?.cron_expression ? (
+              <Badge variant="secondary" className="font-mono text-[11px]">
+                {execution.schedule.cron_expression}
+                {execution.schedule.timezone ? ` • ${execution.schedule.timezone}` : ''}
+              </Badge>
+            ) : null}
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-[180px]">
+            <div className="text-sm whitespace-pre-wrap">
+              {execution.schedule?.task_prompt || 'No task prompt'}
+            </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+
       {/* Status and Metrics Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="space-y-1">
@@ -236,14 +287,6 @@ export function ExecutionDetails({ execution, rawApiResponse }: ExecutionDetails
               </p>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* Task Prompt */}
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Task Prompt</Label>
-        <div className="p-3 bg-muted rounded-md text-sm whitespace-pre-wrap">
-          {execution.schedule?.task_prompt || 'No task prompt'}
         </div>
       </div>
 

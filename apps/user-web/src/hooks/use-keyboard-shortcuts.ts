@@ -20,7 +20,9 @@ export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[]) {
       }
 
       for (const shortcut of shortcuts) {
-        const metaMatch = shortcut.meta ? (event.metaKey || event.ctrlKey) : true
+        const metaMatch = shortcut.meta
+          ? (event.metaKey || event.ctrlKey)   // Requires modifier: check it's pressed
+          : (!event.metaKey && !event.ctrlKey) // No modifier required: ensure modifier is NOT pressed
         const keyMatch = event.key.toLowerCase() === shortcut.key.toLowerCase()
 
         if (metaMatch && keyMatch) {

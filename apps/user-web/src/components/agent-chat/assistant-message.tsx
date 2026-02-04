@@ -9,7 +9,7 @@ import {
   MessageAction,
 } from "@/components/ai-elements/message"
 import { cn } from "@/lib/utils"
-import { Copy, RotateCcw, Lightbulb, Brain, Zap, Loader2, Check, AlertCircle, Sparkles, ChevronRight } from "lucide-react"
+import { Copy, RotateCcw, Lightbulb, Brain, Loader2, Check, AlertCircle, Sparkles, ChevronRight, ChevronDown } from "lucide-react"
 import type { AcknowledgmentPart, ReasoningPart, ToolCallPart, TextPart } from "@/hooks/use-agent-chat"
 import { motion, AnimatePresence } from "motion/react"
 
@@ -43,14 +43,17 @@ export function AssistantMessage({
   status,
   handleRetry,
 }: AssistantMessageProps) {
+  const [showDetails, setShowDetails] = useState(false)
   const hasIncompleteWork = toolParts.some((t) => t.state !== "completed" && t.state !== "error") || isStreaming
   const hasThinkingSteps = ackPart || reasoningParts.length > 0 || toolParts.length > 0
   const totalSteps = (ackPart ? 1 : 0) + reasoningParts.length + toolParts.length
   const completedSteps = (ackPart ? 1 : 0) + reasoningParts.length + toolParts.filter((t) => t.state === "completed").length
   const isComplete = !hasIncompleteWork && hasThinkingSteps
+  const detailsId = `work-details-${messageId}`
 
   const isStreamingText = status === "streaming" && isLastMessage
   const isNotStreaming = !isStreamingText
+  const shouldShowTypingIndicator = isStreaming && textParts.length === 0
 
   // Collect all thinking steps into a unified timeline
   const thinkingSteps = [
@@ -63,88 +66,125 @@ export function AssistantMessage({
     <Fragment>
       {/* Chain of Thought Timeline */}
       {hasThinkingSteps && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="not-prose max-w-2xl"
-        >
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-3 px-1">
-            <div className="relative">
-              {isComplete ? (
-                <div className="flex size-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                  <Check className="size-4" />
-                </div>
-              ) : (
-                <div className="relative">
-                  <motion.div
-                    className="absolute inset-0 rounded-full bg-primary/20"
-                    animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                  />
-                  <div className="relative flex size-7 items-center justify-center rounded-full bg-primary/10">
-                    <Sparkles className="size-4 text-primary" />
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="flex-1">
-              <span className="text-sm font-medium">
-                {isComplete ? "Thought process complete" : "Thinking"}
+        <div className="not-prose max-w-2xl">
+          <button
+            type="button"
+            onClick={() => setShowDetails((prev) => !prev)}
+            aria-expanded={showDetails}
+            aria-controls={detailsId}
+            className="flex w-full items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <span className="flex items-center gap-2">
+              <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-primary">
+                {isComplete ? <Check className="size-3.5" /> : <Sparkles className="size-3.5" />}
               </span>
-              <span className="text-xs text-muted-foreground ml-2">
+              Work details
+              <span className="text-xs font-normal text-muted-foreground">
                 {completedSteps} of {totalSteps}
               </span>
-            </div>
-          </div>
+            </span>
+            <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", showDetails && "rotate-180")} />
+          </button>
 
-          {/* Timeline Steps */}
-          <div className="relative space-y-1">
-            {thinkingSteps.map((step, index) => {
-              const isLast = index === thinkingSteps.length - 1
-              if (step.type === "ack") {
-                return (
-                  <TimelineStep
-                    key="ack"
-                    icon={Lightbulb}
-                    label="Understanding request"
-                    description={step.data.content}
-                    status="completed"
-                    isLast={isLast}
-                    hasSubSteps={false}
-                  />
-                )
-              }
-              if (step.type === "reasoning") {
-                const isActive = isStreaming && step.index === reasoningParts.length - 1 && toolParts.length === 0 && textParts.length === 0
-                return (
-                  <TimelineStep
-                    key={`reasoning-${step.index}`}
-                    icon={Brain}
-                    label="Reasoning"
-                    description={step.data.reasoning}
-                    status={isActive ? "loading" : "completed"}
-                    isLast={isLast}
-                    hasSubSteps={true}
-                  />
-                )
-              }
-              return (
-                <ToolTimelineStep
-                  key={step.data.toolCallId}
-                  part={step.data}
-                  isLast={isLast}
-                />
-              )
-            })}
-            
-            {/* Still working indicator - shows when thinking is done but no text yet */}
-            {hasThinkingSteps && textParts.length === 0 && isStreaming && (
-              <StillWorkingCard />
+          <AnimatePresence>
+            {showDetails && (
+              <motion.div
+                id={detailsId}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                transition={{ duration: 0.3 }}
+                className="mt-3"
+              >
+                {/* Header */}
+                <div className="flex items-center gap-3 mb-3 px-1">
+                  <div className="relative">
+                    {isComplete ? (
+                      <div className="flex size-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                        <Check className="size-4" />
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <motion.div
+                          className="absolute inset-0 rounded-full bg-primary/20"
+                          animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
+                          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                        />
+                        <div className="relative flex size-7 items-center justify-center rounded-full bg-primary/10">
+                          <Sparkles className="size-4 text-primary" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-sm font-medium">
+                      {isComplete ? "Thought process complete" : "Thinking"}
+                    </span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {completedSteps} of {totalSteps}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Timeline Steps */}
+                <div className="relative space-y-1">
+                  {thinkingSteps.map((step, index) => {
+                    const isLast = index === thinkingSteps.length - 1
+                    if (step.type === "ack") {
+                      return (
+                        <TimelineStep
+                          key="ack"
+                          icon={Lightbulb}
+                          label="Understanding request"
+                          description={step.data.content}
+                          status="completed"
+                          isLast={isLast}
+                          hasSubSteps={false}
+                        />
+                      )
+                    }
+                    if (step.type === "reasoning") {
+                      const isActive = isStreaming && step.index === reasoningParts.length - 1 && toolParts.length === 0 && textParts.length === 0
+                      return (
+                        <TimelineStep
+                          key={`reasoning-${step.index}`}
+                          icon={Brain}
+                          label="Reasoning"
+                          description={step.data.reasoning}
+                          status={isActive ? "loading" : "completed"}
+                          isLast={isLast}
+                          hasSubSteps={true}
+                        />
+                      )
+                    }
+                    return (
+                      <ToolTimelineStep
+                        key={step.data.toolCallId}
+                        part={step.data}
+                        isLast={isLast}
+                      />
+                    )
+                  })}
+                  
+                  {/* Still working indicator - shows when thinking is done but no text yet */}
+                  {hasThinkingSteps && textParts.length === 0 && isStreaming && (
+                    <StillWorkingCard />
+                  )}
+                </div>
+              </motion.div>
             )}
-          </div>
-        </motion.div>
+          </AnimatePresence>
+        </div>
+      )}
+
+      {shouldShowTypingIndicator && (
+        <Message from="assistant">
+          <MessageContent>
+            <MessageResponse mode="streaming">
+              Generating response…
+            </MessageResponse>
+          </MessageContent>
+        </Message>
       )}
 
       {/* Final text response */}
@@ -286,6 +326,10 @@ function ToolTimelineStep({ part, isLast }: ToolTimelineStepProps) {
   const isActive = part.state !== "completed" && part.state !== "error"
   const isError = part.state === "error"
   const isCompleted = part.state === "completed"
+  const statusLabel =
+    part.state === "pending" ? "Pending" :
+    part.state === "running" ? "Running" :
+    part.state === "completed" ? "Completed" : "Error"
 
   return (
     <div className="relative">
@@ -325,7 +369,17 @@ function ToolTimelineStep({ part, isLast }: ToolTimelineStepProps) {
             <span className={cn("text-sm font-medium", isActive ? "text-foreground" : isError ? "text-destructive" : "text-foreground/80")}>
               {formatToolName(part.toolName)}
             </span>
-            <ChevronRight className={cn("size-4 text-muted-foreground transition-transform", isExpanded && "rotate-90")} />
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide",
+                isActive ? "border-primary/20 text-primary" :
+                isError ? "border-destructive/30 text-destructive" :
+                "border-emerald-200 text-emerald-600"
+              )}>
+                {statusLabel}
+              </span>
+              <ChevronRight className={cn("size-4 text-muted-foreground transition-transform", isExpanded && "rotate-90")} />
+            </div>
           </div>
 
           {/* Result preview */}

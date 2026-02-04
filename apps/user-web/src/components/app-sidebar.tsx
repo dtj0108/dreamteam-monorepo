@@ -348,7 +348,7 @@ const agentsNav = [
     icon: Settings2,
   },
   {
-    title: "Schedules",
+    title: "Autonomous Actions",
     url: "/agents/schedules",
     icon: Calendar,
   },

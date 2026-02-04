@@ -23,6 +23,7 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import type { AgentScheduleExecution } from "@/lib/types/agents"
+import { describeCron } from "@/lib/cron-utils"
 
 function PendingExecutionCard({
   execution,
@@ -71,7 +72,7 @@ function PendingExecutionCard({
               : new Date(execution.created_at).toLocaleString()}
           </span>
           {execution.schedule?.cron_expression && (
-            <span>Cron: {execution.schedule.cron_expression}</span>
+            <span>Frequency: {describeCron(execution.schedule.cron_expression)}</span>
           )}
         </div>
       </CardContent>

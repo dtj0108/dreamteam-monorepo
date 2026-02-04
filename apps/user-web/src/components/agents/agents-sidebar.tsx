@@ -171,7 +171,7 @@ export function AgentsSidebar({
             </CollapsibleContent>
           </Collapsible>
 
-          {/* Schedules Link */}
+          {/* Autonomous Actions Link */}
           <div className="mt-4">
             <Link
               href="/agents/schedules"
@@ -183,7 +183,7 @@ export function AgentsSidebar({
               )}
             >
               <Calendar className="size-4" />
-              <span>Schedules</span>
+              <span>Autonomous Actions</span>
             </Link>
           </div>
 

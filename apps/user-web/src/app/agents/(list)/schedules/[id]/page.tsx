@@ -290,7 +290,7 @@ export default function ScheduleDetailPage() {
   if (!schedule) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-muted-foreground">Schedule not found</p>
+        <p className="text-muted-foreground">Action not found</p>
       </div>
     )
   }
@@ -303,7 +303,7 @@ export default function ScheduleDetailPage() {
           <Button variant="ghost" size="sm" asChild>
             <Link href="/agents/schedules" className="gap-2">
               <ArrowLeft className="size-4" />
-              Back to Schedules
+              Back to Actions
             </Link>
           </Button>
           <div className="size-10 rounded-lg bg-muted flex items-center justify-center text-lg shrink-0">
@@ -356,7 +356,7 @@ export default function ScheduleDetailPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
                 <Pencil className="size-4 mr-2" />
-                Edit Schedule
+                Edit Action
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -364,7 +364,7 @@ export default function ScheduleDetailPage() {
                 className="text-destructive focus:text-destructive"
               >
                 <Trash2 className="size-4 mr-2" />
-                Delete Schedule
+                Delete Action
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -491,7 +491,7 @@ export default function ScheduleDetailPage() {
                   <Calendar className="size-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-medium">No executions yet</h3>
                   <p className="text-muted-foreground mt-1 max-w-sm mx-auto">
-                    This schedule hasn't run yet. Executions will appear here once the schedule triggers.
+                    This action hasn't run yet. Executions will appear here once it triggers.
                   </p>
                 </div>
               )}
@@ -512,9 +512,9 @@ export default function ScheduleDetailPage() {
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Schedule</AlertDialogTitle>
+            <AlertDialogTitle>Delete Autonomous Action</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{schedule?.name}"? This action cannot be undone.
+              Are you sure you want to delete "{schedule?.name}"? This cannot be undone.
               All execution history will also be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
