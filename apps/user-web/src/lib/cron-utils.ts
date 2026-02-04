@@ -131,48 +131,51 @@ function parseCronPart(part: string, min: number, max: number): number[] {
 export function describeCron(cronExpression: string): string {
   const parts = cronExpression.trim().split(/\s+/)
   if (parts.length !== 5) {
-    return 'Invalid cron expression'
+    return 'Custom schedule'
   }
 
   const [minute, hour, day, month, weekday] = parts
+  const minuteNum = parseInt(minute, 10)
+  const hourNum = parseInt(hour, 10)
+  const hasValidTime = !Number.isNaN(minuteNum) && !Number.isNaN(hourNum)
 
   // Common patterns
-  if (minute === '0' && hour !== '*' && day === '*' && month === '*' && weekday === '*') {
-    return `Daily at ${formatHour(parseInt(hour, 10))}`
+  if (hasValidTime && day === '*' && month === '*' && weekday === '*') {
+    return `Daily at ${formatTime(hourNum, minuteNum)}`
   }
 
-  if (minute === '0' && hour !== '*' && day === '*' && month === '*' && weekday !== '*') {
-    const days = weekday.split(',').map(d => getWeekdayName(parseInt(d, 10))).join(', ')
-    return `Every ${days} at ${formatHour(parseInt(hour, 10))}`
+  if (hasValidTime && day === '*' && month === '*' && weekday !== '*') {
+    const days = weekday
+      .split(',')
+      .map(d => getWeekdayName(parseInt(d, 10)))
+      .filter(d => d && d !== 'Unknown')
+      .join(', ')
+    if (days) {
+      return `Every ${days} at ${formatTime(hourNum, minuteNum)}`
+    }
   }
 
-  if (minute === '0' && hour !== '*' && day !== '*' && month === '*' && weekday === '*') {
-    return `Monthly on day ${day} at ${formatHour(parseInt(hour, 10))}`
+  if (hasValidTime && day !== '*' && month === '*' && weekday === '*') {
+    const dayNum = parseInt(day, 10)
+    if (!Number.isNaN(dayNum)) {
+      return `Monthly on day ${dayNum} at ${formatTime(hourNum, minuteNum)}`
+    }
   }
 
-  if (minute === '0' && hour !== '*' && day !== '*' && month !== '*' && weekday === '*') {
-    const months = month.split(',').map(m => getMonthName(parseInt(m, 10))).join(', ')
-    return `On ${months} ${day} at ${formatHour(parseInt(hour, 10))}`
-  }
-
-  return cronExpression
+  return 'Custom schedule'
 }
 
-function formatHour(hour: number): string {
-  if (hour === 0) return '12:00 AM'
-  if (hour === 12) return '12:00 PM'
-  if (hour < 12) return `${hour}:00 AM`
-  return `${hour - 12}:00 PM`
+function formatTime(hour: number, minute: number): string {
+  const safeHour = Number.isNaN(hour) ? 0 : hour
+  const safeMinute = Number.isNaN(minute) ? 0 : minute
+  const period = safeHour >= 12 ? 'PM' : 'AM'
+  const displayHour = safeHour % 12 === 0 ? 12 : safeHour % 12
+  return `${displayHour}:${safeMinute.toString().padStart(2, '0')} ${period}`
 }
 
 function getWeekdayName(day: number): string {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   return days[day] || 'Unknown'
-}
-
-function getMonthName(month: number): string {
-  const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  return months[month] || 'Unknown'
 }
 
 /**

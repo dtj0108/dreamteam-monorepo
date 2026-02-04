@@ -4,6 +4,14 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@dreamteam/ui", "@dreamteam/database", "@dreamteam/auth"],
   // Silence Turbopack warning when webpack config is present
   turbopack: {},
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+      },
+    ],
+  },
   // Excalidraw configuration
   webpack: (config) => {
     // Handle Excalidraw's ES modules

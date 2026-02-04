@@ -168,23 +168,55 @@ export async function POST(
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
+    const scheduleAgentRaw = schedule.ai_agent as {
+      id?: string
+      name?: string
+      system_prompt?: string
+      provider?: string
+      model?: string
+    } | Array<{
+      id?: string
+      name?: string
+      system_prompt?: string
+      provider?: string
+      model?: string
+    }> | null
+    const scheduleAgent = Array.isArray(scheduleAgentRaw) ? scheduleAgentRaw[0] : scheduleAgentRaw
+
     // Execute the task
     try {
       const systemPrompt =
         resolvedAgent.legacyAgent?.system_prompt ||
         resolvedAgent.deploymentAgent?.system_prompt ||
-        schedule.ai_agent?.system_prompt ||
+        scheduleAgent?.system_prompt ||
         "You are a helpful AI assistant."
 
       // Get provider and model from AI agent config
-      const provider = (resolvedAgent.deploymentAgent?.provider as "anthropic" | "xai" | undefined) ||
-        (schedule.ai_agent?.provider as "anthropic" | "xai" | undefined) ||
-        "anthropic"
-      const model = resolvedAgent.deploymentAgent?.model || schedule.ai_agent?.model || undefined
+      let provider = (resolvedAgent.deploymentAgent?.provider as "anthropic" | "xai" | undefined) ||
+        (scheduleAgent?.provider as "anthropic" | "xai" | undefined)
+      let model = resolvedAgent.deploymentAgent?.model || scheduleAgent?.model || undefined
 
-      // #region agent log
-      fetch('http://127.0.0.1:7251/ingest/ad122d98-a0b2-4935-b292-9bab921eccb9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'schedules/[id]/route:manual-run',message:'Manual schedule run with provider',data:{scheduleId:id,scheduleName:schedule.name,rawProvider:schedule.ai_agent?.provider,resolvedProvider:provider,model,hasXaiKey:!!process.env.XAI_API_KEY,hasAnthropicKey:!!process.env.ANTHROPIC_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'manual-run',hypothesisId:'D-manual-run'})}).catch(()=>{});
-      // #endregion
+      if (!provider || !model) {
+        const { data: aiAgent } = await supabase
+          .from("ai_agents")
+          .select("provider, model, system_prompt")
+          .eq("id", schedule.agent_id)
+          .single()
+
+        provider = provider || (aiAgent?.provider as "anthropic" | "xai" | undefined) || "anthropic"
+        model = model || aiAgent?.model || undefined
+      }
+
+      // Infer provider from model name to ensure consistency
+      // This handles cases where the stored provider doesn't match the model type
+      if (model) {
+        const modelLower = model.toLowerCase()
+        if (modelLower.includes("grok")) {
+          provider = "xai"
+        } else if (modelLower.includes("claude") || modelLower === "sonnet" || modelLower === "opus" || modelLower === "haiku") {
+          provider = "anthropic"
+        }
+      }
 
       console.log("[ScheduleRun] TOOLS BEING PASSED:", {
         toolCategoriesCount: toolCategories.length,

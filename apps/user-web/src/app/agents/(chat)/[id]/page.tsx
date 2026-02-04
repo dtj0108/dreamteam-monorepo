@@ -30,6 +30,14 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation"
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
+import {
   Attachments,
   Attachment,
   AttachmentPreview,
@@ -47,6 +55,9 @@ import {
   WifiOff,
   ServerOff,
   AlertTriangle,
+  PanelLeft,
+  Info,
+  Settings,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -56,6 +67,8 @@ import dynamic from "next/dynamic"
 import {
   MessageRenderer,
   SyntheticThinkingRenderer,
+  SRAnnouncer,
+  useSRAnnouncer,
 } from "@/components/agent-chat"
 
 // Dynamic import for Lottie to reduce initial bundle size
@@ -109,6 +122,11 @@ export default function AgentChatPage() {
   const [loadedMessages, setLoadedMessages] = useState<AgentMessage[]>([])
   const [lastUserMessage, setLastUserMessage] = useState<string | null>(null)
   const lastSavedMessageCount = useRef(0)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isInfoOpen, setIsInfoOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isOnline, setIsOnline] = useState(true)
+  const { announcement, politeness, announcePolite } = useSRAnnouncer()
 
   // Loading states
   const [isLoadingActivity, setIsLoadingActivity] = useState(false)
@@ -161,6 +179,20 @@ export default function AgentChatPage() {
 
   const mappedStatus = status === "idle" ? "ready" : status === "connecting" ? "submitted" : status
   const hasStartedConversation = messages.length > 0
+  const statusLabel = !isOnline
+    ? "Offline"
+    : status === "streaming"
+      ? "Thinking…"
+      : status === "connecting"
+        ? "Connecting…"
+        : "Ready"
+  const statusBadgeClass = !isOnline
+    ? "bg-destructive/10 text-destructive"
+    : status === "streaming"
+      ? "bg-primary/10 text-primary"
+      : status === "connecting"
+        ? "bg-muted text-muted-foreground"
+        : "bg-emerald-100 text-emerald-700"
 
   // Helper to get user-friendly error message
   const getErrorDetails = useCallback((err: Error): { type: 'network' | 'server' | 'validation' | 'unknown'; message: string } => {
@@ -224,6 +256,32 @@ export default function AgentChatPage() {
     }
     loadAnimation()
   }, [])
+
+  // Track online/offline state
+  useEffect(() => {
+    setIsOnline(navigator.onLine)
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
+  }, [])
+
+  // Screen reader announcements for streaming lifecycle
+  const previousStatusRef = useRef(status)
+  useEffect(() => {
+    const prev = previousStatusRef.current
+    if (status === "streaming" && prev !== "streaming") {
+      announcePolite("Assistant is responding.")
+    }
+    if (prev === "streaming" && status === "idle") {
+      announcePolite("Response complete.")
+    }
+    previousStatusRef.current = status
+  }, [status, announcePolite])
 
   const fetchConversations = useCallback(async () => {
     if (!workspaceId) return
@@ -295,11 +353,13 @@ export default function AgentChatPage() {
     setLoadedMessages([])
     setMessages([])
     lastSavedMessageCount.current = 0
+    setIsSidebarOpen(false)
   }, [setMessages])
 
   const selectConversation = useCallback((conversationId: string) => {
     setSelectedConversationId(conversationId)
     loadConversation(conversationId)
+    setIsSidebarOpen(false)
   }, [loadConversation])
 
   const saveMessages = useCallback(async () => {
@@ -346,10 +406,20 @@ export default function AgentChatPage() {
   const handleSubmit = useCallback(
     async ({ text, files }: PromptInputMessage, _event: FormEvent<HTMLFormElement>) => {
       if (!text.trim() && files.length === 0) return
+      if (!isOnline) {
+        setErrorAlert({
+          type: "network",
+          message: "You are offline. Reconnect to send messages.",
+        })
+        return
+      }
+      if (isSwitchingConversation) {
+        return
+      }
       setLastUserMessage(text)
       sendMessage(text)
     },
-    [sendMessage]
+    [sendMessage, isOnline, isSwitchingConversation]
   )
 
   const handleRetry = useCallback(() => {
@@ -424,26 +494,123 @@ export default function AgentChatPage() {
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
-      {/* Conversation sidebar */}
-      <ConversationSidebar
-        conversations={conversations}
-        selectedId={selectedConversationId}
-        onSelect={selectConversation}
-        onNewConversation={startNewConversation}
-        isLoading={isLoadingActivity}
-      />
+      <SRAnnouncer message={announcement} politeness={politeness} />
+
+      {/* Conversation sidebar (desktop) */}
+      <div className="hidden md:flex">
+        <ConversationSidebar
+          conversations={conversations}
+          selectedId={selectedConversationId}
+          onSelect={selectConversation}
+          onNewConversation={startNewConversation}
+          isLoading={isLoadingActivity}
+        />
+      </div>
 
       {/* Main chat area - centered layout like shadcn-ui-kit */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Header - always present */}
-        <div className="flex items-center px-4 py-3 border-b shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
           <div className="flex items-center gap-3">
+            {/* Mobile sidebar trigger */}
+            <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon-sm" className="md:hidden">
+                  <PanelLeft className="size-4" />
+                  <span className="sr-only">Open conversations</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="p-0">
+                <ConversationSidebar
+                  conversations={conversations}
+                  selectedId={selectedConversationId}
+                  onSelect={selectConversation}
+                  onNewConversation={startNewConversation}
+                  isLoading={isLoadingActivity}
+                />
+              </SheetContent>
+            </Sheet>
+
             <div className="size-8 rounded-lg bg-muted flex items-center justify-center text-lg">
               {displayAvatar || <Sparkles className="size-4 text-muted-foreground" />}
             </div>
-            <span className="font-medium">{displayName}</span>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{displayName}</span>
+                <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", statusBadgeClass)}>
+                  {statusLabel}
+                </span>
+              </div>
+              {displayDescription && (
+                <span className="text-xs text-muted-foreground line-clamp-1">
+                  {displayDescription}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Sheet open={isInfoOpen} onOpenChange={setIsInfoOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon-sm">
+                  <Info className="size-4" />
+                  <span className="sr-only">Agent info</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right">
+                <SheetHeader>
+                  <SheetTitle>Agent info</SheetTitle>
+                  <SheetDescription>Overview and capabilities.</SheetDescription>
+                </SheetHeader>
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <div className="font-medium">Name</div>
+                    <div className="text-muted-foreground">{displayName}</div>
+                  </div>
+                  {displayDescription && (
+                    <div>
+                      <div className="font-medium">Description</div>
+                      <div className="text-muted-foreground">{displayDescription}</div>
+                    </div>
+                  )}
+                  <div>
+                    <div className="font-medium">Status</div>
+                    <div className="text-muted-foreground">{statusLabel}</div>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon-sm">
+                  <Settings className="size-4" />
+                  <span className="sr-only">Chat settings</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right">
+                <SheetHeader>
+                  <SheetTitle>Chat settings</SheetTitle>
+                  <SheetDescription>Preferences for this chat.</SheetDescription>
+                </SheetHeader>
+                <div className="space-y-3 text-sm text-muted-foreground">
+                  <p>Preferences will appear here in a future update.</p>
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
         </div>
+
+        {!isOnline && (
+          <div className="px-4 pt-4">
+            <Alert variant="destructive" className="flex items-center gap-3">
+              <WifiOff className="h-4 w-4" />
+              <AlertDescription>
+                Offline mode. Reconnect to send messages.
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
 
         {/* Main content area - using AI Elements Conversation for auto-scroll */}
         <Conversation className="flex-1 min-h-0">
@@ -574,35 +741,39 @@ export default function AgentChatPage() {
               </PromptInputHeader>
 
               <PromptInputBody>
-                <PromptInputTextarea
-                  placeholder={isSwitchingConversation ? "Loading conversation..." : `Ask ${displayName} anything...`}
-                  className="min-h-[44px] px-4 py-3"
-                  disabled={isSwitchingConversation}
+              <PromptInputTextarea
+                placeholder={isSwitchingConversation ? "Loading conversation..." : `Ask ${displayName} anything...`}
+                className="min-h-[44px] px-4 py-3"
+                disabled={isSwitchingConversation || !isOnline}
+              />
+            </PromptInputBody>
+
+            <PromptInputFooter className="flex items-center justify-between gap-2 p-3">
+              <PromptInputTools className="flex items-center gap-2">
+                <PromptInputActionMenu>
+                  <PromptInputActionMenuTrigger
+                    className="hover:bg-secondary-foreground/10 flex size-8 cursor-pointer items-center justify-center rounded-2xl"
+                    disabled={isSwitchingConversation || !isOnline}
+                  >
+                    <Paperclip className="text-primary size-5" />
+                  </PromptInputActionMenuTrigger>
+                  <PromptInputActionMenuContent>
+                    <PromptInputActionAddAttachments />
+                  </PromptInputActionMenuContent>
+                </PromptInputActionMenu>
+              </PromptInputTools>
+
+              <div className="flex items-center gap-2">
+                <PromptInputButton variant="ghost" disabled={isSwitchingConversation || !isOnline}>
+                  <Mic className="size-4" />
+                  <span className="sr-only">Voice</span>
+                </PromptInputButton>
+                <PromptInputSubmit
+                  status={mappedStatus === "streaming" ? "streaming" : mappedStatus === "submitted" ? "submitted" : isSwitchingConversation ? "submitted" : "ready"}
+                  disabled={isSwitchingConversation || !isOnline}
                 />
-              </PromptInputBody>
-
-              <PromptInputFooter className="flex items-center justify-between gap-2 p-3">
-                <PromptInputTools className="flex items-center gap-2">
-                  <PromptInputActionMenu>
-                    <PromptInputActionMenuTrigger className="hover:bg-secondary-foreground/10 flex size-8 cursor-pointer items-center justify-center rounded-2xl">
-                      <Paperclip className="text-primary size-5" />
-                    </PromptInputActionMenuTrigger>
-                    <PromptInputActionMenuContent>
-                      <PromptInputActionAddAttachments />
-                    </PromptInputActionMenuContent>
-                  </PromptInputActionMenu>
-                </PromptInputTools>
-
-                <div className="flex items-center gap-2">
-                  <PromptInputButton variant="ghost" disabled={isSwitchingConversation}>
-                    <Mic className="size-4" />
-                    <span className="sr-only">Voice</span>
-                  </PromptInputButton>
-                  <PromptInputSubmit
-                    status={mappedStatus === "streaming" ? "streaming" : mappedStatus === "submitted" ? "submitted" : isSwitchingConversation ? "submitted" : "ready"}
-                  />
-                </div>
-              </PromptInputFooter>
+              </div>
+            </PromptInputFooter>
             </PromptInput>
           </div>
 

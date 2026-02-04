@@ -63,14 +63,30 @@ const providerRegistry: Record<string, ProviderConfig> = {
   xai: {
     provider: xai,
     modelAliases: {
-      grok: "grok-4-fast",
-      "grok-2": "grok-2-1212",
+      // Common aliases
+      grok: "grok-4-1-fast",
+      // Grok 4
+      "grok-4": "grok-4-0709",
+      "grok-4-latest": "grok-4-0709",
+      "grok-4-0709": "grok-4-0709",
+      // Grok 4 fast variants
+      "grok-4-fast": "grok-4-fast",
+      "grok-4-fast-reasoning": "grok-4-fast",
+      "grok-4-fast-non-reasoning": "grok-4-fast-non-reasoning",
+      // Grok 4.1 fast variants (map both hyphen and dot notation)
+      "grok-4-1-fast": "grok-4-1-fast",
+      "grok-4-1-fast-reasoning": "grok-4-1-fast",
+      "grok-4-1-fast-non-reasoning": "grok-4-1-fast-non-reasoning",
+      "grok-4.1-fast": "grok-4-1-fast",
+      "grok-4.1-fast-reasoning": "grok-4-1-fast",
+      "grok-4.1-fast-non-reasoning": "grok-4-1-fast-non-reasoning",
+      // Grok 3
       "grok-3": "grok-3",
       "grok-3-fast": "grok-3-fast",
-      "grok-4": "grok-4",
-      "grok-4-fast": "grok-4-fast",
+      // Grok 2
+      "grok-2": "grok-2-1212",
     },
-    defaultModel: "grok-4-fast",
+    defaultModel: "grok-4-1-fast",
   },
   google: {
     provider: google,

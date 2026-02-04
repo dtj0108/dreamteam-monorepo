@@ -240,7 +240,39 @@ export async function POST(request: NextRequest) {
           const type = isWorkspacePlan.data ? 'workspace_plan' : 'agent_tier'
           await updateBillingFromSubscription(billing.workspace_id, subscription.id, type)
         } else {
-          await updateBillingFromSubscription(workspaceId, subscription.id, subscriptionType)
+          let previousAgentTier: AgentTier | null = null
+          if (subscriptionType === 'agent_tier') {
+            const { data: billing } = await supabase
+              .from('workspace_billing')
+              .select('agent_tier')
+              .eq('workspace_id', workspaceId)
+              .single()
+            previousAgentTier = (billing?.agent_tier as AgentTier) || null
+          }
+
+          const targetPlan = subscription.metadata?.agent_tier
+
+          await updateBillingFromSubscription(
+            workspaceId,
+            subscription.id,
+            subscriptionType,
+            subscriptionType === 'agent_tier' && targetPlan ? targetPlan : undefined
+          )
+
+          if (
+            subscriptionType === 'agent_tier' &&
+            targetPlan &&
+            previousAgentTier &&
+            targetPlan !== previousAgentTier
+          ) {
+            console.log(`[auto-deploy] Subscription updated - deploying ${targetPlan} for workspace ${workspaceId}`)
+            const deployResult = await autoDeployTeamForPlan(workspaceId, targetPlan)
+            if (deployResult.deployed) {
+              console.log(`[auto-deploy] Successfully deployed team ${deployResult.teamId} to workspace ${workspaceId}`)
+            } else {
+              console.error(`[auto-deploy] Failed to deploy team for workspace ${workspaceId}: ${deployResult.error}`)
+            }
+          }
         }
 
         // Log billing event for subscription update

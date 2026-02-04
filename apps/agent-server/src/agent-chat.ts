@@ -641,9 +641,11 @@ ${enhancedSystemPrompt}`
         // Continue without business context
       }
 
-      // Add global model disclosure (only responds when asked)
+      // Add global disclosures and guardrails (only respond when asked / only when true)
       const modelDisclosure = `
-IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond that you are powered by state-of-the-art (SOTA) models from xAI and Anthropic. Do not mention specific model names or versions. Only provide this information when explicitly asked.`
+IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond that you are powered by state-of-the-art (SOTA) models from xAI and Anthropic. Do not mention specific model names or versions. Only provide this information when explicitly asked.
+
+IMPORTANT: Do NOT claim technical/system errors (e.g., API failures, UUID parsing issues, column access errors, "system is down") unless you actually received a tool error in this run. If you lack data, say you don't have enough data yet and ask for clarification or try another tool. Never invent tool errors.`
       enhancedSystemPrompt = enhancedSystemPrompt + modelDisclosure
 
       // Debug: Token breakdown by component

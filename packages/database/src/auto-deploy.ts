@@ -714,6 +714,28 @@ export async function toggleAgentEnabled(
       return { success: false, error: updateError.message }
     }
 
+    if (enabled) {
+      let ownerId: string | null = null
+      try {
+        const { data: workspace } = await supabase
+          .from('workspaces')
+          .select('owner_id')
+          .eq('id', workspaceId)
+          .single()
+        ownerId = workspace?.owner_id || null
+      } catch (error) {
+        console.warn('[auto-deploy] Failed to load workspace owner for provisioning:', error)
+      }
+
+      const resolvedCreatedBy = modifiedByUserId || ownerId
+
+      await provisionDeploymentResources(supabase, workspaceId, activeConfig, {
+        channelCreatorId: resolvedCreatedBy || null,
+        createdByUserId: resolvedCreatedBy || undefined,
+        retryOnce: true,
+      })
+    }
+
     return { success: true }
 
   } catch (error) {

@@ -81,6 +81,8 @@ type ScheduleContext = {
   scheduleName: string | null
   scheduleTimezone: string
   scheduleWorkspaceId: string | null
+  scheduleTaskPrompt: string | null
+  scheduleCreatedBy: string | null
 }
 
 function unwrapSingle<T>(value: T | T[] | null | undefined): T | null {
@@ -95,7 +97,7 @@ async function loadScheduleContext(
   try {
     const { data: execution } = await supabase
       .from("agent_schedule_executions")
-      .select("schedule_id, schedule:agent_schedules(id, name, timezone, workspace_id)")
+      .select("schedule_id, schedule:agent_schedules(id, name, timezone, workspace_id, task_prompt, created_by)")
       .eq("id", executionId)
       .single()
 
@@ -104,6 +106,8 @@ async function loadScheduleContext(
       name?: string
       timezone?: string
       workspace_id?: string
+      task_prompt?: string
+      created_by?: string
     } | null)
 
     return {
@@ -111,6 +115,8 @@ async function loadScheduleContext(
       scheduleName: schedule?.name || null,
       scheduleTimezone: schedule?.timezone || "UTC",
       scheduleWorkspaceId: schedule?.workspace_id || null,
+      scheduleTaskPrompt: schedule?.task_prompt || null,
+      scheduleCreatedBy: schedule?.created_by || null,
     }
   } catch (error) {
     console.warn("[Scheduled Execution] Failed to load schedule context:", error)
@@ -119,7 +125,219 @@ async function loadScheduleContext(
       scheduleName: null,
       scheduleTimezone: "UTC",
       scheduleWorkspaceId: null,
+      scheduleTaskPrompt: null,
+      scheduleCreatedBy: null,
     }
+  }
+}
+
+function formatTaskCompletionMessage(params: {
+  scheduleName: string
+  status: "completed" | "failed"
+  resultText: string
+}): string {
+  const { scheduleName, status, resultText } = params
+
+  if (status === "completed") {
+    return resultText || `Scheduled task "${scheduleName}" completed.`
+  }
+
+  return `Something went wrong with "${scheduleName}": ${resultText || "Unknown error."}`
+}
+
+async function resolveAgentProfileId(params: {
+  supabase: ReturnType<typeof createAdminClient>
+  aiAgentId: string
+  workspaceId: string
+}): Promise<string | null> {
+  const { supabase, aiAgentId, workspaceId } = params
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("linked_agent_id", aiAgentId)
+    .eq("agent_workspace_id", workspaceId)
+    .eq("is_agent", true)
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !data?.id) {
+    console.warn("[Scheduled Execution] No agent profile found for DM sending:", error?.message)
+    return null
+  }
+
+  return data.id
+}
+
+async function resolveNotificationRecipients(params: {
+  supabase: ReturnType<typeof createAdminClient>
+  workspaceId: string
+  scheduleCreatedBy: string | null
+}): Promise<string[]> {
+  const { supabase, workspaceId, scheduleCreatedBy } = params
+  if (scheduleCreatedBy) return [scheduleCreatedBy]
+
+  const { data: admins } = await supabase
+    .from("workspace_members")
+    .select("profile_id")
+    .eq("workspace_id", workspaceId)
+    .in("role", ["owner", "admin"])
+
+  const adminIds = (admins || []).map(a => a.profile_id).filter(Boolean)
+  if (adminIds.length > 0) return adminIds
+
+  const { data: owner } = await supabase
+    .from("workspace_members")
+    .select("profile_id")
+    .eq("workspace_id", workspaceId)
+    .eq("role", "owner")
+    .limit(1)
+    .maybeSingle()
+
+  return owner?.profile_id ? [owner.profile_id] : []
+}
+
+async function findOrCreateDmConversation(params: {
+  supabase: ReturnType<typeof createAdminClient>
+  workspaceId: string
+  agentProfileId: string
+  recipientProfileId: string
+}): Promise<string | null> {
+  const { supabase, workspaceId, agentProfileId, recipientProfileId } = params
+
+  const { data: agentConvos } = await supabase
+    .from("dm_participants")
+    .select("conversation_id, dm_conversation:conversation_id(id, workspace_id)")
+    .eq("profile_id", agentProfileId)
+
+  for (const convo of agentConvos || []) {
+    const dmConvo = Array.isArray(convo.dm_conversation)
+      ? convo.dm_conversation[0]
+      : convo.dm_conversation
+    if (!dmConvo || dmConvo.workspace_id !== workspaceId) continue
+
+    const { data: recipientParticipant } = await supabase
+      .from("dm_participants")
+      .select("profile_id")
+      .eq("conversation_id", convo.conversation_id)
+      .eq("profile_id", recipientProfileId)
+      .single()
+
+    if (recipientParticipant) {
+      return convo.conversation_id
+    }
+  }
+
+  const { data: newConvo, error: createError } = await supabase
+    .from("dm_conversations")
+    .insert({ workspace_id: workspaceId })
+    .select("id")
+    .single()
+
+  if (createError || !newConvo?.id) {
+    console.error("[Scheduled Execution] Failed to create DM conversation:", createError)
+    return null
+  }
+
+  const { error: participantsError } = await supabase
+    .from("dm_participants")
+    .insert([
+      { conversation_id: newConvo.id, profile_id: agentProfileId },
+      { conversation_id: newConvo.id, profile_id: recipientProfileId },
+    ])
+
+  if (participantsError) {
+    console.error("[Scheduled Execution] Failed to add DM participants:", participantsError)
+    await supabase.from("dm_conversations").delete().eq("id", newConvo.id)
+    return null
+  }
+
+  return newConvo.id
+}
+
+async function sendScheduledTaskNotification(params: {
+  supabase: ReturnType<typeof createAdminClient>
+  aiAgentId: string
+  scheduleName: string
+  scheduleCreatedBy: string | null
+  workspaceId: string
+  status: "completed" | "failed"
+  resultText: string
+}): Promise<{ success: boolean; recipientCount: number; errors: string[] }> {
+  const {
+    supabase,
+    aiAgentId,
+    scheduleName,
+    scheduleCreatedBy,
+    workspaceId,
+    status,
+    resultText,
+  } = params
+
+  const errors: string[] = []
+
+  const agentProfileId = await resolveAgentProfileId({
+    supabase,
+    aiAgentId,
+    workspaceId,
+  })
+  if (!agentProfileId) {
+    errors.push("Agent profile not found")
+    return { success: false, recipientCount: 0, errors }
+  }
+
+  const recipients = await resolveNotificationRecipients({
+    supabase,
+    workspaceId,
+    scheduleCreatedBy,
+  })
+  if (recipients.length === 0) {
+    errors.push("No recipients found")
+    return { success: false, recipientCount: 0, errors }
+  }
+
+  const content = formatTaskCompletionMessage({
+    scheduleName,
+    status,
+    resultText,
+  })
+
+  let successCount = 0
+  for (const recipientId of recipients) {
+    const conversationId = await findOrCreateDmConversation({
+      supabase,
+      workspaceId,
+      agentProfileId,
+      recipientProfileId: recipientId,
+    })
+
+    if (!conversationId) {
+      errors.push(`Failed to create conversation for recipient ${recipientId}`)
+      continue
+    }
+
+    const { error: messageError, data: message } = await supabase
+      .from("messages")
+      .insert({
+        workspace_id: workspaceId,
+        dm_conversation_id: conversationId,
+        sender_id: agentProfileId,
+        content,
+      })
+      .select("id")
+      .single()
+
+    if (messageError || !message?.id) {
+      errors.push(`Failed to send message to ${recipientId}: ${messageError?.message || "unknown error"}`)
+      continue
+    }
+
+    successCount++
+  }
+
+  return {
+    success: successCount > 0,
+    recipientCount: successCount,
+    errors,
   }
 }
 
@@ -284,9 +502,11 @@ ${skillsContent}`
     }
   }
 
-  // Add global model disclosure (only responds when asked)
+  // Add global disclosures and guardrails (only respond when asked / only when true)
   systemPrompt = systemPrompt + `
-IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond that you are powered by state-of-the-art (SOTA) models from xAI and Anthropic. Do not mention specific model names or versions. Only provide this information when explicitly asked.`
+IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond that you are powered by state-of-the-art (SOTA) models from xAI and Anthropic. Do not mention specific model names or versions. Only provide this information when explicitly asked.
+
+IMPORTANT: Do NOT claim technical/system errors (e.g., API failures, UUID parsing issues, column access errors, "system is down") unless you actually received a tool error in this run. If you lack data, say you don't have enough data yet and ask for clarification or try another tool. Never invent tool errors.`
 
   return systemPrompt
 }
@@ -349,6 +569,8 @@ export async function scheduledExecutionHandler(req: Request, res: Response) {
     scheduleName: null,
     scheduleTimezone: "UTC",
     scheduleWorkspaceId: null,
+    scheduleTaskPrompt: null,
+    scheduleCreatedBy: null,
   }
 
   try {
@@ -556,30 +778,62 @@ ${outputInstructions}`
 
     console.log(`[Scheduled Execution] Completed in ${duration}ms, success=${result.success}, hallucination=${wasHallucination}`)
 
-    // Send DM notification via admin API
+    // Send DM notification directly from agent-server
     try {
-      const adminUrl = process.env.ADMIN_URL || 'http://localhost:3000'
-      const notifyResponse = await fetch(`${adminUrl}/api/admin/scheduled-tasks/${executionId}/notify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-        },
-        body: JSON.stringify({
-          status: result.success ? 'completed' : 'failed',
-          resultText: result.content,
-          durationMs: duration,
-        }),
-      })
-      if (notifyResponse.ok) {
-        const notifyResult = await notifyResponse.json() as { recipientCount?: number }
-        console.log(`[Scheduled Execution] Notification sent for ${executionId}: ${notifyResult.recipientCount ?? 0} recipients`)
+      const notifyWorkspaceId = scheduleContext.scheduleWorkspaceId || workspaceId || null
+      if (!notifyWorkspaceId) {
+        console.warn(`[Scheduled Execution] No workspaceId available for notification, skipping`)
       } else {
-        console.error(`[Scheduled Execution] Notification request failed: ${notifyResponse.status} ${notifyResponse.statusText}`)
+        const notifyResult = await sendScheduledTaskNotification({
+          supabase,
+          aiAgentId: agentId,
+          scheduleName: scheduleContext.scheduleName || "Scheduled Task",
+          scheduleCreatedBy: scheduleContext.scheduleCreatedBy,
+          workspaceId: notifyWorkspaceId,
+          status: result.success ? "completed" : "failed",
+          resultText: result.content,
+        })
+
+        console.log(
+          `[Scheduled Execution] Notification result for ${executionId}: ` +
+          `${notifyResult.recipientCount} recipients, success=${notifyResult.success}`
+        )
+
+        await logAuditEvent(supabase, {
+          action: notifyResult.success
+            ? "schedule_execution_notification_sent"
+            : "schedule_execution_notification_failed",
+          resourceType: "agent_schedule_execution",
+          resourceId: executionId,
+          workspaceId: notifyWorkspaceId,
+          details: {
+            schedule_id: scheduleContext.scheduleId,
+            schedule_name: scheduleContext.scheduleName,
+            agent_id: agentId,
+            recipient_count: notifyResult.recipientCount,
+            errors: notifyResult.errors,
+            actor_type: "cron",
+          },
+          context: auditContext,
+        })
       }
     } catch (notifyError) {
       console.error(`[Scheduled Execution] Failed to send notification:`, notifyError)
       // Don't fail execution if notification fails
+      await logAuditEvent(supabase, {
+        action: "schedule_execution_notification_failed",
+        resourceType: "agent_schedule_execution",
+        resourceId: executionId,
+        workspaceId: scheduleContext.scheduleWorkspaceId || workspaceId || null,
+        details: {
+          schedule_id: scheduleContext.scheduleId,
+          schedule_name: scheduleContext.scheduleName,
+          agent_id: agentId,
+          error: notifyError instanceof Error ? notifyError.message : String(notifyError),
+          actor_type: "cron",
+        },
+        context: auditContext,
+      })
     }
 
     return res.json({

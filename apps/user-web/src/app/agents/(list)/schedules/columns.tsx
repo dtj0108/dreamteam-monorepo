@@ -1,31 +1,47 @@
 "use client"
 
+import { useState } from "react"
 import { ColumnDef } from "@tanstack/react-table"
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Sparkles, AlertTriangle, Pause } from "lucide-react"
 import type { AgentSchedule } from "@/lib/types/agents"
+import { describeCron } from "@/lib/cron-utils"
+
+// Toggle cell component with local state
+function ToggleCell({
+  schedule,
+  onToggle,
+}: {
+  schedule: AgentSchedule
+  onToggle: (id: string, enabled: boolean) => void
+}) {
+  const [checked, setChecked] = useState<boolean>(schedule.is_enabled)
+
+  return (
+    <div
+      className="flex items-center justify-end"
+      onClick={(e) => {
+        e.stopPropagation()
+        e.preventDefault()
+      }}
+    >
+      <Switch
+        id={`switch-action-${schedule.id}`}
+        checked={checked}
+        onCheckedChange={(value) => {
+          setChecked(value)
+          onToggle(schedule.id, value)
+        }}
+      />
+    </div>
+  )
+}
 
 // Format cron expression to human-readable
 function formatCron(cron: string): string {
-  const parts = cron.split(" ")
-  if (parts.length !== 5) return cron
-
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts
-
-  // Common patterns
-  if (dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
-    return `Daily at ${hour}:${minute.padStart(2, "0")}`
-  }
-  if (dayOfMonth === "*" && month === "*" && dayOfWeek === "1") {
-    return `Weekly on Monday at ${hour}:${minute.padStart(2, "0")}`
-  }
-  if (dayOfMonth === "1" && month === "*" && dayOfWeek === "*") {
-    return `Monthly on the 1st at ${hour}:${minute.padStart(2, "0")}`
-  }
-
-  return cron
+  return describeCron(cron)
 }
 
 // Format relative time
@@ -61,7 +77,7 @@ export function getScheduleColumns(
     {
       accessorKey: "name",
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Schedule" />
+        <DataTableColumnHeader column={column} title="Action" />
       ),
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
@@ -136,13 +152,7 @@ export function getScheduleColumns(
       id: "actions",
       header: () => null,
       cell: ({ row }) => (
-        <div className="flex items-center justify-end">
-          <Switch
-            checked={row.original.is_enabled}
-            onCheckedChange={(checked) => onToggle(row.original.id, checked)}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+        <ToggleCell schedule={row.original} onToggle={onToggle} />
       ),
       enableSorting: false,
       enableHiding: false,

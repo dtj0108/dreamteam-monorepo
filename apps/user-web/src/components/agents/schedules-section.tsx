@@ -86,27 +86,27 @@ export function SchedulesSection({ agentId }: SchedulesSectionProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Schedules</h2>
+          <h2 className="text-lg font-semibold">Autonomous Actions</h2>
           <p className="text-sm text-muted-foreground">
             Automated tasks for this agent
           </p>
         </div>
         <Button onClick={() => setShowCreateDialog(true)} size="sm">
           <Plus className="size-4 mr-2" />
-          New Schedule
+          New Action
         </Button>
       </div>
 
       {agentSchedules.length === 0 ? (
         <div className="border rounded-lg p-8 text-center">
           <Calendar className="size-10 mx-auto text-muted-foreground mb-3" />
-          <h3 className="font-medium mb-1">No schedules yet</h3>
+          <h3 className="font-medium mb-1">No autonomous actions yet</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Create a schedule to have this agent run tasks automatically
+            Create an action to have this agent run tasks automatically
           </p>
           <Button onClick={() => setShowCreateDialog(true)} variant="outline" size="sm">
             <Plus className="size-4 mr-2" />
-            Create Schedule
+            New Action
           </Button>
         </div>
       ) : (
@@ -127,6 +127,7 @@ export function SchedulesSection({ agentId }: SchedulesSectionProps) {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onSuccess={handleCreateSuccess}
+        defaultAgentId={agentId}
       />
     </div>
   )

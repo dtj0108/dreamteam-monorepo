@@ -14,7 +14,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "@/components/ui/radio-group"
 import {
   Select,
   SelectContent,
@@ -31,6 +34,7 @@ interface CreateScheduleDialogProps {
   onOpenChange: (open: boolean) => void
   schedule?: AgentSchedule | null // For edit mode
   onSuccess?: (schedule: AgentSchedule) => void
+  defaultAgentId?: string
 }
 
 export function CreateScheduleDialog({
@@ -38,6 +42,7 @@ export function CreateScheduleDialog({
   onOpenChange,
   schedule,
   onSuccess,
+  defaultAgentId,
 }: CreateScheduleDialogProps) {
   const { myAgents, createSchedule, updateSchedule } = useAgents()
   const isEditMode = !!schedule
@@ -54,6 +59,13 @@ export function CreateScheduleDialog({
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasAgentSelection, setHasAgentSelection] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setHasAgentSelection(false)
+    }
+  }, [open])
 
   // Reset form when dialog opens/closes or schedule changes
   useEffect(() => {
@@ -68,7 +80,16 @@ export function CreateScheduleDialog({
         setRequiresApproval(schedule.requires_approval)
       } else {
         // Create mode - reset to defaults
-        setAgentId(myAgents[0]?.id || "")
+        const preferredAgent =
+          (defaultAgentId &&
+            myAgents.find((agent) => agent.id === defaultAgentId)) ||
+          null
+        const fallbackAgentId = myAgents[0]?.id || ""
+        const nextAgentId = preferredAgent?.id || fallbackAgentId
+
+        if (!hasAgentSelection) {
+          setAgentId(nextAgentId)
+        }
         setName("")
         setDescription("")
         setCronExpression("0 9 * * *")
@@ -77,7 +98,7 @@ export function CreateScheduleDialog({
       }
       setError(null)
     }
-  }, [open, schedule, myAgents])
+  }, [open, schedule, myAgents, defaultAgentId, hasAgentSelection])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -89,7 +110,7 @@ export function CreateScheduleDialog({
       return
     }
     if (!name.trim()) {
-      setError("Please enter a schedule name")
+      setError("Please enter an action name")
       return
     }
     if (!taskPrompt.trim()) {
@@ -128,7 +149,7 @@ export function CreateScheduleDialog({
         onOpenChange(false)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save schedule")
+      setError(err instanceof Error ? err.message : "Failed to save action")
     } finally {
       setIsSubmitting(false)
     }
@@ -136,16 +157,16 @@ export function CreateScheduleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>
-              {isEditMode ? "Edit Schedule" : "Create Schedule"}
+              {isEditMode ? "Edit Autonomous Action" : "Create Autonomous Action"}
             </DialogTitle>
             <DialogDescription>
               {isEditMode
-                ? "Update this scheduled task"
-                : "Set up a recurring task for one of your agents"}
+                ? "Update this autonomous action"
+                : "Set up a recurring autonomous action for one of your agents"}
             </DialogDescription>
           </DialogHeader>
 
@@ -155,7 +176,10 @@ export function CreateScheduleDialog({
               <Label htmlFor="agent">Agent</Label>
               <Select
                 value={agentId}
-                onValueChange={setAgentId}
+                onValueChange={(value) => {
+                  setAgentId(value)
+                  setHasAgentSelection(true)
+                }}
                 disabled={isEditMode}
               >
                 <SelectTrigger id="agent">
@@ -178,9 +202,9 @@ export function CreateScheduleDialog({
               </Select>
             </div>
 
-            {/* Schedule Name */}
+            {/* Action Name */}
             <div className="space-y-2">
-              <Label htmlFor="name">Schedule Name</Label>
+              <Label htmlFor="name">Action Name</Label>
               <Input
                 id="name"
                 value={name}
@@ -198,7 +222,7 @@ export function CreateScheduleDialog({
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Brief description of this schedule"
+                placeholder="Brief description of this action"
               />
             </div>
 
@@ -208,43 +232,61 @@ export function CreateScheduleDialog({
                 value={cronExpression}
                 onChange={setCronExpression}
                 timezone={timezone}
+                layout="split"
+                sideContent={
+                  <div className="rounded-xl bg-muted/50 p-4 space-y-3 h-full">
+                    <Label className="text-sm font-medium">Autonomy Level</Label>
+                    <RadioGroup
+                      value={requiresApproval ? "approval" : "auto"}
+                      onValueChange={(value) => setRequiresApproval(value === "approval")}
+                      className="grid gap-2"
+                    >
+                      <label
+                        htmlFor="autonomy-approval"
+                        className="flex items-start gap-3 rounded-lg border bg-background p-3 cursor-pointer hover:bg-muted/40 transition-colors"
+                      >
+                        <RadioGroupItem id="autonomy-approval" value="approval" className="mt-0.5" />
+                        <div className="space-y-0.5">
+                          <span className="text-sm font-medium">Review first</span>
+                          <p className="text-xs text-muted-foreground">
+                            Approve each run before it starts
+                          </p>
+                        </div>
+                      </label>
+                      <label
+                        htmlFor="autonomy-auto"
+                        className="flex items-start gap-3 rounded-lg border bg-background p-3 cursor-pointer hover:bg-muted/40 transition-colors"
+                      >
+                        <RadioGroupItem id="autonomy-auto" value="auto" className="mt-0.5" />
+                        <div className="space-y-0.5">
+                          <span className="text-sm font-medium">Auto-run</span>
+                          <p className="text-xs text-muted-foreground">
+                            Runs on schedule without approval
+                          </p>
+                        </div>
+                      </label>
+                    </RadioGroup>
+                  </div>
+                }
               />
             </div>
 
             {/* Task Prompt */}
             <div className="space-y-2">
-              <Label htmlFor="task">Task Prompt</Label>
+              <Label htmlFor="task">What should I do?</Label>
               <Textarea
                 id="task"
                 value={taskPrompt}
                 onChange={(e) => setTaskPrompt(e.target.value)}
                 placeholder="What should the agent do? e.g., 'Generate a summary of this week's transactions and identify any unusual spending patterns.'"
-                rows={4}
+                rows={6}
+                className="min-h-[160px]"
               />
               <p className="text-xs text-muted-foreground">
-                This is the instruction the agent will receive when the schedule runs.
+                This is the instruction the agent will receive when the action runs.
               </p>
             </div>
 
-            {/* Requires Approval */}
-            <div className="flex items-start space-x-3">
-              <Checkbox
-                id="requires-approval"
-                checked={requiresApproval}
-                onCheckedChange={(checked) => setRequiresApproval(checked === true)}
-              />
-              <div className="space-y-1">
-                <Label
-                  htmlFor="requires-approval"
-                  className="cursor-pointer font-medium leading-none"
-                >
-                  Require approval before running
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  When enabled, you'll receive a notification to approve the task before the agent executes it.
-                </p>
-              </div>
-            </div>
 
             {/* Error message */}
             {error && (
@@ -265,7 +307,7 @@ export function CreateScheduleDialog({
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isEditMode ? "Save Changes" : "Create Schedule"}
+              {isEditMode ? "Save Changes" : "Create Autonomous Action"}
             </Button>
           </DialogFooter>
         </form>

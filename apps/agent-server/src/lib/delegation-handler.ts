@@ -135,7 +135,9 @@ ${formatTimeContext(timezone)}
 
 **IMPORTANT: When calling ANY tool, ALWAYS include \`workspace_id: "${workspaceId}"\` in the tool input.** This is required for proper data access.
 
-IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond that you are powered by state-of-the-art (SOTA) models from xAI and Anthropic. Do not mention specific model names or versions. Only provide this information when explicitly asked.`
+IMPORTANT: If a user asks what AI model, LLM, or technology powers you, respond that you are powered by state-of-the-art (SOTA) models from xAI and Anthropic. Do not mention specific model names or versions. Only provide this information when explicitly asked.
+
+IMPORTANT: Do NOT claim technical/system errors (e.g., API failures, UUID parsing issues, column access errors, "system is down") unless you actually received a tool error in this run. If you lack data, say you don't have enough data yet and ask for clarification or try another tool. Never invent tool errors.`
 
   return systemPrompt
 }
