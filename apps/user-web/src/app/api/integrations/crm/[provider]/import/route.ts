@@ -94,8 +94,8 @@ export async function POST(
   }
 
   try {
-    // Get default pipeline and stage
-    const { data: defaultPipeline } = await adminSupabase
+    // Get default lead pipeline and stage (for leads)
+    const { data: defaultLeadPipeline } = await adminSupabase
       .from("lead_pipelines")
       .select(`
         id,
@@ -105,28 +105,48 @@ export async function POST(
       .eq("is_default", true)
       .single()
 
-    let pipelineId = defaultPipeline?.id || null
-    let stageId: string | null = null
+    let leadPipelineId = defaultLeadPipeline?.id || null
+    let leadStageId: string | null = null
 
-    if (defaultPipeline?.stages) {
-      const stages = defaultPipeline.stages as { id: string; position: number }[]
+    if (defaultLeadPipeline?.stages) {
+      const stages = defaultLeadPipeline.stages as { id: string; position: number }[]
       const sortedStages = stages.sort((a, b) => a.position - b.position)
-      stageId = sortedStages[0]?.id || null
+      leadStageId = sortedStages[0]?.id || null
+    }
+
+    // Get default deals pipeline and stage (for deals/opportunities)
+    const { data: defaultDealsPipeline } = await adminSupabase
+      .from("pipelines")
+      .select(`
+        id,
+        stages:pipeline_stages(id, name, position)
+      `)
+      .eq("profile_id", user.id)
+      .eq("is_default", true)
+      .single()
+
+    let dealsPipelineId = defaultDealsPipeline?.id || null
+    let dealsStageId: string | null = null
+
+    if (defaultDealsPipeline?.stages) {
+      const stages = defaultDealsPipeline.stages as { id: string; position: number }[]
+      const sortedStages = stages.sort((a, b) => a.position - b.position)
+      dealsStageId = sortedStages[0]?.id || null
     }
 
     // Fetch data from CRM based on provider
     if (provider === "close") {
       const client = new CloseClient(apiKey)
-      await importFromClose(client, adminSupabase, workspaceId, user.id, options, result, pipelineId, stageId)
+      await importFromClose(client, adminSupabase, workspaceId, user.id, options, result, leadPipelineId, leadStageId, dealsPipelineId, dealsStageId)
     } else if (provider === "pipedrive") {
       const client = new PipedriveClient(apiKey)
-      await importFromPipedrive(client, adminSupabase, workspaceId, user.id, options, result, pipelineId, stageId)
+      await importFromPipedrive(client, adminSupabase, workspaceId, user.id, options, result, leadPipelineId, leadStageId, dealsPipelineId, dealsStageId)
     } else if (provider === "hubspot") {
       const client = new HubSpotClient(apiKey)
-      await importFromHubSpot(client, adminSupabase, workspaceId, user.id, options, result, pipelineId, stageId)
+      await importFromHubSpot(client, adminSupabase, workspaceId, user.id, options, result, leadPipelineId, leadStageId, dealsPipelineId, dealsStageId)
     } else if (provider === "freshsales") {
       const client = new FreshsalesClient(apiKey)
-      await importFromFreshsales(client, adminSupabase, workspaceId, user.id, options, result, pipelineId, stageId)
+      await importFromFreshsales(client, adminSupabase, workspaceId, user.id, options, result, leadPipelineId, leadStageId, dealsPipelineId, dealsStageId)
     }
 
     // Update last sync time
@@ -154,20 +174,23 @@ async function importFromClose(
   userId: string,
   options: CRMImportOptions,
   result: CRMImportResult,
-  pipelineId: string | null,
-  stageId: string | null
+  leadPipelineId: string | null,
+  leadStageId: string | null,
+  dealsPipelineId: string | null,
+  dealsStageId: string | null
 ) {
   // Build a map of lead IDs to names for contact/opportunity linking
   const leadIdToName = new Map<string, string>()
   const importedLeadNames = new Map<string, string>() // Close lead name -> DreamTeam lead ID
+  const importedLeadCloseIds = new Set<string>() // Track Close lead IDs for filtering contacts/opportunities
 
-  // Track total records imported for limit filter
-  let totalImported = 0
   const importLimit = options.filters?.limit || 0
   const createdAfterDate = options.filters?.createdAfter ? new Date(options.filters.createdAfter) : null
 
-  // Always fetch leads (needed for embedded contacts and opportunity linking)
-  let closeLeads = await client.fetchLeads()
+  // Fetch leads with early termination if limit is set (fetch extra to account for date filtering)
+  // If date filter is set, we need to fetch more since some may be filtered out
+  const fetchLimit = createdAfterDate ? 0 : importLimit
+  let closeLeads = await client.fetchLeads(100, fetchLimit)
 
   // Apply date filter to leads
   if (createdAfterDate) {
@@ -182,9 +205,10 @@ async function importFromClose(
     closeLeads = closeLeads.slice(0, importLimit)
   }
 
-  // Build the ID map from filtered leads
+  // Build the ID map from filtered leads and track Close lead IDs
   closeLeads.forEach((lead) => {
     leadIdToName.set(lead.id, lead.display_name)
+    importedLeadCloseIds.add(lead.id)
   })
 
   // Import leads if requested
@@ -235,8 +259,8 @@ async function importFromClose(
           postal_code: lead.zip_code,
           country: lead.country,
           source: "close_import",
-          pipeline_id: pipelineId,
-          stage_id: stageId,
+          pipeline_id: leadPipelineId,
+          stage_id: leadStageId,
         }))
 
       if (leadsToInsert.length > 0) {
@@ -256,15 +280,12 @@ async function importFromClose(
     }
   }
 
-  // Import contacts
+  // Import contacts - use embedded contacts from leads we already fetched
+  // This ensures we only import contacts belonging to the imported leads
   if (options.contacts) {
-    // Try fetching from /contact/ endpoint first
-    let closeContacts = await client.fetchContacts()
-
-    // If /contact/ returns 0, extract embedded contacts from leads
-    if (closeContacts.length === 0 && closeLeads.length > 0) {
-      closeContacts = client.extractContactsFromLeads(closeLeads)
-    }
+    // Extract contacts embedded in the leads we already fetched
+    // This avoids fetching ALL contacts and ensures proper filtering
+    let closeContacts = client.extractContactsFromLeads(closeLeads)
 
     // Apply date filter to contacts
     if (createdAfterDate) {
@@ -286,9 +307,9 @@ async function importFromClose(
           // Try to find the lead ID
           const leadId = importedLeadNames.get(contact.lead_name) || null
 
+          // Note: contacts table links to leads via lead_id
+          // user_id/workspace_id are on the leads table, not contacts
           return {
-            user_id: userId,
-            workspace_id: workspaceId,
             lead_id: leadId,
             first_name: contact.first_name || "",
             last_name: contact.last_name || "",
@@ -297,6 +318,8 @@ async function importFromClose(
             title: contact.title,
           }
         })
+        // Only insert contacts that have a valid lead_id
+        .filter((c) => c.lead_id !== null)
 
       if (contactsToInsert.length > 0) {
         const { data, error } = await supabase.from("contacts").insert(contactsToInsert).select("id")
@@ -311,9 +334,14 @@ async function importFromClose(
     }
   }
 
-  // Import opportunities
+  // Import opportunities as deals - only for the leads we're importing
   if (options.opportunities) {
     let closeOpportunities = await client.fetchOpportunities()
+
+    // Filter to only opportunities belonging to our imported leads
+    closeOpportunities = closeOpportunities.filter((opp) =>
+      importedLeadCloseIds.has(opp.lead_id)
+    )
 
     // Apply date filter to opportunities
     if (createdAfterDate) {
@@ -337,25 +365,33 @@ async function importFromClose(
     for (let i = 0; i < transformedOpportunities.length; i += BATCH_SIZE) {
       const batch = transformedOpportunities.slice(i, i + BATCH_SIZE)
 
+      // Map CRM opportunities to lead_opportunities table
+      // This links opportunities to leads and shows them in /sales/opportunities
       const opportunitiesToInsert = batch
         .filter((o) => o.name)
         .map((opp) => {
+          // Get the DreamTeam lead ID from the imported leads
           const leadId = importedLeadNames.get(opp.lead_name) || null
 
           return {
+            lead_id: leadId,
             user_id: userId,
             workspace_id: workspaceId,
-            lead_id: leadId,
             name: opp.name,
             value: opp.value,
-            probability: opp.probability,
-            status: opp.status,
+            probability: opp.probability || 0,
+            status: opp.status || "active", // "active", "won", "lost"
+            stage: "prospect", // Default stage
+            value_type: "one_time",
             expected_close_date: opp.expected_close_date,
+            notes: `Imported from Close CRM`,
           }
         })
+        // Only insert opportunities that have a valid lead_id
+        .filter((o) => o.lead_id !== null)
 
       if (opportunitiesToInsert.length > 0) {
-        const { data, error } = await supabase.from("opportunities").insert(opportunitiesToInsert).select("id")
+        const { data, error } = await supabase.from("lead_opportunities").insert(opportunitiesToInsert).select("id")
 
         if (error) {
           result.errors.push(`Opportunity batch error: ${error.message}`)
@@ -378,8 +414,10 @@ async function importFromPipedrive(
   userId: string,
   options: CRMImportOptions,
   result: CRMImportResult,
-  pipelineId: string | null,
-  stageId: string | null
+  leadPipelineId: string | null,
+  leadStageId: string | null,
+  dealsPipelineId: string | null,
+  dealsStageId: string | null
 ) {
   // Build maps for linking
   const orgIdToName = new Map<number, string>()
@@ -451,8 +489,8 @@ async function importFromPipedrive(
           website: lead.website,
           address: lead.address,
           source: "pipedrive_import",
-          pipeline_id: pipelineId,
-          stage_id: stageId,
+          pipeline_id: leadPipelineId,
+          stage_id: leadStageId,
         }))
 
       if (leadsToInsert.length > 0) {
@@ -471,7 +509,7 @@ async function importFromPipedrive(
     }
   }
 
-  // Import persons as contacts
+  // Import persons as contacts - contacts link to leads via lead_id
   if (options.contacts) {
     let persons = await client.fetchPersons()
 
@@ -494,9 +532,9 @@ async function importFromPipedrive(
         .map((contact) => {
           const leadId = importedLeadNames.get(contact.lead_name) || null
 
+          // Note: contacts table links to leads via lead_id
+          // user_id/workspace_id are on the leads table, not contacts
           return {
-            user_id: userId,
-            workspace_id: workspaceId,
             lead_id: leadId,
             first_name: contact.first_name || "",
             last_name: contact.last_name || "",
@@ -505,6 +543,8 @@ async function importFromPipedrive(
             title: contact.title,
           }
         })
+        // Only insert contacts that have a valid lead_id
+        .filter((c) => c.lead_id !== null)
 
       if (contactsToInsert.length > 0) {
         const { data, error } = await supabase.from("contacts").insert(contactsToInsert).select("id")
@@ -519,13 +559,13 @@ async function importFromPipedrive(
     }
   }
 
-  // Import deals as opportunities
+  // Import deals as deals table
   if (options.opportunities) {
-    let deals = await client.fetchDeals()
+    let pipedriveDeals = await client.fetchDeals()
 
     // Apply date filter
     if (createdAfterDate) {
-      deals = deals.filter((deal) => {
+      pipedriveDeals = pipedriveDeals.filter((deal) => {
         if (!deal.add_time) return false
         return new Date(deal.add_time) >= createdAfterDate
       })
@@ -534,38 +574,43 @@ async function importFromPipedrive(
     // Apply status filter to deals (Pipedrive uses 'open' instead of 'active')
     const statusFilter = options.filters?.opportunityStatuses
     if (statusFilter && statusFilter.length > 0) {
-      deals = deals.filter((deal) => {
+      pipedriveDeals = pipedriveDeals.filter((deal) => {
         // Map Pipedrive 'open' to our 'active'
         const dealStatus = deal.status === "open" ? "active" : deal.status || "active"
         return statusFilter.includes(dealStatus)
       })
     }
 
-    const transformedOpportunities = client.transformDeals(deals, orgIdToName)
+    const transformedOpportunities = client.transformDeals(pipedriveDeals, orgIdToName)
 
     const BATCH_SIZE = 100
     for (let i = 0; i < transformedOpportunities.length; i += BATCH_SIZE) {
       const batch = transformedOpportunities.slice(i, i + BATCH_SIZE)
 
+      // Map CRM opportunities to lead_opportunities table
       const opportunitiesToInsert = batch
         .filter((o) => o.name)
         .map((opp) => {
           const leadId = importedLeadNames.get(opp.lead_name) || null
 
           return {
+            lead_id: leadId,
             user_id: userId,
             workspace_id: workspaceId,
-            lead_id: leadId,
             name: opp.name,
             value: opp.value,
-            probability: opp.probability,
-            status: opp.status,
+            probability: opp.probability || 0,
+            status: opp.status || "active",
+            stage: "prospect",
+            value_type: "one_time",
             expected_close_date: opp.expected_close_date,
+            notes: `Imported from Pipedrive`,
           }
         })
+        .filter((o) => o.lead_id !== null)
 
       if (opportunitiesToInsert.length > 0) {
-        const { data, error } = await supabase.from("opportunities").insert(opportunitiesToInsert).select("id")
+        const { data, error } = await supabase.from("lead_opportunities").insert(opportunitiesToInsert).select("id")
 
         if (error) {
           result.errors.push(`Opportunity batch error: ${error.message}`)
@@ -588,8 +633,10 @@ async function importFromHubSpot(
   userId: string,
   options: CRMImportOptions,
   result: CRMImportResult,
-  pipelineId: string | null,
-  stageId: string | null
+  leadPipelineId: string | null,
+  leadStageId: string | null,
+  dealsPipelineId: string | null,
+  dealsStageId: string | null
 ) {
   // Build maps for linking
   const companyIdToName = new Map<string, string>()
@@ -667,8 +714,8 @@ async function importFromHubSpot(
           postal_code: lead.zip_code,
           country: lead.country,
           source: "hubspot_import",
-          pipeline_id: pipelineId,
-          stage_id: stageId,
+          pipeline_id: leadPipelineId,
+          stage_id: leadStageId,
         }))
 
       if (leadsToInsert.length > 0) {
@@ -687,7 +734,7 @@ async function importFromHubSpot(
     }
   }
 
-  // Import contacts
+  // Import contacts - contacts link to leads via lead_id
   if (options.contacts) {
     let contacts = await client.fetchContacts()
 
@@ -711,9 +758,9 @@ async function importFromHubSpot(
         .map((contact) => {
           const leadId = importedLeadNames.get(contact.lead_name) || null
 
+          // Note: contacts table links to leads via lead_id
+          // user_id/workspace_id are on the leads table, not contacts
           return {
-            user_id: userId,
-            workspace_id: workspaceId,
             lead_id: leadId,
             first_name: contact.first_name || "",
             last_name: contact.last_name || "",
@@ -722,6 +769,8 @@ async function importFromHubSpot(
             title: contact.title,
           }
         })
+        // Only insert contacts that have a valid lead_id
+        .filter((c) => c.lead_id !== null)
 
       if (contactsToInsert.length > 0) {
         const { data, error } = await supabase.from("contacts").insert(contactsToInsert).select("id")
@@ -736,13 +785,13 @@ async function importFromHubSpot(
     }
   }
 
-  // Import deals as opportunities
+  // Import deals as deals table
   if (options.opportunities) {
-    let deals = await client.fetchDeals()
+    let hubspotDeals = await client.fetchDeals()
 
     // Apply date filter
     if (createdAfterDate) {
-      deals = deals.filter((deal) => {
+      hubspotDeals = hubspotDeals.filter((deal) => {
         const createDate = deal.properties.createdate || deal.createdAt
         if (!createDate) return false
         return new Date(createDate) >= createdAfterDate
@@ -752,7 +801,7 @@ async function importFromHubSpot(
     // Apply status filter
     const statusFilter = options.filters?.opportunityStatuses
     if (statusFilter && statusFilter.length > 0) {
-      deals = deals.filter((deal) => {
+      hubspotDeals = hubspotDeals.filter((deal) => {
         const stage = deal.properties.dealstage?.toLowerCase() || ""
         let status = "active"
         if (stage.includes("won") || stage.includes("closed won")) {
@@ -764,31 +813,36 @@ async function importFromHubSpot(
       })
     }
 
-    const transformedOpportunities = client.transformDeals(deals, companyIdToName)
+    const transformedOpportunities = client.transformDeals(hubspotDeals, companyIdToName)
 
     const BATCH_SIZE = 100
     for (let i = 0; i < transformedOpportunities.length; i += BATCH_SIZE) {
       const batch = transformedOpportunities.slice(i, i + BATCH_SIZE)
 
+      // Map CRM opportunities to lead_opportunities table
       const opportunitiesToInsert = batch
         .filter((o) => o.name)
         .map((opp) => {
           const leadId = importedLeadNames.get(opp.lead_name) || null
 
           return {
+            lead_id: leadId,
             user_id: userId,
             workspace_id: workspaceId,
-            lead_id: leadId,
             name: opp.name,
             value: opp.value,
-            probability: opp.probability,
-            status: opp.status,
+            probability: opp.probability || 0,
+            status: opp.status || "active",
+            stage: "prospect",
+            value_type: "one_time",
             expected_close_date: opp.expected_close_date,
+            notes: `Imported from HubSpot`,
           }
         })
+        .filter((o) => o.lead_id !== null)
 
       if (opportunitiesToInsert.length > 0) {
-        const { data, error } = await supabase.from("opportunities").insert(opportunitiesToInsert).select("id")
+        const { data, error } = await supabase.from("lead_opportunities").insert(opportunitiesToInsert).select("id")
 
         if (error) {
           result.errors.push(`Opportunity batch error: ${error.message}`)
@@ -811,8 +865,10 @@ async function importFromFreshsales(
   userId: string,
   options: CRMImportOptions,
   result: CRMImportResult,
-  pipelineId: string | null,
-  stageId: string | null
+  leadPipelineId: string | null,
+  leadStageId: string | null,
+  dealsPipelineId: string | null,
+  dealsStageId: string | null
 ) {
   // Build maps for linking
   const accountIdToName = new Map<number, string>()
@@ -889,8 +945,8 @@ async function importFromFreshsales(
           postal_code: lead.zip_code,
           country: lead.country,
           source: "freshsales_import",
-          pipeline_id: pipelineId,
-          stage_id: stageId,
+          pipeline_id: leadPipelineId,
+          stage_id: leadStageId,
         }))
 
       if (leadsToInsert.length > 0) {
@@ -909,7 +965,7 @@ async function importFromFreshsales(
     }
   }
 
-  // Import contacts
+  // Import contacts - contacts link to leads via lead_id
   if (options.contacts) {
     let contacts = await client.fetchContacts()
 
@@ -932,9 +988,9 @@ async function importFromFreshsales(
         .map((contact) => {
           const leadId = importedLeadNames.get(contact.lead_name) || null
 
+          // Note: contacts table links to leads via lead_id
+          // user_id/workspace_id are on the leads table, not contacts
           return {
-            user_id: userId,
-            workspace_id: workspaceId,
             lead_id: leadId,
             first_name: contact.first_name || "",
             last_name: contact.last_name || "",
@@ -943,6 +999,8 @@ async function importFromFreshsales(
             title: contact.title,
           }
         })
+        // Only insert contacts that have a valid lead_id
+        .filter((c) => c.lead_id !== null)
 
       if (contactsToInsert.length > 0) {
         const { data, error } = await supabase.from("contacts").insert(contactsToInsert).select("id")
@@ -957,13 +1015,13 @@ async function importFromFreshsales(
     }
   }
 
-  // Import deals as opportunities
+  // Import deals as deals table
   if (options.opportunities) {
-    let deals = await client.fetchDeals()
+    let freshsalesDeals = await client.fetchDeals()
 
     // Apply date filter
     if (createdAfterDate) {
-      deals = deals.filter((deal) => {
+      freshsalesDeals = freshsalesDeals.filter((deal) => {
         if (!deal.created_at) return false
         return new Date(deal.created_at) >= createdAfterDate
       })
@@ -972,7 +1030,7 @@ async function importFromFreshsales(
     // Apply status filter
     const statusFilter = options.filters?.opportunityStatuses
     if (statusFilter && statusFilter.length > 0) {
-      deals = deals.filter((deal) => {
+      freshsalesDeals = freshsalesDeals.filter((deal) => {
         const stageName = deal.deal_stage?.name?.toLowerCase() || ""
         let status = "active"
         if (stageName.includes("won") || stageName.includes("closed won")) {
@@ -984,31 +1042,36 @@ async function importFromFreshsales(
       })
     }
 
-    const transformedOpportunities = client.transformDeals(deals, accountIdToName)
+    const transformedOpportunities = client.transformDeals(freshsalesDeals, accountIdToName)
 
     const BATCH_SIZE = 100
     for (let i = 0; i < transformedOpportunities.length; i += BATCH_SIZE) {
       const batch = transformedOpportunities.slice(i, i + BATCH_SIZE)
 
+      // Map CRM opportunities to lead_opportunities table
       const opportunitiesToInsert = batch
         .filter((o) => o.name)
         .map((opp) => {
           const leadId = importedLeadNames.get(opp.lead_name) || null
 
           return {
+            lead_id: leadId,
             user_id: userId,
             workspace_id: workspaceId,
-            lead_id: leadId,
             name: opp.name,
             value: opp.value,
-            probability: opp.probability,
-            status: opp.status,
+            probability: opp.probability || 0,
+            status: opp.status || "active",
+            stage: "prospect",
+            value_type: "one_time",
             expected_close_date: opp.expected_close_date,
+            notes: `Imported from Freshsales`,
           }
         })
+        .filter((o) => o.lead_id !== null)
 
       if (opportunitiesToInsert.length > 0) {
-        const { data, error } = await supabase.from("opportunities").insert(opportunitiesToInsert).select("id")
+        const { data, error } = await supabase.from("lead_opportunities").insert(opportunitiesToInsert).select("id")
 
         if (error) {
           result.errors.push(`Opportunity batch error: ${error.message}`)

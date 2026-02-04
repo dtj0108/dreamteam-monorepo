@@ -824,6 +824,7 @@ export default function LeadsPage() {
         open={importModalOpen}
         onOpenChange={setImportModalOpen}
         onImportComplete={fetchLeads}
+        defaultDataType="leads"
       />
 
       {/* Bulk Delete Dialog */}
