@@ -128,7 +128,9 @@ export function CRMImportModal({
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.error || "Import failed")
+        // Check for errors array (from catch block) or error string (from early returns)
+        const errorMessage = data.errors?.[0] || data.error || "Import failed"
+        setError(errorMessage)
         return
       }
 

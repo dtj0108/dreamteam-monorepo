@@ -10,6 +10,7 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  ChevronDown,
 } from "lucide-react"
 import {
   Dialog,
@@ -28,13 +29,13 @@ import { LeadColumnMapper } from "@/components/import/lead-column-mapper"
 import { LeadPreviewTable, type LeadWithDuplicate } from "@/components/import/lead-preview-table"
 import {
   parseCSV,
-  detectLeadColumnMapping,
-  transformToLeads,
-  validateLeadMapping,
-  createEmptyLeadMapping,
+  detectMultiContactLeadColumnMapping,
+  transformToLeadsWithMultipleContacts,
+  validateMultiContactLeadMapping,
+  createEmptyMultiContactLeadMapping,
   type ParsedCSV,
-  type LeadColumnMapping,
-  type DetectedLeadMapping,
+  type MultiContactLeadColumnMapping,
+  type DetectedMultiContactLeadMapping,
 } from "@/lib/lead-csv-parser"
 import type { LeadDuplicateCheckResult } from "@/lib/lead-duplicate-detector"
 
@@ -61,12 +62,14 @@ export function LeadImportModal({
 
   // CSV data
   const [parsedCSV, setParsedCSV] = useState<ParsedCSV | null>(null)
-  const [detectedMapping, setDetectedMapping] = useState<DetectedLeadMapping | null>(null)
-  const [mapping, setMapping] = useState<LeadColumnMapping>(createEmptyLeadMapping())
+  const [detectedMapping, setDetectedMapping] = useState<DetectedMultiContactLeadMapping | null>(null)
+  const [mapping, setMapping] = useState<MultiContactLeadColumnMapping>(createEmptyMultiContactLeadMapping())
   const [leads, setLeads] = useState<LeadWithDuplicate[]>([])
 
   // Duplicate detection state
   const [checkingDuplicates, setCheckingDuplicates] = useState(false)
+  const [previewCollapsed, setPreviewCollapsed] = useState(true)
+  const [previewExpanded, setPreviewExpanded] = useState(false)
   const [duplicateCount, setDuplicateCount] = useState(0)
   const [importDuplicates, setImportDuplicates] = useState(false)
 
@@ -78,6 +81,8 @@ export function LeadImportModal({
     imported: number
     failed: number
     skipped_duplicates?: number
+    contacts_created?: number
+    contacts_for_existing_leads?: number
     errors?: string[]
   } | null>(null)
 
@@ -85,9 +90,11 @@ export function LeadImportModal({
     setCurrentStep("upload")
     setParsedCSV(null)
     setDetectedMapping(null)
-    setMapping(createEmptyLeadMapping())
+    setMapping(createEmptyMultiContactLeadMapping())
     setLeads([])
     setCheckingDuplicates(false)
+    setPreviewCollapsed(true)
+    setPreviewExpanded(false)
     setDuplicateCount(0)
     setImportDuplicates(false)
     setImporting(false)
@@ -108,8 +115,8 @@ export function LeadImportModal({
       const parsed = parseCSV(text)
       setParsedCSV(parsed)
 
-      // Auto-detect columns
-      const detected = detectLeadColumnMapping(parsed.headers)
+      // Auto-detect columns with multi-contact support
+      const detected = detectMultiContactLeadColumnMapping(parsed.headers)
       setDetectedMapping(detected)
 
       // Set initial mapping from detected values
@@ -125,6 +132,7 @@ export function LeadImportModal({
         country: detected.country,
         postal_code: detected.postal_code,
         source: detected.source,
+        contactSlots: detected.contactSlots,
       })
 
       setCurrentStep("map-columns")
@@ -135,8 +143,8 @@ export function LeadImportModal({
   const handleMappingComplete = useCallback(async () => {
     if (!parsedCSV) return
 
-    // Transform CSV to leads
-    const parsedLeads = transformToLeads(parsedCSV.rows, parsedCSV.headers, mapping)
+    // Transform CSV to leads with multi-contact support
+    const parsedLeads = transformToLeadsWithMultipleContacts(parsedCSV.rows, parsedCSV.headers, mapping)
 
     // Check for duplicates
     setCheckingDuplicates(true)
@@ -183,7 +191,7 @@ export function LeadImportModal({
       // Filter out invalid leads
       const validLeads = leads.filter((l) => l.isValid)
 
-      // Prepare leads for import
+      // Prepare leads for import with contacts array
       const leadsToImport = validLeads.map((l) => ({
         name: l.name,
         website: l.website,
@@ -196,6 +204,8 @@ export function LeadImportModal({
         country: l.country,
         postal_code: l.postal_code,
         source: l.source,
+        // Use contacts array for multi-contact support
+        contacts: l.contacts,
       }))
 
       setImportProgress(30)
@@ -218,6 +228,8 @@ export function LeadImportModal({
         imported: result.imported || 0,
         failed: result.failed || 0,
         skipped_duplicates: result.skipped_duplicates,
+        contacts_created: result.contacts_created,
+        contacts_for_existing_leads: result.contacts_for_existing_leads,
         errors: result.errors,
       })
 
@@ -247,7 +259,7 @@ export function LeadImportModal({
       case "upload":
         return parsedCSV !== null
       case "map-columns":
-        return validateLeadMapping(mapping).valid
+        return validateMultiContactLeadMapping(mapping).valid
       case "preview":
         return leads.filter((l) => l.isValid).length > 0
       default:
@@ -280,6 +292,10 @@ export function LeadImportModal({
     }
   }, [currentStep])
 
+  const handleRemoveLead = useCallback((index: number) => {
+    setLeads((prevLeads) => prevLeads.filter((_, i) => i !== index))
+  }, [])
+
   const getStepIndex = (step: ImportStep): number => {
     const index = STEPS.findIndex((s) => s.key === step)
     return index >= 0 ? index : 0
@@ -289,7 +305,11 @@ export function LeadImportModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className={`max-h-[90vh] overflow-y-auto transition-all duration-200 ${
+        currentStep === "preview" || currentStep === "importing" || currentStep === "complete"
+          ? "max-w-5xl"
+          : "max-w-2xl"
+      }`}>
         <DialogHeader>
           <DialogTitle>Import Leads from CSV</DialogTitle>
           <DialogDescription>
@@ -329,40 +349,79 @@ export function LeadImportModal({
         )}
 
         {/* Step Content */}
-        <div className="py-4">
+        <div className="py-2">
           {currentStep === "upload" && (
             <CSVUploader onFileSelect={handleFileSelect} />
           )}
 
           {currentStep === "map-columns" && parsedCSV && detectedMapping && (
-            <div className="space-y-4">
-              {/* CSV Preview */}
-              <div className="rounded-lg border p-4 bg-muted/30">
-                <h4 className="text-sm font-medium mb-2">CSV Preview (first 3 rows)</h4>
-                <div className="overflow-x-auto">
-                  <table className="text-xs w-full">
-                    <thead>
-                      <tr className="border-b">
-                        {parsedCSV.headers.map((h, i) => (
-                          <th key={i} className="text-left p-2 font-medium">
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parsedCSV.rows.slice(0, 3).map((row, i) => (
-                        <tr key={i} className="border-b last:border-0">
-                          {row.map((cell, j) => (
-                            <td key={j} className="p-2 text-muted-foreground truncate max-w-[150px]">
-                              {cell || "-"}
-                            </td>
+            <div className="space-y-3">
+              {/* CSV Preview - Collapsible */}
+              <div className="rounded-lg border bg-muted/30">
+                <button
+                  type="button"
+                  onClick={() => setPreviewCollapsed(!previewCollapsed)}
+                  className="w-full flex items-center justify-between p-2 text-sm"
+                >
+                  <span className="font-medium">CSV Preview</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {parsedCSV.headers.length} columns, {parsedCSV.rows.length} rows
+                    </span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${previewCollapsed ? '' : 'rotate-180'}`} />
+                  </div>
+                </button>
+                {!previewCollapsed && (
+                  <div className="px-3 pb-3">
+                    {parsedCSV.headers.length > 4 && (
+                      <div className="flex justify-end mb-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setPreviewExpanded(!previewExpanded)
+                          }}
+                        >
+                          {previewExpanded ? "Show fewer columns" : `Show all ${parsedCSV.headers.length} columns`}
+                        </Button>
+                      </div>
+                    )}
+                    <div className="overflow-x-auto max-w-full">
+                      <table className="text-xs">
+                        <thead>
+                          <tr className="border-b">
+                            {(previewExpanded ? parsedCSV.headers : parsedCSV.headers.slice(0, 4)).map((h, i) => (
+                              <th key={i} className="text-left p-1.5 font-medium whitespace-nowrap">
+                                {h}
+                              </th>
+                            ))}
+                            {!previewExpanded && parsedCSV.headers.length > 4 && (
+                              <th className="text-left p-1.5 font-medium text-muted-foreground">
+                                +{parsedCSV.headers.length - 4} more
+                              </th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parsedCSV.rows.slice(0, 2).map((row, i) => (
+                            <tr key={i} className="border-b last:border-0">
+                              {(previewExpanded ? row : row.slice(0, 4)).map((cell, j) => (
+                                <td key={j} className="p-1.5 text-muted-foreground truncate max-w-[120px]">
+                                  {cell || "-"}
+                                </td>
+                              ))}
+                              {!previewExpanded && row.length > 4 && (
+                                <td className="p-1.5 text-muted-foreground">...</td>
+                              )}
+                            </tr>
                           ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <LeadColumnMapper
@@ -383,7 +442,7 @@ export function LeadImportModal({
                 </div>
               ) : (
                 <>
-                  <LeadPreviewTable leads={leads} />
+                  <LeadPreviewTable leads={leads} onRemove={handleRemoveLead} />
 
                   {duplicateCount > 0 && (
                     <div className="flex items-center gap-2 p-3 rounded-lg border">
@@ -425,6 +484,7 @@ export function LeadImportModal({
                   </AlertTitle>
                   <AlertDescription className="text-emerald-600 dark:text-emerald-300">
                     Successfully imported {importResult.imported} lead{importResult.imported !== 1 ? "s" : ""}.
+                    {importResult.contacts_created ? ` Created ${importResult.contacts_created} contact${importResult.contacts_created !== 1 ? "s" : ""}.` : ""}
                     {importResult.skipped_duplicates ? ` Skipped ${importResult.skipped_duplicates} duplicate${importResult.skipped_duplicates !== 1 ? "s" : ""}.` : ""}
                     {importResult.failed > 0 && ` Failed to import ${importResult.failed}.`}
                   </AlertDescription>
@@ -440,14 +500,20 @@ export function LeadImportModal({
               )}
 
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className={`grid gap-4 ${importResult.contacts_created ? 'grid-cols-4' : 'grid-cols-3'}`}>
                 <div className="rounded-lg border p-4 text-center">
                   <p className="text-2xl font-bold text-emerald-600">{importResult.imported}</p>
-                  <p className="text-sm text-muted-foreground">Imported</p>
+                  <p className="text-sm text-muted-foreground">Leads</p>
                 </div>
+                {importResult.contacts_created !== undefined && importResult.contacts_created > 0 && (
+                  <div className="rounded-lg border p-4 text-center">
+                    <p className="text-2xl font-bold text-indigo-600">{importResult.contacts_created}</p>
+                    <p className="text-sm text-muted-foreground">Contacts</p>
+                  </div>
+                )}
                 <div className="rounded-lg border p-4 text-center">
                   <p className="text-2xl font-bold text-amber-600">{importResult.skipped_duplicates || 0}</p>
-                  <p className="text-sm text-muted-foreground">Skipped (duplicates)</p>
+                  <p className="text-sm text-muted-foreground">Skipped</p>
                 </div>
                 <div className="rounded-lg border p-4 text-center">
                   <p className="text-2xl font-bold text-rose-600">{importResult.failed}</p>

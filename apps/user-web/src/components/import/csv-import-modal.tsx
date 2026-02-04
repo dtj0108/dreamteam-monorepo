@@ -14,6 +14,7 @@ import {
   User,
   Briefcase,
   ListTodo,
+  ChevronDown,
 } from "lucide-react"
 import {
   Dialog,
@@ -39,13 +40,13 @@ import {
 } from "@/components/import/generic-preview-table"
 import {
   parseCSV,
-  detectLeadColumnMapping,
-  transformToLeads,
-  validateLeadMapping,
-  createEmptyLeadMapping,
+  detectMultiContactLeadColumnMapping,
+  transformToLeadsWithMultipleContacts,
+  validateMultiContactLeadMapping,
+  createEmptyMultiContactLeadMapping,
   type ParsedCSV,
-  type LeadColumnMapping,
-  type DetectedLeadMapping,
+  type MultiContactLeadColumnMapping,
+  type DetectedMultiContactLeadMapping,
 } from "@/lib/lead-csv-parser"
 import {
   detectContactColumnMapping,
@@ -83,8 +84,8 @@ type DataType = "leads" | "contacts" | "opportunities" | "tasks"
 type ImportStep = "select-type" | "upload" | "map-columns" | "preview" | "importing" | "complete"
 
 const DATA_TYPES: { key: DataType; label: string; description: string; icon: typeof Building2 }[] = [
-  { key: "leads", label: "Leads", description: "Companies and organizations you want to track", icon: Building2 },
-  { key: "contacts", label: "Contacts", description: "People associated with your leads", icon: User },
+  { key: "leads", label: "Leads", description: "Companies with optional contact info (recommended)", icon: Building2 },
+  { key: "contacts", label: "Contacts", description: "Add contacts to existing leads only", icon: User },
   { key: "opportunities", label: "Opportunities", description: "Deals and sales opportunities", icon: Briefcase },
   { key: "tasks", label: "Tasks", description: "To-do items linked to leads", icon: ListTodo },
 ]
@@ -143,9 +144,9 @@ export function CSVImportModal({
   // CSV data
   const [parsedCSV, setParsedCSV] = useState<ParsedCSV | null>(null)
 
-  // Lead-specific state
-  const [detectedLeadMapping, setDetectedLeadMapping] = useState<DetectedLeadMapping | null>(null)
-  const [leadMapping, setLeadMapping] = useState<LeadColumnMapping>(createEmptyLeadMapping())
+  // Lead-specific state (with multi-contact support)
+  const [detectedLeadMapping, setDetectedLeadMapping] = useState<DetectedMultiContactLeadMapping | null>(null)
+  const [leadMapping, setLeadMapping] = useState<MultiContactLeadColumnMapping>(createEmptyMultiContactLeadMapping())
   const [leads, setLeads] = useState<LeadWithDuplicate[]>([])
   const [duplicateCount, setDuplicateCount] = useState(0)
   const [importDuplicates, setImportDuplicates] = useState(false)
@@ -167,6 +168,8 @@ export function CSVImportModal({
 
   // Shared state
   const [checkingDuplicates, setCheckingDuplicates] = useState(false)
+  const [previewCollapsed, setPreviewCollapsed] = useState(true)
+  const [previewExpanded, setPreviewExpanded] = useState(false)
   const [unmatchedCount, setUnmatchedCount] = useState(0)
 
   // Import state
@@ -178,6 +181,8 @@ export function CSVImportModal({
     failed: number
     skipped_duplicates?: number
     skipped_unmatched?: number
+    contacts_created?: number
+    contacts_for_existing_leads?: number
     errors?: string[]
     unmatched_leads?: string[]
   } | null>(null)
@@ -187,7 +192,7 @@ export function CSVImportModal({
     setDataType(defaultDataType || "leads")
     setParsedCSV(null)
     setDetectedLeadMapping(null)
-    setLeadMapping(createEmptyLeadMapping())
+    setLeadMapping(createEmptyMultiContactLeadMapping())
     setLeads([])
     setDuplicateCount(0)
     setImportDuplicates(false)
@@ -201,6 +206,8 @@ export function CSVImportModal({
     setTaskMapping(createEmptyTaskMapping())
     setTasks([])
     setCheckingDuplicates(false)
+    setPreviewCollapsed(true)
+    setPreviewExpanded(false)
     setUnmatchedCount(0)
     setImporting(false)
     setImportProgress(0)
@@ -221,7 +228,7 @@ export function CSVImportModal({
 
       // Auto-detect columns based on data type
       if (dataType === "leads") {
-        const detected = detectLeadColumnMapping(parsed.headers)
+        const detected = detectMultiContactLeadColumnMapping(parsed.headers)
         setDetectedLeadMapping(detected)
         setLeadMapping({
           name: detected.name,
@@ -235,6 +242,7 @@ export function CSVImportModal({
           country: detected.country,
           postal_code: detected.postal_code,
           source: detected.source,
+          contactSlots: detected.contactSlots,
         })
       } else if (dataType === "contacts") {
         const detected = detectContactColumnMapping(parsed.headers)
@@ -283,8 +291,8 @@ export function CSVImportModal({
 
     try {
       if (dataType === "leads") {
-        // Lead import - check for duplicates
-        const parsedLeads = transformToLeads(parsedCSV.rows, parsedCSV.headers, leadMapping)
+        // Lead import - check for duplicates (with multi-contact support)
+        const parsedLeads = transformToLeadsWithMultipleContacts(parsedCSV.rows, parsedCSV.headers, leadMapping)
 
         const response = await fetch("/api/leads/check-duplicates", {
           method: "POST",
@@ -367,7 +375,7 @@ export function CSVImportModal({
       console.error("Error during mapping:", error)
       // Continue with what we have
       if (dataType === "leads") {
-        setLeads(transformToLeads(parsedCSV.rows, parsedCSV.headers, leadMapping))
+        setLeads(transformToLeadsWithMultipleContacts(parsedCSV.rows, parsedCSV.headers, leadMapping))
       } else if (dataType === "contacts") {
         setContacts(transformToContacts(parsedCSV.rows, parsedCSV.headers, contactMapping))
       } else if (dataType === "opportunities") {
@@ -406,6 +414,8 @@ export function CSVImportModal({
             country: l.country,
             postal_code: l.postal_code,
             source: l.source,
+            // Use contacts array for multi-contact support
+            contacts: l.contacts,
           })),
           skip_duplicates: !importDuplicates,
         }
@@ -468,6 +478,8 @@ export function CSVImportModal({
         failed: result.failed || 0,
         skipped_duplicates: result.skipped_duplicates,
         skipped_unmatched: result.skipped_unmatched,
+        contacts_created: result.contacts_created,
+        contacts_for_existing_leads: result.contacts_for_existing_leads,
         errors: result.errors,
         unmatched_leads: result.unmatched_leads,
       })
@@ -504,7 +516,7 @@ export function CSVImportModal({
       case "upload":
         return parsedCSV !== null
       case "map-columns":
-        if (dataType === "leads") return validateLeadMapping(leadMapping).valid
+        if (dataType === "leads") return validateMultiContactLeadMapping(leadMapping).valid
         if (dataType === "contacts") return validateContactMapping(contactMapping).valid
         if (dataType === "opportunities") return validateOpportunityMapping(opportunityMapping).valid
         if (dataType === "tasks") return validateTaskMapping(taskMapping).valid
@@ -551,6 +563,10 @@ export function CSVImportModal({
     }
   }, [currentStep, defaultDataType])
 
+  const handleRemoveLead = useCallback((index: number) => {
+    setLeads((prevLeads) => prevLeads.filter((_, i) => i !== index))
+  }, [])
+
   const getStepIndex = (step: ImportStep): number => {
     const index = STEPS_WITH_TYPE.findIndex((s) => s.key === step)
     return index >= 0 ? index : 0
@@ -570,8 +586,9 @@ export function CSVImportModal({
   // Determine modal width based on current step
   const getModalWidth = () => {
     if (currentStep === "select-type" || currentStep === "upload") return "max-w-lg"
-    if (currentStep === "importing" || currentStep === "complete") return "max-w-md"
-    return "max-w-3xl" // map-columns and preview need more space
+    if (currentStep === "importing" || currentStep === "complete") return "max-w-2xl"
+    if (currentStep === "map-columns") return "max-w-2xl" // narrower for accordion layout
+    return "max-w-5xl" // preview needs more space for table
   }
 
   return (
@@ -620,7 +637,7 @@ export function CSVImportModal({
         )}
 
         {/* Step Content */}
-        <div className="py-3">
+        <div className="py-2">
           {currentStep === "select-type" && (
             <div className="grid grid-cols-2 gap-3">
               {DATA_TYPES.map((type) => {
@@ -649,38 +666,77 @@ export function CSVImportModal({
           )}
 
           {currentStep === "upload" && (
-            <CSVUploader onFileSelect={handleFileSelect} />
+            <CSVUploader onFileSelect={handleFileSelect} dataType={dataType} />
           )}
 
           {currentStep === "map-columns" && parsedCSV && (
-            <div className="space-y-4">
-              {/* CSV Preview */}
-              <div className="rounded-lg border p-4 bg-muted/30">
-                <h4 className="text-sm font-medium mb-2">CSV Preview (first 3 rows)</h4>
-                <div className="overflow-x-auto">
-                  <table className="text-xs w-full">
-                    <thead>
-                      <tr className="border-b">
-                        {parsedCSV.headers.map((h, i) => (
-                          <th key={i} className="text-left p-2 font-medium">
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parsedCSV.rows.slice(0, 3).map((row, i) => (
-                        <tr key={i} className="border-b last:border-0">
-                          {row.map((cell, j) => (
-                            <td key={j} className="p-2 text-muted-foreground truncate max-w-[150px]">
-                              {cell || "-"}
-                            </td>
+            <div className="space-y-3">
+              {/* CSV Preview - Collapsible */}
+              <div className="rounded-lg border bg-muted/30">
+                <button
+                  type="button"
+                  onClick={() => setPreviewCollapsed(!previewCollapsed)}
+                  className="w-full flex items-center justify-between p-2 text-sm"
+                >
+                  <span className="font-medium">CSV Preview</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {parsedCSV.headers.length} columns, {parsedCSV.rows.length} rows
+                    </span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${previewCollapsed ? '' : 'rotate-180'}`} />
+                  </div>
+                </button>
+                {!previewCollapsed && (
+                  <div className="px-3 pb-3">
+                    {parsedCSV.headers.length > 4 && (
+                      <div className="flex justify-end mb-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setPreviewExpanded(!previewExpanded)
+                          }}
+                        >
+                          {previewExpanded ? "Show fewer columns" : `Show all ${parsedCSV.headers.length} columns`}
+                        </Button>
+                      </div>
+                    )}
+                    <div className="overflow-x-auto max-w-full">
+                      <table className="text-xs">
+                        <thead>
+                          <tr className="border-b">
+                            {(previewExpanded ? parsedCSV.headers : parsedCSV.headers.slice(0, 4)).map((h, i) => (
+                              <th key={i} className="text-left p-1.5 font-medium whitespace-nowrap">
+                                {h}
+                              </th>
+                            ))}
+                            {!previewExpanded && parsedCSV.headers.length > 4 && (
+                              <th className="text-left p-1.5 font-medium text-muted-foreground">
+                                +{parsedCSV.headers.length - 4} more
+                              </th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parsedCSV.rows.slice(0, 2).map((row, i) => (
+                            <tr key={i} className="border-b last:border-0">
+                              {(previewExpanded ? row : row.slice(0, 4)).map((cell, j) => (
+                                <td key={j} className="p-1.5 text-muted-foreground truncate max-w-[120px]">
+                                  {cell || "-"}
+                                </td>
+                              ))}
+                              {!previewExpanded && row.length > 4 && (
+                                <td className="p-1.5 text-muted-foreground">...</td>
+                              )}
+                            </tr>
                           ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Column Mapper */}
@@ -736,7 +792,7 @@ export function CSVImportModal({
                 </div>
               ) : (
                 <>
-                  {dataType === "leads" && <LeadPreviewTable leads={leads} />}
+                  {dataType === "leads" && <LeadPreviewTable leads={leads} onRemove={handleRemoveLead} />}
                   {dataType === "contacts" && (
                     <GenericPreviewTable entities={contacts} entityType="contact" />
                   )}
@@ -787,6 +843,7 @@ export function CSVImportModal({
                   </AlertTitle>
                   <AlertDescription className="text-emerald-600 dark:text-emerald-300">
                     Successfully imported {importResult.imported} {dataTypeInfo?.label.toLowerCase()}.
+                    {importResult.contacts_created ? ` Created ${importResult.contacts_created} contact${importResult.contacts_created !== 1 ? "s" : ""}.` : ""}
                     {importResult.skipped_duplicates ? ` Skipped ${importResult.skipped_duplicates} duplicate${importResult.skipped_duplicates !== 1 ? "s" : ""}.` : ""}
                     {importResult.skipped_unmatched ? ` Skipped ${importResult.skipped_unmatched} with unmatched leads.` : ""}
                     {importResult.failed > 0 && ` Failed to import ${importResult.failed}.`}
@@ -803,11 +860,17 @@ export function CSVImportModal({
               )}
 
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className={`grid gap-4 ${importResult.contacts_created ? 'grid-cols-4' : 'grid-cols-3'}`}>
                 <div className="rounded-lg border p-4 text-center">
                   <p className="text-2xl font-bold text-emerald-600">{importResult.imported}</p>
-                  <p className="text-sm text-muted-foreground">Imported</p>
+                  <p className="text-sm text-muted-foreground">{dataType === "leads" ? "Leads" : "Imported"}</p>
                 </div>
+                {importResult.contacts_created !== undefined && importResult.contacts_created > 0 && (
+                  <div className="rounded-lg border p-4 text-center">
+                    <p className="text-2xl font-bold text-indigo-600">{importResult.contacts_created}</p>
+                    <p className="text-sm text-muted-foreground">Contacts</p>
+                  </div>
+                )}
                 <div className="rounded-lg border p-4 text-center">
                   <p className="text-2xl font-bold text-amber-600">
                     {(importResult.skipped_duplicates || 0) + (importResult.skipped_unmatched || 0)}

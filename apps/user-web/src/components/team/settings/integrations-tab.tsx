@@ -491,6 +491,7 @@ export function IntegrationsTab({ workspaceId, isOwner, isAdmin }: IntegrationsT
         open={csvModalOpen}
         onOpenChange={setCsvModalOpen}
         onImportComplete={() => {}}
+        defaultDataType="leads"
       />
 
       <ApiKeyModal

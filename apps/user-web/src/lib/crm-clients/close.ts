@@ -180,22 +180,29 @@ export class CloseClient {
   }
 
   /**
-   * Fetch all leads with pagination
+   * Fetch leads with pagination
+   * @param pageSize - Number of records per API request (default 100)
+   * @param maxRecords - Maximum total records to fetch (0 = unlimited)
    */
-  async fetchLeads(limit = 100): Promise<CloseLeadRaw[]> {
+  async fetchLeads(pageSize = 100, maxRecords = 0): Promise<CloseLeadRaw[]> {
     const allLeads: CloseLeadRaw[] = []
     let skip = 0
     let hasMore = true
 
     while (hasMore) {
       const response = await this.fetch<{ data: CloseLeadRaw[]; has_more: boolean }>("/lead/", {
-        _limit: String(limit),
+        _limit: String(pageSize),
         _skip: String(skip),
       })
 
       allLeads.push(...response.data)
       hasMore = response.has_more
-      skip += limit
+      skip += pageSize
+
+      // Early termination if we have enough records
+      if (maxRecords > 0 && allLeads.length >= maxRecords) {
+        break
+      }
     }
 
     return allLeads

@@ -222,7 +222,7 @@ export function SlackImportModal({
                   <span className="font-medium">{importResult.messagesImported.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>Users created:</span>
+                  <span>Channel participants:</span>
                   <span className="font-medium">{importResult.usersCreated}</span>
                 </div>
               </div>
