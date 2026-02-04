@@ -7,6 +7,9 @@ import {
   type ExistingLead,
 } from '@/lib/lead-duplicate-detector'
 
+// Extend timeout for large CSV imports
+export const maxDuration = 300
+
 interface ImportContact {
   first_name: string
   last_name?: string | null

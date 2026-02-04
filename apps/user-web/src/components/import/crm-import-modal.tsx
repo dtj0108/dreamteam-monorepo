@@ -42,9 +42,9 @@ export function CRMImportModal({
   const [skipDuplicates, setSkipDuplicates] = useState(true)
 
   // Filter options
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(true)  // Show filters by default
   const [createdAfter, setCreatedAfter] = useState<string>("")
-  const [importLimit, setImportLimit] = useState<string>("")
+  const [importLimit, setImportLimit] = useState<string>("2000")  // Safe default for CRM imports
   const [includeActiveOpps, setIncludeActiveOpps] = useState(true)
   const [includeWonOpps, setIncludeWonOpps] = useState(true)
   const [includeLostOpps, setIncludeLostOpps] = useState(false)
@@ -381,7 +381,7 @@ export function CRMImportModal({
                     <Input
                       id="importLimit"
                       type="number"
-                      placeholder="e.g., 1000"
+                      placeholder="2000 (recommended)"
                       value={importLimit}
                       onChange={(e) => setImportLimit(e.target.value)}
                       disabled={isImporting}
@@ -389,6 +389,17 @@ export function CRMImportModal({
                       className="w-full"
                     />
                   </div>
+
+                  {/* Warning for large imports */}
+                  {counts && (counts.leads || 0) > 5000 && (!importLimit || parseInt(importLimit) > 5000) && (
+                    <div className="flex items-start gap-1.5 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded mt-3">
+                      <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <span>
+                        Large imports ({counts.leads?.toLocaleString()}+ records) may fail due to timeouts.
+                        Consider setting a limit of 2,000-5,000 records, or export from {config?.name} to CSV and use the "Upload CSV" option for better reliability with large datasets.
+                      </span>
+                    </div>
+                  )}
 
                   {/* Opportunity Status Filter */}
                   {importOpportunities && (counts.opportunities ?? 0) > 0 && (

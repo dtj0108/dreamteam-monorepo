@@ -9,6 +9,9 @@ import { HubSpotClient } from "@/lib/crm-clients/hubspot"
 import { FreshsalesClient } from "@/lib/crm-clients/freshsales"
 import { checkLeadDuplicate, type ExistingLead } from "@/lib/lead-duplicate-detector"
 
+// Extend timeout for large imports (Vercel Pro supports up to 300s)
+export const maxDuration = 300
+
 interface ImportRequest {
   workspaceId: string
   options: CRMImportOptions
