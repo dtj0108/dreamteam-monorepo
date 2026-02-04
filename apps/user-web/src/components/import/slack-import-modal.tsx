@@ -65,9 +65,9 @@ export function SlackImportModal({
   const [error, setError] = useState<string | null>(null)
 
   // Filters
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(true)  // Show filters by default
   const [dateRange, setDateRange] = useState<"7days" | "30days" | "90days" | "all">("30days")
-  const [messageLimit, setMessageLimit] = useState<string>("")
+  const [messageLimit, setMessageLimit] = useState<string>("500")  // Safe default
   const [includeThreads, setIncludeThreads] = useState(true)
 
   // Import state
@@ -398,13 +398,23 @@ export function SlackImportModal({
                     </Select>
                   </div>
 
+                  {/* Warning for large imports */}
+                  {(dateRange === "90days" || dateRange === "all") && (!messageLimit || parseInt(messageLimit, 10) > 1000) && (
+                    <div className="flex items-start gap-1.5 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded">
+                      <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <span>
+                        Large imports may fail due to timeouts. Consider using a shorter date range or setting a message limit of 500-1000 per channel.
+                      </span>
+                    </div>
+                  )}
+
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium">
                       Message limit per channel (optional)
                     </label>
                     <Input
                       type="number"
-                      placeholder="e.g., 1000 (blank = all)"
+                      placeholder="500 (recommended)"
                       value={messageLimit}
                       onChange={(e) => setMessageLimit(e.target.value)}
                       className="h-8 text-sm"
