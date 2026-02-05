@@ -3,40 +3,30 @@
  *
  * This module handles call minute checks, reservations, and deductions.
  * For calls, we use a reservation system since call duration is unknown upfront.
+ *
+ * Reservations are stored in the call_usage_log table with status='reserved'
+ * so they persist across serverless invocations.
  */
 
 import {
   hasSufficientCallMinutes,
   deductCallMinutes,
-  recordCallUsage,
   getWorkspaceCallMinutes,
 } from '@/lib/addons-queries'
 import { createAdminClient } from '@/lib/supabase-server'
 
-export interface CallReservation {
-  workspaceId: string
-  callSid: string
-  reservedSeconds: number
-  from: string
-  to: string
-  direction: 'inbound' | 'outbound'
-}
-
-// In-memory store for active call reservations
-// In production, you'd use Redis or a database table
-const activeReservations = new Map<string, CallReservation>()
-
 // Default reservation: 5 minutes
 const DEFAULT_RESERVATION_MINUTES = 5
-const DEFAULT_RESERVATION_SECONDS = DEFAULT_RESERVATION_MINUTES * 60
 
 /**
- * Reserve minutes before initiating a call
- * Returns false if insufficient minutes available
+ * Reserve minutes before initiating a call.
+ *
+ * @param reservationId - A temporary identifier (e.g. communication record ID).
+ *   Call updateReservationCallSid() once the real Twilio SID is known.
  */
 export async function reserveCallMinutes(
   workspaceId: string,
-  callSid: string,
+  reservationId: string,
   from: string,
   to: string,
   direction: 'inbound' | 'outbound' = 'outbound',
@@ -54,7 +44,7 @@ export async function reserveCallMinutes(
     }
   }
 
-  // Deduct reserved minutes
+  // Atomically deduct reserved minutes
   const deducted = await deductCallMinutes(workspaceId, reserveSeconds)
   if (!deducted) {
     return {
@@ -63,48 +53,72 @@ export async function reserveCallMinutes(
     }
   }
 
-  // Store reservation
-  activeReservations.set(callSid, {
-    workspaceId,
-    callSid,
-    reservedSeconds: reserveSeconds,
-    from,
-    to,
+  // Store reservation in call_usage_log with status='reserved'
+  // duration_seconds holds the reserved amount until finalization
+  const supabase = createAdminClient()
+  await supabase.from('call_usage_log').insert({
+    workspace_id: workspaceId,
+    call_sid: reservationId,
     direction,
+    duration_seconds: reserveSeconds,
+    minutes_consumed: reserveMinutes,
+    from_number: from,
+    to_number: to,
+    status: 'reserved',
   })
 
   return { success: true }
 }
 
 /**
- * Finalize call and reconcile minutes
- * Called when call ends (from status callback)
+ * Update the reservation's call_sid once the real Twilio SID is known.
+ */
+export async function updateReservationCallSid(
+  oldId: string,
+  newCallSid: string
+): Promise<void> {
+  const supabase = createAdminClient()
+  await supabase
+    .from('call_usage_log')
+    .update({ call_sid: newCallSid })
+    .eq('call_sid', oldId)
+    .eq('status', 'reserved')
+}
+
+/**
+ * Finalize call and reconcile minutes.
+ * Called when a call ends successfully (from status callback).
  */
 export async function finalizeCall(
   callSid: string,
   actualDurationSeconds: number,
   status: string
 ): Promise<void> {
-  const reservation = activeReservations.get(callSid)
+  const supabase = createAdminClient()
+
+  // Look up reservation from database
+  const { data: reservation } = await supabase
+    .from('call_usage_log')
+    .select('*')
+    .eq('call_sid', callSid)
+    .eq('status', 'reserved')
+    .single()
 
   if (!reservation) {
     console.warn(`No reservation found for call ${callSid}`)
     return
   }
 
-  const { workspaceId, reservedSeconds, from, to, direction } = reservation
-
-  // Calculate difference between reserved and actual
+  const reservedSeconds = reservation.duration_seconds
   const difference = reservedSeconds - actualDurationSeconds
 
   // If call was shorter than reserved, refund the difference
   if (difference > 0) {
     try {
-      const supabase = createAdminClient()
       const { data: current } = await supabase
         .from('workspace_call_minutes')
         .select('balance_seconds, lifetime_used_seconds')
-        .eq('workspace_id', workspaceId)
+        .eq('workspace_id', reservation.workspace_id)
         .single()
 
       if (current) {
@@ -114,10 +128,10 @@ export async function finalizeCall(
             balance_seconds: current.balance_seconds + difference,
             lifetime_used_seconds: Math.max(0, current.lifetime_used_seconds - difference),
           })
-          .eq('workspace_id', workspaceId)
+          .eq('workspace_id', reservation.workspace_id)
 
         console.log(
-          `Refunded ${Math.ceil(difference / 60)} minutes (${difference}s) to workspace ${workspaceId}`
+          `Refunded ${Math.ceil(difference / 60)} minutes (${difference}s) to workspace ${reservation.workspace_id}`
         )
       }
     } catch (error) {
@@ -125,40 +139,46 @@ export async function finalizeCall(
     }
   }
 
-  // Record the actual usage
+  // Update the reservation record with actual values
   const actualMinutes = Math.ceil(actualDurationSeconds / 60)
-  await recordCallUsage(workspaceId, callSid, {
-    direction,
-    duration_seconds: actualDurationSeconds,
-    minutes_consumed: actualMinutes,
-    from_number: from,
-    to_number: to,
-    status,
-  })
-
-  // Clean up reservation
-  activeReservations.delete(callSid)
+  await supabase
+    .from('call_usage_log')
+    .update({
+      duration_seconds: actualDurationSeconds,
+      minutes_consumed: actualMinutes,
+      status,
+    })
+    .eq('call_sid', callSid)
+    .eq('status', 'reserved')
 }
 
 /**
- * Cancel a call reservation (if call never connected)
+ * Cancel a call reservation (if call never connected).
+ * Refunds all reserved minutes back to the workspace.
  */
 export async function cancelReservation(callSid: string): Promise<void> {
-  const reservation = activeReservations.get(callSid)
+  const supabase = createAdminClient()
+
+  // Look up reservation from database
+  const { data: reservation } = await supabase
+    .from('call_usage_log')
+    .select('*')
+    .eq('call_sid', callSid)
+    .eq('status', 'reserved')
+    .single()
 
   if (!reservation) {
     return
   }
 
-  const { workspaceId, reservedSeconds } = reservation
+  const reservedSeconds = reservation.duration_seconds
 
   // Refund all reserved minutes
   try {
-    const supabase = createAdminClient()
     const { data: current } = await supabase
       .from('workspace_call_minutes')
       .select('balance_seconds, lifetime_used_seconds')
-      .eq('workspace_id', workspaceId)
+      .eq('workspace_id', reservation.workspace_id)
       .single()
 
     if (current) {
@@ -168,17 +188,26 @@ export async function cancelReservation(callSid: string): Promise<void> {
           balance_seconds: current.balance_seconds + reservedSeconds,
           lifetime_used_seconds: Math.max(0, current.lifetime_used_seconds - reservedSeconds),
         })
-        .eq('workspace_id', workspaceId)
+        .eq('workspace_id', reservation.workspace_id)
 
       console.log(
-        `Canceled reservation: refunded ${Math.ceil(reservedSeconds / 60)} minutes to workspace ${workspaceId}`
+        `Canceled reservation: refunded ${Math.ceil(reservedSeconds / 60)} minutes to workspace ${reservation.workspace_id}`
       )
     }
   } catch (error) {
     console.error('Failed to refund canceled reservation:', error)
   }
 
-  activeReservations.delete(callSid)
+  // Mark the reservation record as canceled
+  await supabase
+    .from('call_usage_log')
+    .update({
+      duration_seconds: 0,
+      minutes_consumed: 0,
+      status: 'canceled',
+    })
+    .eq('call_sid', callSid)
+    .eq('status', 'reserved')
 }
 
 /**
@@ -205,8 +234,8 @@ export async function getCallMinutesBalance(
 }
 
 /**
- * Handle call status webhook
- * This should be called from the Twilio status callback endpoint
+ * Handle call status webhook.
+ * This should be called from the Twilio status callback endpoint.
  */
 export async function handleCallStatusUpdate(
   callSid: string,
@@ -224,20 +253,7 @@ export async function handleCallStatusUpdate(
     // Call completed successfully, finalize with actual duration
     await finalizeCall(callSid, durationSeconds, status)
   } else {
-    // Call didn't complete, cancel reservation
+    // Call didn't complete, cancel reservation and refund all minutes
     await cancelReservation(callSid)
-
-    // Still record the attempt for tracking
-    const reservation = activeReservations.get(callSid)
-    if (reservation) {
-      await recordCallUsage(reservation.workspaceId, callSid, {
-        direction: reservation.direction,
-        duration_seconds: 0,
-        minutes_consumed: 0,
-        from_number: reservation.from,
-        to_number: reservation.to,
-        status,
-      })
-    }
   }
 }

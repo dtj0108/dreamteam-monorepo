@@ -1,6 +1,7 @@
 "use client"
 
-import { Check, AlertCircle, Sparkles, HelpCircle, Plus, X } from "lucide-react"
+import { useState } from "react"
+import { Check, AlertCircle, CircleCheck, HelpCircle, Plus, X, ChevronDown } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -17,12 +18,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
-import {
   type MultiContactLeadColumnMapping,
   type DetectedMultiContactLeadMapping,
   type ContactSlot,
@@ -33,6 +28,7 @@ import {
 
 interface LeadColumnMapperProps {
   headers: string[]
+  rows?: string[][]
   detectedMapping: DetectedMultiContactLeadMapping
   mapping: MultiContactLeadColumnMapping
   onMappingChange: (mapping: MultiContactLeadColumnMapping) => void
@@ -40,7 +36,6 @@ interface LeadColumnMapperProps {
 
 const NONE_VALUE = "__none__"
 
-// Lead field keys (non-contact fields)
 type LeadFieldKey = 'name' | 'website' | 'industry' | 'status' | 'notes' | 'address' | 'city' | 'state' | 'country' | 'postal_code' | 'source'
 
 const LEAD_FIELD_LABELS: Record<LeadFieldKey, string> = {
@@ -88,20 +83,34 @@ const CONTACT_FIELD_DESCRIPTIONS: Record<ContactFieldType, string> = {
 }
 
 const LEAD_SECTIONS = [
-  { value: 'required', label: 'Required', fields: ['name', 'website'] as LeadFieldKey[] },
-  { value: 'lead-info', label: 'Lead Info', fields: ['industry', 'status', 'source'] as LeadFieldKey[] },
-  { value: 'address', label: 'Address', fields: ['address', 'city', 'state', 'country', 'postal_code'] as LeadFieldKey[] },
-  { value: 'other', label: 'Other', fields: ['notes'] as LeadFieldKey[] },
+  { value: 'required', label: 'REQUIRED', fields: ['name', 'website'] as LeadFieldKey[] },
+  { value: 'lead-info', label: 'LEAD INFO', fields: ['industry', 'status', 'source'] as LeadFieldKey[] },
+  { value: 'address', label: 'ADDRESS', fields: ['address', 'city', 'state', 'country', 'postal_code'] as LeadFieldKey[] },
+  { value: 'other', label: 'OTHER', fields: ['notes'] as LeadFieldKey[] },
 ] as const
 
 const CONTACT_FIELDS: ContactFieldType[] = ['first_name', 'last_name', 'email', 'phone', 'title']
 
+function getSampleValue(headers: string[], rows: string[][], columnName: string | null): string | null {
+  if (!columnName) return null
+  const colIndex = headers.indexOf(columnName)
+  if (colIndex === -1) return null
+  for (const row of rows) {
+    const val = row[colIndex]?.trim()
+    if (val) return val.length > 30 ? val.slice(0, 30) + '...' : val
+  }
+  return null
+}
+
 export function LeadColumnMapper({
   headers,
+  rows = [],
   detectedMapping,
   mapping,
   onMappingChange,
 }: LeadColumnMapperProps) {
+  const [collapsedContacts, setCollapsedContacts] = useState<Set<number>>(new Set())
+
   const handleLeadFieldChange = (field: LeadFieldKey, value: string) => {
     onMappingChange({
       ...mapping,
@@ -128,7 +137,6 @@ export function LeadColumnMapper({
 
   const addContactSlot = () => {
     if (mapping.contactSlots.length >= MAX_CONTACTS_PER_LEAD) return
-
     const nextIndex = mapping.contactSlots.length
     onMappingChange({
       ...mapping,
@@ -137,8 +145,7 @@ export function LeadColumnMapper({
   }
 
   const removeContactSlot = (slotIndex: number) => {
-    if (slotIndex === 0) return // Can't remove primary contact
-
+    if (slotIndex === 0) return
     const newSlots = mapping.contactSlots
       .filter((_, idx) => idx !== slotIndex)
       .map((slot, idx) => ({
@@ -146,10 +153,23 @@ export function LeadColumnMapper({
         slotIndex: idx,
         slotLabel: idx === 0 ? 'Primary Contact' : `Contact ${idx + 1}`,
       }))
-
     onMappingChange({
       ...mapping,
       contactSlots: newSlots,
+    })
+    setCollapsedContacts((prev) => {
+      const next = new Set(prev)
+      next.delete(slotIndex)
+      return next
+    })
+  }
+
+  const toggleContactCollapse = (slotIndex: number) => {
+    setCollapsedContacts((prev) => {
+      const next = new Set(prev)
+      if (next.has(slotIndex)) next.delete(slotIndex)
+      else next.add(slotIndex)
+      return next
     })
   }
 
@@ -164,29 +184,32 @@ export function LeadColumnMapper({
     return detectedSlot.fields[field] === currentSlot.fields[field] && currentSlot.fields[field] !== null
   }
 
-  const getLeadSectionMappedCount = (fields: readonly LeadFieldKey[]) => {
-    return fields.filter(f => mapping[f] !== null).length
-  }
-
   const getContactSlotMappedCount = (slot: ContactSlot) => {
     return CONTACT_FIELDS.filter(f => slot.fields[f] !== null).length
   }
 
-  const renderLeadFieldSelect = (field: LeadFieldKey, required: boolean = false) => {
-    const currentValue = mapping[field]
-    const autoDetected = isLeadFieldAutoDetected(field)
+  const renderFieldRow = (
+    id: string,
+    label: string,
+    required: boolean,
+    currentValue: string | null,
+    autoDetected: boolean,
+    description: string,
+    onChange: (value: string) => void,
+  ) => {
+    const sample = getSampleValue(headers, rows, currentValue)
 
     return (
-      <div className="flex items-center gap-2">
-        <Label htmlFor={`field-${field}`} className="w-24 shrink-0 text-sm flex items-center gap-1">
-          {LEAD_FIELD_LABELS[field]}
+      <div key={id} className="flex items-center gap-3 py-3">
+        <Label htmlFor={id} className="w-40 shrink-0 text-sm flex items-center gap-1">
+          {label}
           {required && <span className="text-destructive">*</span>}
         </Label>
         <Select
           value={currentValue || NONE_VALUE}
-          onValueChange={(value) => handleLeadFieldChange(field, value)}
+          onValueChange={(value) => onChange(value)}
         >
-          <SelectTrigger id={`field-${field}`} className="flex-1 min-w-0">
+          <SelectTrigger id={id} className="flex-1 min-w-0">
             <SelectValue placeholder="Select column..." />
           </SelectTrigger>
           <SelectContent position="popper" className="max-h-60">
@@ -200,8 +223,20 @@ export function LeadColumnMapper({
             ))}
           </SelectContent>
         </Select>
+        {sample && (
+          <span className="hidden sm:inline-block text-xs text-muted-foreground bg-muted px-2 py-1 rounded max-w-[160px] truncate shrink-0" title={sample}>
+            {sample}
+          </span>
+        )}
         {autoDetected && (
-          <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <CircleCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>Auto-mapped</p>
+            </TooltipContent>
+          </Tooltip>
         )}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -210,56 +245,7 @@ export function LeadColumnMapper({
             </button>
           </TooltipTrigger>
           <TooltipContent side="top">
-            <p>{LEAD_FIELD_DESCRIPTIONS[field]}</p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
-    )
-  }
-
-  const renderContactFieldSelect = (slotIndex: number, field: ContactFieldType) => {
-    const slot = mapping.contactSlots[slotIndex]
-    if (!slot) return null
-
-    const currentValue = slot.fields[field]
-    const autoDetected = isContactFieldAutoDetected(slotIndex, field)
-    const isRequired = field === 'first_name'
-
-    return (
-      <div className="flex items-center gap-2">
-        <Label htmlFor={`contact-${slotIndex}-${field}`} className="w-24 shrink-0 text-sm flex items-center gap-1">
-          {CONTACT_FIELD_LABELS[field]}
-          {isRequired && <span className="text-destructive">*</span>}
-        </Label>
-        <Select
-          value={currentValue || NONE_VALUE}
-          onValueChange={(value) => handleContactFieldChange(slotIndex, field, value)}
-        >
-          <SelectTrigger id={`contact-${slotIndex}-${field}`} className="flex-1 min-w-0">
-            <SelectValue placeholder="Select column..." />
-          </SelectTrigger>
-          <SelectContent position="popper" className="max-h-60">
-            <SelectItem value={NONE_VALUE}>
-              <span className="text-muted-foreground">None</span>
-            </SelectItem>
-            {headers.map((header) => (
-              <SelectItem key={header} value={header} title={header}>
-                {header}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {autoDetected && (
-          <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
-        )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button type="button" className="text-muted-foreground hover:text-foreground shrink-0">
-              <HelpCircle className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p>{CONTACT_FIELD_DESCRIPTIONS[field]}</p>
+            <p>{description}</p>
           </TooltipContent>
         </Tooltip>
       </div>
@@ -271,127 +257,176 @@ export function LeadColumnMapper({
   const canAddMoreContacts = totalContactSlots < MAX_CONTACTS_PER_LEAD
 
   return (
-    <div className="space-y-2">
-      {/* Header */}
-      <div className="space-y-1">
-        <h3 className="text-lg font-semibold">Map Columns</h3>
-        <p className="text-sm text-muted-foreground">
-          We&apos;ve auto-detected your columns. Review and adjust if needed.
-          <span className="inline-flex items-center gap-1 ml-2">
-            <Sparkles className="h-3 w-3 text-amber-500" /> = auto-detected
-          </span>
-        </p>
+    <div className="flex gap-6">
+      {/* Left column: CSV Preview */}
+      <div className="w-[40%] shrink-0">
+        <div className="sticky top-0">
+          <div className="rounded-lg border bg-muted/30 overflow-hidden">
+            <div className="px-4 py-3 border-b bg-muted/50">
+              <h4 className="text-sm font-medium">CSV Preview</h4>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {headers.length} columns, {rows.length} rows
+              </p>
+            </div>
+            <div className="overflow-auto max-h-[calc(100vh-280px)]">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th className="text-left p-2 font-medium text-muted-foreground w-8">#</th>
+                    <th className="text-left p-2 font-medium">Column</th>
+                    <th className="text-left p-2 font-medium">Sample</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {headers.map((header, i) => {
+                    const sample = getSampleValue(headers, rows, header)
+                    return (
+                      <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
+                        <td className="p-2 text-muted-foreground">{i + 1}</td>
+                        <td className="p-2 font-medium">{header}</td>
+                        <td className="p-2 text-muted-foreground truncate max-w-[180px]">
+                          {sample || <span className="italic">empty</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Accordion Sections */}
-      <Accordion type="single" collapsible defaultValue="required" className="w-full">
-        {/* Lead Field Sections */}
-        {LEAD_SECTIONS.map((section) => {
-          const mappedCount = getLeadSectionMappedCount(section.fields)
-          const totalCount = section.fields.length
+      {/* Right column: Mapping Fields */}
+      <div className="flex-1 min-w-0">
+        {/* Header */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold">Map Your Columns</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            We&apos;ve auto-detected your columns. Review and adjust if needed.
+            <span className="inline-flex items-center gap-1 ml-2">
+              <CircleCheck className="h-3 w-3 text-emerald-500" /> = auto-mapped
+            </span>
+          </p>
+        </div>
 
-          return (
-            <AccordionItem key={section.value} value={section.value}>
-              <AccordionTrigger className="text-sm font-medium hover:no-underline">
-                <span className="flex items-center gap-2">
+        {/* Flat Sections */}
+        <div className="space-y-8">
+          {LEAD_SECTIONS.map((section) => (
+            <div key={section.value}>
+              <div className="flex items-center gap-3 mb-3">
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   {section.label}
+                </h4>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+              <div className="divide-y">
+                {section.fields.map((field) =>
+                  renderFieldRow(
+                    `field-${field}`,
+                    LEAD_FIELD_LABELS[field],
+                    section.value === 'required' && field === 'name',
+                    mapping[field],
+                    isLeadFieldAutoDetected(field),
+                    LEAD_FIELD_DESCRIPTIONS[field],
+                    (value) => handleLeadFieldChange(field, value),
+                  )
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* Contact Sections */}
+          {mapping.contactSlots.map((slot, slotIndex) => {
+            const mappedCount = getContactSlotMappedCount(slot)
+            const isCollapsed = slotIndex > 0 && collapsedContacts.has(slotIndex)
+
+            return (
+              <div key={`contact-${slotIndex}`}>
+                <div className="flex items-center gap-3 mb-3">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {slot.slotLabel}
+                  </h4>
                   <Badge
                     variant={mappedCount > 0 ? "default" : "secondary"}
                     className="text-xs"
                   >
-                    {mappedCount}/{totalCount}
+                    {mappedCount}/{CONTACT_FIELDS.length}
                   </Badge>
-                </span>
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="space-y-2 pt-1">
-                  {section.fields.map((field) => (
-                    <div key={field}>
-                      {renderLeadFieldSelect(field, section.value === 'required' && field === 'name')}
-                    </div>
-                  ))}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          )
-        })}
-
-        {/* Contact Sections - Dynamic */}
-        {mapping.contactSlots.map((slot, slotIndex) => {
-          const mappedCount = getContactSlotMappedCount(slot)
-          const totalCount = CONTACT_FIELDS.length
-
-          return (
-            <AccordionItem key={`contact-${slotIndex}`} value={`contact-${slotIndex}`}>
-              <AccordionTrigger className="text-sm font-medium hover:no-underline">
-                <span className="flex items-center gap-2 flex-1">
-                  {slot.slotLabel}
-                  <Badge
-                    variant={mappedCount > 0 ? "default" : "secondary"}
-                    className="text-xs"
-                  >
-                    {mappedCount}/{totalCount}
-                  </Badge>
+                  <div className="flex-1 h-px bg-border" />
                   {slotIndex > 0 && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        removeContactSlot(slotIndex)
-                      }}
-                      className="ml-auto mr-2 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                      title="Remove contact"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
-                </span>
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="space-y-2 pt-1">
-                  {CONTACT_FIELDS.map((field) => (
-                    <div key={field}>
-                      {renderContactFieldSelect(slotIndex, field)}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleContactCollapse(slotIndex)}
+                        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                        title={isCollapsed ? "Expand" : "Collapse"}
+                      >
+                        <ChevronDown className={`h-4 w-4 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeContactSlot(slotIndex)}
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                        title="Remove contact"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                  ))}
+                  )}
                 </div>
-              </AccordionContent>
-            </AccordionItem>
-          )
-        })}
-      </Accordion>
+                {!isCollapsed && (
+                  <div className="divide-y">
+                    {CONTACT_FIELDS.map((field) =>
+                      renderFieldRow(
+                        `contact-${slotIndex}-${field}`,
+                        CONTACT_FIELD_LABELS[field],
+                        field === 'first_name',
+                        slot.fields[field],
+                        isContactFieldAutoDetected(slotIndex, field),
+                        CONTACT_FIELD_DESCRIPTIONS[field],
+                        (value) => handleContactFieldChange(slotIndex, field, value),
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
 
-      {/* Add Contact Button */}
-      {canAddMoreContacts && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addContactSlot}
-          className="w-full mt-2"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Another Contact ({totalContactSlots}/{MAX_CONTACTS_PER_LEAD})
-        </Button>
-      )}
-
-      {/* Validation Status */}
-      <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
-        hasRequiredFields
-          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-          : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-      }`}>
-        {hasRequiredFields ? (
-          <>
-            <Check className="h-4 w-4" />
-            <span>Required field is mapped</span>
-          </>
-        ) : (
-          <>
-            <AlertCircle className="h-4 w-4" />
-            <span>Please map the Company Name column to continue</span>
-          </>
+        {/* Add Contact Button */}
+        {canAddMoreContacts && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addContactSlot}
+            className="w-full mt-6"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Another Contact ({totalContactSlots}/{MAX_CONTACTS_PER_LEAD})
+          </Button>
         )}
+
+        {/* Validation Status */}
+        <div className={`flex items-center gap-2 p-3 rounded-lg text-sm mt-6 ${
+          hasRequiredFields
+            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+            : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+        }`}>
+          {hasRequiredFields ? (
+            <>
+              <Check className="h-4 w-4" />
+              <span>Required field is mapped</span>
+            </>
+          ) : (
+            <>
+              <AlertCircle className="h-4 w-4" />
+              <span>Please map the Company Name column to continue</span>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -1,11 +1,9 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import {
   ArrowLeft,
   ArrowRight,
-  Upload,
-  FileSpreadsheet,
   Check,
   Loader2,
   CheckCircle2,
@@ -14,15 +12,8 @@ import {
   User,
   Briefcase,
   ListTodo,
-  ChevronDown,
+  X,
 } from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -76,7 +67,6 @@ import {
   matchLeadsByName,
   getUniqueLeadNames,
   buildLeadMatchMap,
-  type LeadMatchResult,
 } from "@/lib/lead-matcher"
 import type { LeadDuplicateCheckResult } from "@/lib/lead-duplicate-detector"
 
@@ -90,14 +80,13 @@ const DATA_TYPES: { key: DataType; label: string; description: string; icon: typ
   { key: "tasks", label: "Tasks", description: "To-do items linked to leads", icon: ListTodo },
 ]
 
-const STEPS_WITH_TYPE: { key: ImportStep; label: string; icon: React.ReactNode }[] = [
-  { key: "select-type", label: "Data Type", icon: <FileSpreadsheet className="h-4 w-4" /> },
-  { key: "upload", label: "Upload CSV", icon: <Upload className="h-4 w-4" /> },
-  { key: "map-columns", label: "Map Columns", icon: <FileSpreadsheet className="h-4 w-4" /> },
-  { key: "preview", label: "Preview", icon: <Check className="h-4 w-4" /> },
+const STEPS_WITH_TYPE: { key: ImportStep; label: string }[] = [
+  { key: "select-type", label: "Data Type" },
+  { key: "upload", label: "Upload" },
+  { key: "map-columns", label: "Map Columns" },
+  { key: "preview", label: "Preview" },
 ]
 
-// Field configurations for each entity type
 const CONTACT_FIELDS: FieldConfig[] = [
   { key: 'lead_name', label: 'Company/Lead Name', description: 'The company or lead this contact belongs to (required)', required: true, group: 'required' },
   { key: 'first_name', label: 'First Name', description: 'Contact\'s first name (required)', required: true, group: 'required' },
@@ -125,21 +114,22 @@ const TASK_FIELDS: FieldConfig[] = [
   { key: 'due_date', label: 'Due Date', description: 'When the task is due', required: false, group: 'primary' },
 ]
 
-interface CSVImportModalProps {
+interface CSVImportPageProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onImportComplete: () => void
   defaultDataType?: DataType
 }
 
-export function CSVImportModal({
+export function CSVImportPage({
   open,
   onOpenChange,
   onImportComplete,
   defaultDataType,
-}: CSVImportModalProps) {
+}: CSVImportPageProps) {
   const [currentStep, setCurrentStep] = useState<ImportStep>(defaultDataType ? "upload" : "select-type")
   const [dataType, setDataType] = useState<DataType>(defaultDataType || "leads")
+  const [isClosing, setIsClosing] = useState(false)
 
   // CSV data
   const [parsedCSV, setParsedCSV] = useState<ParsedCSV | null>(null)
@@ -168,8 +158,6 @@ export function CSVImportModal({
 
   // Shared state
   const [checkingDuplicates, setCheckingDuplicates] = useState(false)
-  const [previewCollapsed, setPreviewCollapsed] = useState(true)
-  const [previewExpanded, setPreviewExpanded] = useState(false)
   const [unmatchedCount, setUnmatchedCount] = useState(0)
 
   // Import state
@@ -206,8 +194,6 @@ export function CSVImportModal({
     setTaskMapping(createEmptyTaskMapping())
     setTasks([])
     setCheckingDuplicates(false)
-    setPreviewCollapsed(true)
-    setPreviewExpanded(false)
     setUnmatchedCount(0)
     setImporting(false)
     setImportProgress(0)
@@ -215,9 +201,35 @@ export function CSVImportModal({
   }, [defaultDataType])
 
   const handleClose = useCallback(() => {
-    onOpenChange(false)
-    setTimeout(resetState, 300)
+    setIsClosing(true)
+    setTimeout(() => {
+      onOpenChange(false)
+      setIsClosing(false)
+      resetState()
+    }, 200)
   }, [onOpenChange, resetState])
+
+  // Handle escape key
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleClose()
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [open, handleClose])
+
+  // Lock body scroll when open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [open])
 
   const handleFileSelect = useCallback((file: File) => {
     const reader = new FileReader()
@@ -226,7 +238,6 @@ export function CSVImportModal({
       const parsed = parseCSV(text)
       setParsedCSV(parsed)
 
-      // Auto-detect columns based on data type
       if (dataType === "leads") {
         const detected = detectMultiContactLeadColumnMapping(parsed.headers)
         setDetectedLeadMapping(detected)
@@ -291,7 +302,6 @@ export function CSVImportModal({
 
     try {
       if (dataType === "leads") {
-        // Lead import - check for duplicates (with multi-contact support)
         const parsedLeads = transformToLeadsWithMultipleContacts(parsedCSV.rows, parsedCSV.headers, leadMapping)
 
         const response = await fetch("/api/leads/check-duplicates", {
@@ -315,7 +325,6 @@ export function CSVImportModal({
           setLeads(parsedLeads)
         }
       } else {
-        // For contacts, opportunities, tasks - match lead names
         const response = await fetch("/api/leads?limit=10000", {
           method: "GET",
           headers: { "Content-Type": "application/json" },
@@ -373,7 +382,6 @@ export function CSVImportModal({
       }
     } catch (error) {
       console.error("Error during mapping:", error)
-      // Continue with what we have
       if (dataType === "leads") {
         setLeads(transformToLeadsWithMultipleContacts(parsedCSV.rows, parsedCSV.headers, leadMapping))
       } else if (dataType === "contacts") {
@@ -414,7 +422,6 @@ export function CSVImportModal({
             country: l.country,
             postal_code: l.postal_code,
             source: l.source,
-            // Use contacts array for multi-contact support
             contacts: l.contacts,
           })),
           skip_duplicates: !importDuplicates,
@@ -583,353 +590,340 @@ export function CSVImportModal({
     return 0
   }
 
-  // Determine modal width based on current step
-  const getModalWidth = () => {
-    if (currentStep === "select-type" || currentStep === "upload") return "max-w-lg"
+  const getContentMaxWidth = () => {
     if (currentStep === "importing" || currentStep === "complete") return "max-w-2xl"
-    if (currentStep === "map-columns") return "max-w-2xl" // narrower for accordion layout
-    return "max-w-5xl" // preview needs more space for table
+    if (currentStep === "map-columns") return "max-w-6xl"
+    return "max-w-7xl"
   }
 
-  return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className={`${getModalWidth()} max-h-[90vh] overflow-y-auto`}>
-        <DialogHeader>
-          <DialogTitle>Import {dataTypeInfo?.label || 'Data'} from CSV</DialogTitle>
-          <DialogDescription>
-            Upload a CSV file to bulk import {dataTypeInfo?.label.toLowerCase() || 'data'} into your CRM
-          </DialogDescription>
-        </DialogHeader>
+  if (!open) return null
 
-        {/* Step Indicator - Horizontal Tabs */}
-        {currentStep !== "importing" && currentStep !== "complete" && (
-          <div className="flex items-center border-b overflow-x-auto">
-            {STEPS_WITH_TYPE.filter((s) => defaultDataType ? s.key !== "select-type" : true).map((step, index) => {
-              const actualIndex = defaultDataType ? index : index
-              const adjustedStepIndex = defaultDataType && currentStepIndex > 0 ? currentStepIndex - 1 : currentStepIndex
-              return (
-                <div
-                  key={step.key}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
-                    actualIndex < adjustedStepIndex
-                      ? "text-emerald-600 border-emerald-600 dark:text-emerald-400 dark:border-emerald-400"
-                      : actualIndex === adjustedStepIndex
-                        ? "text-primary border-primary"
-                        : "text-muted-foreground border-transparent"
-                  }`}
-                >
-                  {actualIndex < adjustedStepIndex ? (
-                    <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  ) : (
-                    <span className={`flex items-center justify-center w-5 h-5 rounded-full border text-xs shrink-0 ${
-                      actualIndex === adjustedStepIndex
-                        ? "border-primary"
-                        : "border-muted-foreground"
-                    }`}>
-                      {actualIndex + 1}
-                    </span>
-                  )}
-                  <span>{step.label}</span>
-                </div>
-              )
-            })}
-          </div>
+  const visibleSteps = STEPS_WITH_TYPE.filter((s) => defaultDataType ? s.key !== "select-type" : true)
+  const isCompactStep = currentStep === "select-type" || currentStep === "upload"
+
+  const footerButtons = (
+    <div className="flex justify-between items-center">
+      <Button
+        variant="outline"
+        onClick={handleBack}
+        disabled={currentStep === "upload" && !!defaultDataType || currentStep === "select-type"}
+      >
+        <ArrowLeft className="h-4 w-4 mr-2" />
+        Back
+      </Button>
+      <Button
+        onClick={handleNext}
+        disabled={!canProceed() || checkingDuplicates}
+      >
+        {checkingDuplicates ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            {dataType === "leads" ? "Checking..." : "Matching..."}
+          </>
+        ) : currentStep === "preview" ? (
+          <>
+            Import {getValidCount()} {dataTypeInfo?.label}
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </>
+        ) : (
+          <>
+            Next
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </>
         )}
+      </Button>
+    </div>
+  )
 
-        {/* Step Content */}
-        <div className="py-2">
-          {currentStep === "select-type" && (
-            <div className="grid grid-cols-2 gap-3">
-              {DATA_TYPES.map((type) => {
-                const Icon = type.icon
-                return (
-                  <button
-                    key={type.key}
-                    onClick={() => setDataType(type.key)}
-                    className={`flex flex-col items-start gap-1.5 p-3 rounded-lg border-2 text-left transition-colors ${
-                      dataType === type.key
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-muted-foreground/50"
-                    }`}
-                  >
-                    <div className={`p-1.5 rounded-md ${dataType === type.key ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">{type.label}</p>
-                      <p className="text-xs text-muted-foreground">{type.description}</p>
-                    </div>
-                  </button>
-                )
-              })}
+  return (
+    <div className={`fixed inset-0 z-50 transition-opacity duration-200 ${isClosing ? "opacity-0" : "opacity-100"}`}>
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={handleClose} />
+
+      {isCompactStep ? (
+        /* Compact centered modal for select-type and upload */
+        <div className="relative flex items-center justify-center w-full h-full p-4">
+          <div className={`w-full max-w-lg bg-background rounded-xl border shadow-lg transition-transform duration-200 ${isClosing ? "translate-y-2" : "translate-y-0"}`}>
+            {/* Compact Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="text-lg font-semibold">Import {dataTypeInfo?.label || 'Data'} from CSV</h2>
+              <Button variant="ghost" size="icon" onClick={handleClose} className="shrink-0 -mr-2">
+                <X className="h-5 w-5" />
+              </Button>
             </div>
-          )}
 
-          {currentStep === "upload" && (
-            <CSVUploader onFileSelect={handleFileSelect} dataType={dataType} />
-          )}
+            {/* Content */}
+            <div className="px-6 py-6">
+              {currentStep === "select-type" && (
+                <div className="grid grid-cols-2 gap-4">
+                  {DATA_TYPES.map((type) => {
+                    const Icon = type.icon
+                    return (
+                      <button
+                        key={type.key}
+                        onClick={() => setDataType(type.key)}
+                        className={`flex flex-col items-start gap-2 p-4 rounded-xl border-2 text-left transition-colors ${
+                          dataType === type.key
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-muted-foreground/50"
+                        }`}
+                      >
+                        <div className={`p-2 rounded-lg ${dataType === type.key ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{type.label}</p>
+                          <p className="text-sm text-muted-foreground">{type.description}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
-          {currentStep === "map-columns" && parsedCSV && (
-            <div className="space-y-3">
-              {/* CSV Preview - Collapsible */}
-              <div className="rounded-lg border bg-muted/30">
-                <button
-                  type="button"
-                  onClick={() => setPreviewCollapsed(!previewCollapsed)}
-                  className="w-full flex items-center justify-between p-2 text-sm"
-                >
-                  <span className="font-medium">CSV Preview</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {parsedCSV.headers.length} columns, {parsedCSV.rows.length} rows
-                    </span>
-                    <ChevronDown className={`h-4 w-4 transition-transform ${previewCollapsed ? '' : 'rotate-180'}`} />
-                  </div>
-                </button>
-                {!previewCollapsed && (
-                  <div className="px-3 pb-3">
-                    {parsedCSV.headers.length > 4 && (
-                      <div className="flex justify-end mb-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 text-xs"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setPreviewExpanded(!previewExpanded)
-                          }}
-                        >
-                          {previewExpanded ? "Show fewer columns" : `Show all ${parsedCSV.headers.length} columns`}
-                        </Button>
-                      </div>
-                    )}
-                    <div className="overflow-x-auto max-w-full">
-                      <table className="text-xs">
-                        <thead>
-                          <tr className="border-b">
-                            {(previewExpanded ? parsedCSV.headers : parsedCSV.headers.slice(0, 4)).map((h, i) => (
-                              <th key={i} className="text-left p-1.5 font-medium whitespace-nowrap">
-                                {h}
-                              </th>
-                            ))}
-                            {!previewExpanded && parsedCSV.headers.length > 4 && (
-                              <th className="text-left p-1.5 font-medium text-muted-foreground">
-                                +{parsedCSV.headers.length - 4} more
-                              </th>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {parsedCSV.rows.slice(0, 2).map((row, i) => (
-                            <tr key={i} className="border-b last:border-0">
-                              {(previewExpanded ? row : row.slice(0, 4)).map((cell, j) => (
-                                <td key={j} className="p-1.5 text-muted-foreground truncate max-w-[120px]">
-                                  {cell || "-"}
-                                </td>
-                              ))}
-                              {!previewExpanded && row.length > 4 && (
-                                <td className="p-1.5 text-muted-foreground">...</td>
-                              )}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Column Mapper */}
-              {dataType === "leads" && detectedLeadMapping && (
-                <LeadColumnMapper
-                  headers={parsedCSV.headers}
-                  detectedMapping={detectedLeadMapping}
-                  mapping={leadMapping}
-                  onMappingChange={setLeadMapping}
-                />
-              )}
-              {dataType === "contacts" && detectedContactMapping && (
-                <GenericColumnMapper
-                  headers={parsedCSV.headers}
-                  detectedMapping={detectedContactMapping}
-                  mapping={contactMapping}
-                  onMappingChange={setContactMapping}
-                  fieldConfig={CONTACT_FIELDS}
-                  title="Map Contact Columns"
-                />
-              )}
-              {dataType === "opportunities" && detectedOpportunityMapping && (
-                <GenericColumnMapper
-                  headers={parsedCSV.headers}
-                  detectedMapping={detectedOpportunityMapping}
-                  mapping={opportunityMapping}
-                  onMappingChange={setOpportunityMapping}
-                  fieldConfig={OPPORTUNITY_FIELDS}
-                  title="Map Opportunity Columns"
-                />
-              )}
-              {dataType === "tasks" && detectedTaskMapping && (
-                <GenericColumnMapper
-                  headers={parsedCSV.headers}
-                  detectedMapping={detectedTaskMapping}
-                  mapping={taskMapping}
-                  onMappingChange={setTaskMapping}
-                  fieldConfig={TASK_FIELDS}
-                  title="Map Task Columns"
-                />
+              {currentStep === "upload" && (
+                <CSVUploader onFileSelect={handleFileSelect} dataType={dataType} />
               )}
             </div>
-          )}
 
-          {currentStep === "preview" && (
-            <div className="space-y-4">
-              {checkingDuplicates ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-4">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    {dataType === "leads" ? "Checking for duplicates..." : "Matching to existing leads..."}
+            {/* Compact Footer */}
+            <div className="px-6 py-4 border-t">
+              {footerButtons}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Full-screen panel for map-columns, preview, importing, complete */
+        <div className={`relative w-full h-full bg-background flex flex-col transition-transform duration-200 ${isClosing ? "translate-y-2" : "translate-y-0"}`}>
+          {/* Sticky Header */}
+          {currentStep !== "importing" && currentStep !== "complete" && (
+            <div className="shrink-0 border-b bg-background">
+              <div className="flex items-center justify-between px-6 py-4">
+                <div>
+                  <h1 className="text-xl font-semibold">Import {dataTypeInfo?.label || 'Data'} from CSV</h1>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Upload a CSV file to bulk import {dataTypeInfo?.label.toLowerCase() || 'data'} into your CRM
                   </p>
                 </div>
-              ) : (
-                <>
-                  {dataType === "leads" && <LeadPreviewTable leads={leads} onRemove={handleRemoveLead} />}
-                  {dataType === "contacts" && (
-                    <GenericPreviewTable entities={contacts} entityType="contact" />
-                  )}
-                  {dataType === "opportunities" && (
-                    <GenericPreviewTable entities={opportunities} entityType="opportunity" />
-                  )}
-                  {dataType === "tasks" && (
-                    <GenericPreviewTable entities={tasks} entityType="task" />
-                  )}
+                <Button variant="ghost" size="icon" onClick={handleClose} className="shrink-0">
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
 
-                  {dataType === "leads" && duplicateCount > 0 && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg border">
-                      <Checkbox
-                        id="import-duplicates"
-                        checked={importDuplicates}
-                        onCheckedChange={(checked) => setImportDuplicates(checked === true)}
-                      />
-                      <Label htmlFor="import-duplicates" className="text-sm cursor-pointer">
-                        Import duplicates anyway ({duplicateCount} found)
-                      </Label>
-                    </div>
+              {/* Stepper */}
+              <div className="px-6 pb-4">
+                <div className="flex items-center">
+                  {visibleSteps.map((step, index) => {
+                    const stepIdx = STEPS_WITH_TYPE.findIndex((s) => s.key === step.key)
+                    const isCompleted = stepIdx < currentStepIndex
+                    const isCurrent = stepIdx === currentStepIndex
+                    const isLast = index === visibleSteps.length - 1
+
+                    return (
+                      <div key={step.key} className="flex items-center flex-1 last:flex-none">
+                        <div className="flex items-center gap-2">
+                          <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium transition-colors ${
+                            isCompleted
+                              ? "bg-emerald-500 text-white"
+                              : isCurrent
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
+                          }`}>
+                            {isCompleted ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                          </div>
+                          <span className={`text-sm font-medium whitespace-nowrap ${
+                            isCurrent ? "text-foreground" : isCompleted ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+                          }`}>
+                            {step.label}
+                          </span>
+                        </div>
+                        {!isLast && (
+                          <div className={`flex-1 h-px mx-4 ${
+                            isCompleted ? "bg-emerald-500" : "bg-border"
+                          }`} />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto">
+            <div className={`mx-auto ${getContentMaxWidth()} px-6 py-8`}>
+              {currentStep === "map-columns" && parsedCSV && (
+                <>
+                  {dataType === "leads" && detectedLeadMapping && (
+                    <LeadColumnMapper
+                      headers={parsedCSV.headers}
+                      rows={parsedCSV.rows}
+                      detectedMapping={detectedLeadMapping}
+                      mapping={leadMapping}
+                      onMappingChange={setLeadMapping}
+                    />
+                  )}
+                  {dataType === "contacts" && detectedContactMapping && (
+                    <GenericColumnMapper
+                      headers={parsedCSV.headers}
+                      rows={parsedCSV.rows}
+                      detectedMapping={detectedContactMapping}
+                      mapping={contactMapping}
+                      onMappingChange={setContactMapping}
+                      fieldConfig={CONTACT_FIELDS}
+                      title="Map Contact Columns"
+                    />
+                  )}
+                  {dataType === "opportunities" && detectedOpportunityMapping && (
+                    <GenericColumnMapper
+                      headers={parsedCSV.headers}
+                      rows={parsedCSV.rows}
+                      detectedMapping={detectedOpportunityMapping}
+                      mapping={opportunityMapping}
+                      onMappingChange={setOpportunityMapping}
+                      fieldConfig={OPPORTUNITY_FIELDS}
+                      title="Map Opportunity Columns"
+                    />
+                  )}
+                  {dataType === "tasks" && detectedTaskMapping && (
+                    <GenericColumnMapper
+                      headers={parsedCSV.headers}
+                      rows={parsedCSV.rows}
+                      detectedMapping={detectedTaskMapping}
+                      mapping={taskMapping}
+                      onMappingChange={setTaskMapping}
+                      fieldConfig={TASK_FIELDS}
+                      title="Map Task Columns"
+                    />
                   )}
                 </>
               )}
-            </div>
-          )}
 
-          {currentStep === "importing" && (
-            <div className="flex flex-col items-center justify-center py-12 gap-6">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
-              <div className="text-center">
-                <h3 className="text-lg font-semibold">Importing {dataTypeInfo?.label.toLowerCase()}...</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Please wait while we import your {dataTypeInfo?.label.toLowerCase()}
-                </p>
-              </div>
-              <Progress value={importProgress} className="w-64" />
-            </div>
-          )}
+              {currentStep === "preview" && (
+                <div className="space-y-4">
+                  {checkingDuplicates ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-4">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        {dataType === "leads" ? "Checking for duplicates..." : "Matching to existing leads..."}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {dataType === "leads" && <LeadPreviewTable leads={leads} onRemove={handleRemoveLead} />}
+                      {dataType === "contacts" && (
+                        <GenericPreviewTable entities={contacts} entityType="contact" />
+                      )}
+                      {dataType === "opportunities" && (
+                        <GenericPreviewTable entities={opportunities} entityType="opportunity" />
+                      )}
+                      {dataType === "tasks" && (
+                        <GenericPreviewTable entities={tasks} entityType="task" />
+                      )}
 
-          {currentStep === "complete" && importResult && (
-            <div className="space-y-6 py-4">
-              {importResult.success ? (
-                <Alert className="border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                  <AlertTitle className="text-emerald-700 dark:text-emerald-400">
-                    Import Complete!
-                  </AlertTitle>
-                  <AlertDescription className="text-emerald-600 dark:text-emerald-300">
-                    Successfully imported {importResult.imported} {dataTypeInfo?.label.toLowerCase()}.
-                    {importResult.contacts_created ? ` Created ${importResult.contacts_created} contact${importResult.contacts_created !== 1 ? "s" : ""}.` : ""}
-                    {importResult.skipped_duplicates ? ` Skipped ${importResult.skipped_duplicates} duplicate${importResult.skipped_duplicates !== 1 ? "s" : ""}.` : ""}
-                    {importResult.skipped_unmatched ? ` Skipped ${importResult.skipped_unmatched} with unmatched leads.` : ""}
-                    {importResult.failed > 0 && ` Failed to import ${importResult.failed}.`}
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-5 w-5" />
-                  <AlertTitle>Import Failed</AlertTitle>
-                  <AlertDescription>
-                    {importResult.errors?.[0] || "An error occurred during import."}
-                  </AlertDescription>
-                </Alert>
+                      {dataType === "leads" && duplicateCount > 0 && (
+                        <div className="flex items-center gap-2 p-3 rounded-lg border">
+                          <Checkbox
+                            id="import-duplicates"
+                            checked={importDuplicates}
+                            onCheckedChange={(checked) => setImportDuplicates(checked === true)}
+                          />
+                          <Label htmlFor="import-duplicates" className="text-sm cursor-pointer">
+                            Import duplicates anyway ({duplicateCount} found)
+                          </Label>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               )}
 
-              {/* Stats */}
-              <div className={`grid gap-4 ${importResult.contacts_created ? 'grid-cols-4' : 'grid-cols-3'}`}>
-                <div className="rounded-lg border p-4 text-center">
-                  <p className="text-2xl font-bold text-emerald-600">{importResult.imported}</p>
-                  <p className="text-sm text-muted-foreground">{dataType === "leads" ? "Leads" : "Imported"}</p>
-                </div>
-                {importResult.contacts_created !== undefined && importResult.contacts_created > 0 && (
-                  <div className="rounded-lg border p-4 text-center">
-                    <p className="text-2xl font-bold text-indigo-600">{importResult.contacts_created}</p>
-                    <p className="text-sm text-muted-foreground">Contacts</p>
+              {currentStep === "importing" && (
+                <div className="flex flex-col items-center justify-center py-24 gap-6">
+                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold">Importing {dataTypeInfo?.label.toLowerCase()}...</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Please wait while we import your {dataTypeInfo?.label.toLowerCase()}
+                    </p>
                   </div>
-                )}
-                <div className="rounded-lg border p-4 text-center">
-                  <p className="text-2xl font-bold text-amber-600">
-                    {(importResult.skipped_duplicates || 0) + (importResult.skipped_unmatched || 0)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Skipped</p>
+                  <Progress value={importProgress} className="w-64" />
                 </div>
-                <div className="rounded-lg border p-4 text-center">
-                  <p className="text-2xl font-bold text-rose-600">{importResult.failed}</p>
-                  <p className="text-sm text-muted-foreground">Failed</p>
-                </div>
-              </div>
+              )}
 
-              <div className="flex justify-center gap-3">
-                <Button variant="outline" onClick={resetState}>
-                  Import More
-                </Button>
-                <Button onClick={handleClose}>
-                  Done
-                </Button>
+              {currentStep === "complete" && importResult && (
+                <div className="max-w-2xl mx-auto space-y-6 py-8">
+                  {importResult.success ? (
+                    <Alert className="border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                      <AlertTitle className="text-emerald-700 dark:text-emerald-400">
+                        Import Complete!
+                      </AlertTitle>
+                      <AlertDescription className="text-emerald-600 dark:text-emerald-300">
+                        Successfully imported {importResult.imported} {dataTypeInfo?.label.toLowerCase()}.
+                        {importResult.contacts_created ? ` Created ${importResult.contacts_created} contact${importResult.contacts_created !== 1 ? "s" : ""}.` : ""}
+                        {importResult.skipped_duplicates ? ` Skipped ${importResult.skipped_duplicates} duplicate${importResult.skipped_duplicates !== 1 ? "s" : ""}.` : ""}
+                        {importResult.skipped_unmatched ? ` Skipped ${importResult.skipped_unmatched} with unmatched leads.` : ""}
+                        {importResult.failed > 0 && ` Failed to import ${importResult.failed}.`}
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-5 w-5" />
+                      <AlertTitle>Import Failed</AlertTitle>
+                      <AlertDescription>
+                        {importResult.errors?.[0] || "An error occurred during import."}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className={`grid gap-4 ${importResult.contacts_created ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                    <div className="rounded-lg border p-4 text-center">
+                      <p className="text-2xl font-bold text-emerald-600">{importResult.imported}</p>
+                      <p className="text-sm text-muted-foreground">{dataType === "leads" ? "Leads" : "Imported"}</p>
+                    </div>
+                    {importResult.contacts_created !== undefined && importResult.contacts_created > 0 && (
+                      <div className="rounded-lg border p-4 text-center">
+                        <p className="text-2xl font-bold text-indigo-600">{importResult.contacts_created}</p>
+                        <p className="text-sm text-muted-foreground">Contacts</p>
+                      </div>
+                    )}
+                    <div className="rounded-lg border p-4 text-center">
+                      <p className="text-2xl font-bold text-amber-600">
+                        {(importResult.skipped_duplicates || 0) + (importResult.skipped_unmatched || 0)}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Skipped</p>
+                    </div>
+                    <div className="rounded-lg border p-4 text-center">
+                      <p className="text-2xl font-bold text-rose-600">{importResult.failed}</p>
+                      <p className="text-sm text-muted-foreground">Failed</p>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center gap-3">
+                    <Button variant="outline" onClick={resetState}>
+                      Import More
+                    </Button>
+                    <Button onClick={handleClose}>
+                      Done
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Sticky Footer */}
+          {currentStep !== "importing" && currentStep !== "complete" && (
+            <div className="shrink-0 border-t bg-background">
+              <div className="px-6 py-4 max-w-6xl mx-auto">
+                {footerButtons}
               </div>
             </div>
           )}
         </div>
-
-        {/* Navigation */}
-        {currentStep !== "importing" && currentStep !== "complete" && (
-          <div className="flex justify-between pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={handleBack}
-              disabled={currentStep === "upload" && !!defaultDataType || currentStep === "select-type"}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
-            <Button
-              onClick={handleNext}
-              disabled={!canProceed() || checkingDuplicates}
-            >
-              {checkingDuplicates ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {dataType === "leads" ? "Checking..." : "Matching..."}
-                </>
-              ) : currentStep === "preview" ? (
-                <>
-                  Import {getValidCount()} {dataTypeInfo?.label}
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </>
-              ) : (
-                <>
-                  Next
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </>
-              )}
-            </Button>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+      )}
+    </div>
   )
 }

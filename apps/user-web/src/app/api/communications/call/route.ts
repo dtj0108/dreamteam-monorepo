@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { getSession } from '@dreamteam/auth/session'
 import { makeCall, formatE164, isValidE164 } from '@/lib/twilio'
+import { reserveCallMinutes, updateReservationCallSid, cancelReservation } from '@/lib/call-with-minutes'
+import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
 import { fireWebhooks } from '@/lib/make-webhooks'
 
 export async function POST(request: NextRequest) {
@@ -9,6 +11,11 @@ export async function POST(request: NextRequest) {
     const session = await getSession()
     if (!session?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'No workspace selected' }, { status: 400 })
     }
 
     const body = await request.json()
@@ -75,6 +82,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create record' }, { status: 500 })
     }
 
+    // Reserve call minutes before initiating the call
+    const reservation = await reserveCallMinutes(
+      workspaceId,
+      comm.id, // temporary ID until we get Twilio SID
+      ownedNumber.phone_number,
+      formattedPhone,
+      'outbound'
+    )
+
+    if (!reservation.success) {
+      // Update comm record to reflect the failure
+      await supabase
+        .from('communications')
+        .update({ twilio_status: 'failed', error_message: reservation.error })
+        .eq('id', comm.id)
+
+      return NextResponse.json(
+        { error: reservation.error || 'Insufficient call minutes', errorCode: 'INSUFFICIENT_MINUTES' },
+        { status: 402 }
+      )
+    }
+
     // Initiate call via Twilio
     const result = await makeCall({
       to: formattedPhone,
@@ -93,30 +122,29 @@ export async function POST(request: NextRequest) {
       .eq('id', comm.id)
 
     if (!result.success) {
+      // Call failed to initiate — cancel reservation and refund minutes
+      await cancelReservation(comm.id)
       return NextResponse.json(
         { error: result.error || 'Failed to initiate call' },
         { status: 500 }
       )
     }
 
-    // Fire call.started webhook
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('default_workspace_id')
-      .eq('id', session.id)
-      .single()
-
-    if (profile?.default_workspace_id) {
-      fireWebhooks('call.started', {
-        id: comm.id,
-        twilio_sid: result.sid,
-        from: ownedNumber.phone_number,
-        to: formattedPhone,
-        status: result.status,
-        lead_id: leadId,
-        contact_id: contactId,
-      }, profile.default_workspace_id)
+    // Call initiated — update reservation with real Twilio SID
+    if (result.sid) {
+      await updateReservationCallSid(comm.id, result.sid)
     }
+
+    // Fire call.started webhook
+    fireWebhooks('call.started', {
+      id: comm.id,
+      twilio_sid: result.sid,
+      from: ownedNumber.phone_number,
+      to: formattedPhone,
+      status: result.status,
+      lead_id: leadId,
+      contact_id: contactId,
+    }, workspaceId)
 
     return NextResponse.json({
       success: true,

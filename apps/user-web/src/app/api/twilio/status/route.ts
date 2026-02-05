@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { validateTwilioWebhook } from '@/lib/twilio'
+import { handleCallStatusUpdate } from '@/lib/call-with-minutes'
 import { fireWebhooks } from "@/lib/make-webhooks"
 import { triggerCallCompleted, triggerCallMissed, type Call, type Lead, type Contact } from '@/lib/workflow-trigger-service'
 
@@ -90,6 +91,17 @@ export async function POST(request: NextRequest) {
     }
 
     if (CallSid && ['completed', 'busy', 'no-answer', 'canceled', 'failed'].includes(status)) {
+      // Reconcile call minute reservations (refund unused minutes)
+      try {
+        await handleCallStatusUpdate(
+          CallSid,
+          status,
+          CallDuration ? parseInt(CallDuration) : undefined
+        )
+      } catch (minutesError) {
+        console.error('Failed to reconcile call minutes:', minutesError)
+      }
+
       const { data: comm } = await supabase
         .from('communications')
         .select('id, user_id, from_number, to_number, direction, lead_id, contact_id, duration_seconds')

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { getSession } from '@dreamteam/auth/session'
-import { sendSMS, formatE164, isValidE164 } from '@/lib/twilio'
+import { formatE164, isValidE164 } from '@/lib/twilio'
+import { sendSMSWithCredits } from '@/lib/sms-with-credits'
+import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
 import { fireWebhooks } from "@/lib/make-webhooks"
 
 export async function POST(request: NextRequest) {
@@ -9,6 +11,11 @@ export async function POST(request: NextRequest) {
     const session = await getSession()
     if (!session?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'No workspace selected' }, { status: 400 })
     }
 
     const body = await request.json()
@@ -81,8 +88,9 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // Send SMS via Twilio
-    const result = await sendSMS({
+    // Send SMS via Twilio with credit check and deduction
+    const result = await sendSMSWithCredits({
+      workspaceId,
       to: formattedPhone,
       from: ownedNumber.phone_number,
       body: message,
@@ -92,11 +100,19 @@ export async function POST(request: NextRequest) {
     await supabase
       .from('communications')
       .update({
-        twilio_sid: result.sid,
-        twilio_status: result.success ? result.status : 'failed',
+        twilio_sid: result.messageSid || null,
+        twilio_status: result.success ? 'queued' : 'failed',
         error_message: result.error,
       })
       .eq('id', comm.id)
+
+    if (!result.success) {
+      const status = result.errorCode === 'INSUFFICIENT_CREDITS' ? 402 : 500
+      return NextResponse.json(
+        { error: result.error || 'Failed to send SMS', errorCode: result.errorCode },
+        { status }
+      )
+    }
 
     // Update or create conversation thread
     await supabase
@@ -113,38 +129,21 @@ export async function POST(request: NextRequest) {
       })
 
     // Fire webhook for Make.com integrations
-    if (result.success) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("default_workspace_id")
-        .eq("id", session.id)
-        .single()
-
-      if (profile?.default_workspace_id) {
-        fireWebhooks("sms.sent", {
-          id: comm.id,
-          twilio_sid: result.sid,
-          from: ownedNumber.phone_number,
-          to: formattedPhone,
-          body: message,
-          status: result.status,
-          lead_id: leadId,
-          contact_id: contactId,
-        }, profile.default_workspace_id)
-      }
-    }
-
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || 'Failed to send SMS' },
-        { status: 500 }
-      )
-    }
+    fireWebhooks("sms.sent", {
+      id: comm.id,
+      twilio_sid: result.messageSid,
+      from: ownedNumber.phone_number,
+      to: formattedPhone,
+      body: message,
+      status: 'queued',
+      lead_id: leadId,
+      contact_id: contactId,
+    }, workspaceId)
 
     return NextResponse.json({
       success: true,
       communicationId: comm.id,
-      sid: result.sid,
+      sid: result.messageSid,
     })
   } catch (error) {
     console.error('Error sending SMS:', error)

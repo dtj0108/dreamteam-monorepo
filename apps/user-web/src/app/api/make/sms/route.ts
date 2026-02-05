@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 import { getAuthContext, isApiKeyAuth } from "@/lib/api-auth"
-import { sendSMS, formatE164, isValidE164 } from "@/lib/twilio"
+import { formatE164, isValidE164 } from "@/lib/twilio"
+import { sendSMSWithCredits } from "@/lib/sms-with-credits"
 import { fireWebhooks } from "@/lib/make-webhooks"
 
 /**
@@ -81,8 +82,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
-    // Send SMS via Twilio
-    const result = await sendSMS({
+    // Send SMS via Twilio with credit check and deduction
+    const result = await sendSMSWithCredits({
+      workspaceId: auth.workspaceId,
       to: formattedPhone,
       from: ownedNumber.phone_number,
       body: message,
@@ -92,35 +94,36 @@ export async function POST(request: NextRequest) {
     await supabase
       .from("communications")
       .update({
-        twilio_sid: result.sid,
-        twilio_status: result.success ? result.status : "failed",
+        twilio_sid: result.messageSid || null,
+        twilio_status: result.success ? "queued" : "failed",
         error_message: result.error,
       })
       .eq("id", comm.id)
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error || "Failed to send SMS" }, { status: 500 })
+      const status = result.errorCode === "INSUFFICIENT_CREDITS" ? 402 : 500
+      return NextResponse.json({ error: result.error || "Failed to send SMS", errorCode: result.errorCode }, { status })
     }
 
     // Fire webhook
     fireWebhooks("sms.sent", {
       id: comm.id,
-      twilio_sid: result.sid,
+      twilio_sid: result.messageSid,
       from: ownedNumber.phone_number,
       to: formattedPhone,
       body: message,
-      status: result.status,
+      status: "queued",
       lead_id,
       contact_id,
     }, auth.workspaceId)
 
     return NextResponse.json({
       id: comm.id,
-      twilio_sid: result.sid,
+      twilio_sid: result.messageSid,
       from: ownedNumber.phone_number,
       to: formattedPhone,
       body: message,
-      status: result.status,
+      status: "queued",
     }, { status: 201 })
   } catch (error) {
     console.error("Error in make/sms POST:", error)
