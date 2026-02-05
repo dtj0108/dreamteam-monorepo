@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
 import { listOwnedNumbers } from "@/lib/twilio"
+import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
 
 // POST /api/twilio/numbers/sync - Sync phone numbers from Twilio to database
 export async function POST() {
@@ -12,14 +13,10 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get user's default workspace
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("default_workspace_id")
-      .eq("id", user.id)
-      .single()
+    // Get user's current workspace
+    const workspaceId = await getCurrentWorkspaceId(user.id)
 
-    if (!profile?.default_workspace_id) {
+    if (!workspaceId) {
       return NextResponse.json(
         { error: "No workspace found. Please set up your workspace first." },
         { status: 400 }
@@ -36,11 +33,11 @@ export async function POST() {
       )
     }
 
-    // Get existing numbers from database
+    // Get existing numbers from database for this workspace
     const { data: existingNumbers } = await supabase
       .from("twilio_numbers")
       .select("twilio_sid")
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     const existingSids = new Set(existingNumbers?.map((n) => n.twilio_sid) || [])
 
@@ -66,7 +63,7 @@ export async function POST() {
       .insert(
         missingNumbers.map((n, index) => ({
           user_id: user.id,
-          workspace_id: profile.default_workspace_id,
+          workspace_id: workspaceId,
           twilio_sid: n.sid,
           phone_number: n.phoneNumber,
           friendly_name: n.friendlyName,
