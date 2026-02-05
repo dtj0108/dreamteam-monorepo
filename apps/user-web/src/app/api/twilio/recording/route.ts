@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { validateTwilioWebhook, downloadRecording } from '@/lib/twilio'
 import { fireWebhooks } from "@/lib/make-webhooks"
+import { triggerVoicemailReceived, type Call, type Lead, type Contact } from '@/lib/workflow-trigger-service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -100,6 +101,52 @@ export async function POST(request: NextRequest) {
         duration_seconds: parseInt(RecordingDuration),
         storage_path: storagePath,
       }, profile.default_workspace_id)
+    }
+
+    // Trigger voicemail_received workflow
+    // Fetch full communication details to get lead_id and contact_id
+    const { data: fullComm } = await supabase
+      .from('communications')
+      .select('id, lead_id, contact_id, direction, twilio_status, from_number, to_number')
+      .eq('id', communication.id)
+      .single()
+
+    if (fullComm) {
+      const callData: Call = {
+        id: fullComm.id,
+        twilio_sid: CallSid,
+        direction: fullComm.direction as 'inbound' | 'outbound',
+        status: fullComm.twilio_status || 'completed',
+        from_number: fullComm.from_number,
+        to_number: fullComm.to_number,
+        duration_seconds: parseInt(RecordingDuration),
+        recording_url: RecordingUrl,
+        recording_sid: RecordingSid,
+      }
+
+      let leadData: Lead | null = null
+      let contactData: Contact | null = null
+
+      if (fullComm.lead_id) {
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('id, name, status, notes, user_id')
+          .eq('id', fullComm.lead_id)
+          .single()
+        leadData = lead as Lead | null
+      }
+
+      if (fullComm.contact_id) {
+        const { data: contact } = await supabase
+          .from('contacts')
+          .select('id, first_name, last_name, email, phone')
+          .eq('id', fullComm.contact_id)
+          .single()
+        contactData = contact as Contact | null
+      }
+
+      // Trigger voicemail workflow
+      triggerVoicemailReceived(callData, leadData, contactData, communication.user_id)
     }
 
     return NextResponse.json({ success: true })

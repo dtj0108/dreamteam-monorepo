@@ -8,6 +8,7 @@ interface UseWorkspaceFilesOptions {
   type?: FileCategory
   query?: string
   channelId?: string
+  dmConversationId?: string
   uploaderId?: string
 }
 
@@ -26,6 +27,7 @@ export function useWorkspaceFiles({
   type,
   query,
   channelId,
+  dmConversationId,
   uploaderId,
 }: UseWorkspaceFilesOptions): UseWorkspaceFilesReturn {
   const [files, setFiles] = useState<WorkspaceFile[]>([])
@@ -49,6 +51,7 @@ export function useWorkspaceFiles({
         if (type) params.set("type", type)
         if (query) params.set("q", query)
         if (channelId) params.set("channelId", channelId)
+        if (dmConversationId) params.set("dmConversationId", dmConversationId)
         if (uploaderId) params.set("uploaderId", uploaderId)
         if (loadMore && cursor) params.set("cursor", cursor)
 
@@ -93,14 +96,14 @@ export function useWorkspaceFiles({
         setIsLoading(false)
       }
     },
-    [workspaceId, type, query, channelId, uploaderId, cursor]
+    [workspaceId, type, query, channelId, dmConversationId, uploaderId, cursor]
   )
 
   // Refetch when filters change
   useEffect(() => {
     setCursor(null) // Reset cursor when filters change
     fetchFiles(false)
-  }, [workspaceId, type, query, channelId, uploaderId])
+  }, [workspaceId, type, query, channelId, dmConversationId, uploaderId])
 
   const loadMore = useCallback(() => {
     if (hasMore && !isLoading) {

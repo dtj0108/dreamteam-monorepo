@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { validateTwilioWebhook, VoiceResponse } from '@/lib/twilio'
 import { fireWebhooks } from "@/lib/make-webhooks"
+import { triggerCallReceived, type Call, type Lead, type Contact } from '@/lib/workflow-trigger-service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
       const userId = (contact.leads as unknown as { user_id: string }).user_id
 
       // Log the incoming call
-      await supabase.from('communications').insert({
+      const { data: commRecord } = await supabase.from('communications').insert({
         user_id: userId,
         lead_id: contact.lead_id,
         contact_id: contact.id,
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
         from_number: From,
         to_number: To,
         triggered_by: 'inbound',
-      })
+      }).select('id').single()
 
       // Fire webhook for Make.com integrations
       const { data: profile } = await supabase
@@ -62,6 +63,29 @@ export async function POST(request: NextRequest) {
           contact_id: contact.id,
           lead_id: contact.lead_id,
         }, profile.default_workspace_id)
+      }
+
+      // Trigger call_received workflows
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('id, name, status, notes, user_id')
+        .eq('id', contact.lead_id)
+        .single()
+
+      if (lead) {
+        const callData: Call = {
+          id: commRecord?.id || CallSid,
+          twilio_sid: CallSid,
+          direction: 'inbound',
+          status: CallStatus,
+          from_number: From,
+          to_number: To,
+        }
+        const contactData: Contact = {
+          id: contact.id,
+          first_name: contact.first_name,
+        }
+        triggerCallReceived(callData, lead as Lead, contactData, userId)
       }
     }
 

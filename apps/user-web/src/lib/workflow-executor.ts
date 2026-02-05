@@ -1,4 +1,4 @@
-import { sendSMS, makeCall, formatE164, getTwilioPhoneNumber } from './twilio'
+import { sendSMS, formatE164, getTwilioPhoneNumber } from './twilio'
 import { sendEmail as sendNylasEmail, isNylasConfigured } from './nylas'
 import { createAdminClient } from './supabase-server'
 import type { WorkflowAction, ActionType, TriggerType, ConditionActionConfig } from '@/types/workflow'
@@ -38,6 +38,16 @@ export interface WorkflowContext {
     id: string
     title: string
     is_completed: boolean
+  }
+  call?: {
+    id: string
+    twilio_sid: string
+    direction: 'inbound' | 'outbound'
+    status: string
+    from_number: string
+    to_number: string
+    duration_seconds?: number
+    recording_url?: string
   }
   customFieldValues?: Record<string, string>  // field_id -> value for custom fields
 }
@@ -100,6 +110,11 @@ interface ActionConfig {
   // For add_tag / remove_tag
   tags?: Array<{ id: string; name: string; color?: string }>
   remove_all?: boolean
+  // For log_activity
+  activity_type?: 'call' | 'email' | 'meeting' | 'note' | 'task'
+  activity_subject?: string
+  activity_description?: string
+  activity_completed?: boolean
 }
 
 export interface ExecutionResult {
@@ -326,66 +341,6 @@ export async function executeWorkflowAction(
         const result = await sendSMS({
           to: formattedPhone,
           body: message,
-        })
-
-        // Update status
-        if (comm) {
-          await supabase
-            .from('communications')
-            .update({
-              twilio_sid: result.sid,
-              twilio_status: result.success ? result.status : 'failed',
-              error_message: result.error,
-            })
-            .eq('id', comm.id)
-        }
-
-        return {
-          success: result.success,
-          actionType: action.type,
-          actionId: action.id,
-          error: result.error,
-          data: { sid: result.sid, communicationId: comm?.id },
-          executedAt,
-        }
-      }
-
-      case 'make_call': {
-        const phone = getPhoneNumber(config, context)
-        if (!phone) {
-          return {
-            success: false,
-            actionType: action.type,
-            actionId: action.id,
-            error: 'No phone number available for call',
-            executedAt,
-          }
-        }
-
-        const formattedPhone = formatE164(phone)
-
-        // Create communication record
-        const { data: comm } = await supabase
-          .from('communications')
-          .insert({
-            user_id: context.userId,
-            lead_id: context.leadId || null,
-            contact_id: context.contactId || null,
-            type: 'call',
-            direction: 'outbound',
-            from_number: getTwilioPhoneNumber(),
-            to_number: formattedPhone,
-            twilio_status: 'pending',
-            triggered_by: 'workflow',
-            workflow_id: workflowId,
-          })
-          .select()
-          .single()
-
-        // Make call via Twilio
-        const result = await makeCall({
-          to: formattedPhone,
-          record: config.record ?? true,
         })
 
         // Update status
@@ -1371,6 +1326,75 @@ export async function executeWorkflowAction(
           actionType: action.type,
           actionId: action.id,
           data: { leadId: context.leadId, tagsRemoved: tags.map(t => t.name) },
+          executedAt,
+        }
+      }
+
+      case 'log_activity': {
+        // Get activity type, default to 'note'
+        const activityType = config.activity_type || 'note'
+        const activitySubject = replaceTemplateVariables(config.activity_subject || `Workflow ${activityType}`, context)
+        const activityDescription = config.activity_description
+          ? replaceTemplateVariables(config.activity_description, context)
+          : null
+        const isCompleted = config.activity_completed !== false // default to true
+
+        // Activities require a contact_id - get from context or find one from the lead
+        let contactId = context.contactId
+        if (!contactId && context.leadId) {
+          const { data: contacts } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('lead_id', context.leadId)
+            .limit(1)
+          contactId = contacts?.[0]?.id
+        }
+
+        if (!contactId) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No contact found to log activity for',
+            executedAt,
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('activities')
+          .insert({
+            profile_id: context.userId,
+            type: activityType,
+            subject: activitySubject,
+            description: activityDescription,
+            contact_id: contactId,
+            is_completed: isCompleted,
+            completed_at: isCompleted ? new Date().toISOString() : null,
+          })
+          .select('id')
+          .single()
+
+        if (error) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: `Failed to log activity: ${error.message}`,
+            executedAt,
+          }
+        }
+
+        return {
+          success: true,
+          actionType: action.type,
+          actionId: action.id,
+          data: {
+            activityId: data.id,
+            contactId,
+            activityType,
+            subject: activitySubject,
+            isCompleted,
+          },
           executedAt,
         }
       }

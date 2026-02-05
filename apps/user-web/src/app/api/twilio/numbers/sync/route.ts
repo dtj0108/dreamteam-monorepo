@@ -12,6 +12,20 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Get user's default workspace
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("default_workspace_id")
+      .eq("id", user.id)
+      .single()
+
+    if (!profile?.default_workspace_id) {
+      return NextResponse.json(
+        { error: "No workspace found. Please set up your workspace first." },
+        { status: 400 }
+      )
+    }
+
     // Get all numbers from Twilio
     const twilioResult = await listOwnedNumbers()
 
@@ -52,6 +66,7 @@ export async function POST() {
       .insert(
         missingNumbers.map((n, index) => ({
           user_id: user.id,
+          workspace_id: profile.default_workspace_id,
           twilio_sid: n.sid,
           phone_number: n.phoneNumber,
           friendly_name: n.friendlyName,

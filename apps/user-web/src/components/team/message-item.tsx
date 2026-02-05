@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { formatDistanceToNow } from "date-fns"
-import { MessageSquare, MoreHorizontal, Check, CheckCheck, AlertCircle, Copy, Edit2, Bookmark } from "lucide-react"
+import { MessageSquare, MoreHorizontal, Check, CheckCheck, AlertCircle, Copy, Edit2, Bookmark, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -93,7 +94,7 @@ interface MessageItemProps {
   isLastInGroup?: boolean
   onReact?: (messageId: string, emoji: string) => void
   onReply?: (messageId: string) => void
-  onEdit?: (messageId: string) => void
+  onEdit?: (messageId: string, newContent: string) => Promise<void>
   onDelete?: (messageId: string) => void
   onBookmark?: (messageId: string) => void
 }
@@ -111,6 +112,61 @@ export function MessageItem({
 }: MessageItemProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState(message.content)
+  const [isSaving, setIsSaving] = useState(false)
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Focus textarea when entering edit mode
+  useEffect(() => {
+    if (isEditing && editTextareaRef.current) {
+      editTextareaRef.current.focus()
+      editTextareaRef.current.setSelectionRange(
+        editTextareaRef.current.value.length,
+        editTextareaRef.current.value.length
+      )
+    }
+  }, [isEditing])
+
+  const handleStartEdit = () => {
+    setEditContent(message.content)
+    setIsEditing(true)
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    setEditContent(message.content)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!onEdit || editContent.trim() === message.content) {
+      setIsEditing(false)
+      return
+    }
+
+    if (!editContent.trim()) {
+      return // Don't allow empty messages
+    }
+
+    setIsSaving(true)
+    try {
+      await onEdit(message.id, editContent.trim())
+      setIsEditing(false)
+    } catch (error) {
+      console.error("Failed to save edit:", error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleEditKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      handleCancelEdit()
+    } else if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleSaveEdit()
+    }
+  }
 
   const initials = message.sender.name
     .split(" ")
@@ -168,8 +224,41 @@ export function MessageItem({
         
         {/* Message content */}
         <div className={cn(isFirstInGroup ? "mt-0.5" : "")}>
-          {message.content && (
-            <MessageContent content={message.content} className="text-sm" />
+          {isEditing ? (
+            <div className="space-y-2">
+              <Textarea
+                ref={editTextareaRef}
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                onKeyDown={handleEditKeyDown}
+                className="min-h-[60px] text-sm resize-none"
+                disabled={isSaving}
+              />
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleSaveEdit}
+                  disabled={isSaving || !editContent.trim()}
+                >
+                  {isSaving ? "Saving..." : "Save"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleCancelEdit}
+                  disabled={isSaving}
+                >
+                  Cancel
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Press Enter to save, Escape to cancel
+                </span>
+              </div>
+            </div>
+          ) : (
+            message.content && (
+              <MessageContent content={message.content} className="text-sm" />
+            )
           )}
         </div>
 
@@ -280,7 +369,7 @@ export function MessageItem({
               </DropdownMenuItem>
               {isCurrentUser && (
                 <>
-                  <DropdownMenuItem onClick={() => onEdit?.(message.id)}>
+                  <DropdownMenuItem onClick={handleStartEdit} disabled={isEditing}>
                     <Edit2 className="size-4 mr-2" />
                     Edit message
                   </DropdownMenuItem>

@@ -24,9 +24,11 @@ interface FileBrowserProps {
   workspaceId: string
   currentUserId?: string
   isAdmin?: boolean
+  channelId?: string
+  dmConversationId?: string
 }
 
-export function FileBrowser({ workspaceId, currentUserId, isAdmin = false }: FileBrowserProps) {
+export function FileBrowser({ workspaceId, currentUserId, isAdmin = false, channelId, dmConversationId }: FileBrowserProps) {
   const [view, setView] = useState<"grid" | "list">("grid")
   const [type, setType] = useState<FileCategory | undefined>()
   const [query, setQuery] = useState("")
@@ -40,6 +42,8 @@ export function FileBrowser({ workspaceId, currentUserId, isAdmin = false }: Fil
     workspaceId,
     type,
     query,
+    channelId,
+    dmConversationId,
   })
 
   // Get all image files for lightbox
@@ -162,7 +166,11 @@ export function FileBrowser({ workspaceId, currentUserId, isAdmin = false }: Fil
             <p className="text-muted-foreground max-w-md">
               {query || type
                 ? "No files match your search. Try adjusting your filters."
-                : "Files shared in channels and direct messages will appear here."}
+                : channelId
+                  ? "Files shared in this channel will appear here."
+                  : dmConversationId
+                    ? "Files shared in this conversation will appear here."
+                    : "Files shared in channels and direct messages will appear here."}
             </p>
           </div>
         ) : (

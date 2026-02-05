@@ -20,7 +20,7 @@ interface ThreadPanelProps {
   onClose: () => void
   onSendReply: (content: string) => void
   onReact?: (messageId: string, emoji: string) => void
-  onEdit?: (messageId: string) => void
+  onEdit?: (messageId: string, newContent: string) => Promise<void>
   onDelete?: (messageId: string) => void
 }
 

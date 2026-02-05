@@ -214,7 +214,7 @@ export function ConfigSidePanel({
 
   const renderContextInfo = () => {
     // Communication actions - show recipient info
-    if (["send_sms", "make_call", "send_email", "send_notification"].includes(action.type)) {
+    if (["send_sms", "send_email", "send_notification"].includes(action.type)) {
       return (
         <div className="bg-muted/50 rounded-lg p-3 space-y-1">
           <div className="flex items-center gap-2 text-sm">
@@ -627,48 +627,6 @@ export function ConfigSidePanel({
                 />
               </div>
             )}
-          </div>
-        )
-
-      case "make_call":
-        return (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="phone_source">Phone Number</Label>
-              <Select
-                value={(config.phone_source as string) || "contact_phone"}
-                onValueChange={(v) => updateConfig("phone_source", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select phone source" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="contact_phone">Contact Phone</SelectItem>
-                  <SelectItem value="custom">Custom Number</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {config.phone_source === "custom" && (
-              <div className="space-y-2">
-                <Label htmlFor="custom_phone">Custom Phone Number</Label>
-                <Input
-                  id="custom_phone"
-                  value={(config.custom_phone as string) || ""}
-                  onChange={(e) => updateConfig("custom_phone", e.target.value)}
-                  placeholder="+1234567890"
-                />
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="record"
-                checked={(config.record as boolean) ?? true}
-                onChange={(e) => updateConfig("record", e.target.checked)}
-                className="rounded"
-              />
-              <Label htmlFor="record">Record call</Label>
-            </div>
           </div>
         )
 
@@ -1344,6 +1302,64 @@ export function ConfigSidePanel({
               />
               <Label htmlFor="auto_set_close_date" className="font-normal">
                 Set close date to today
+              </Label>
+            </div>
+          </div>
+        )
+
+      case "log_activity":
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="activity_type">Activity Type</Label>
+              <Select
+                value={(config.activity_type as string) || "note"}
+                onValueChange={(v) => updateConfig("activity_type", v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select activity type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="call">Call</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="meeting">Meeting</SelectItem>
+                  <SelectItem value="note">Note</SelectItem>
+                  <SelectItem value="task">Task</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="activity_subject">Subject</Label>
+              <Input
+                id="activity_subject"
+                value={(config.activity_subject as string) || ""}
+                onChange={(e) => updateConfig("activity_subject", e.target.value)}
+                placeholder="Activity subject"
+              />
+              <p className="text-xs text-muted-foreground">
+                Use {"{{contact_first_name}}"}, {"{{lead_name}}"} for dynamic content
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="activity_description">Description (optional)</Label>
+              <Textarea
+                id="activity_description"
+                value={(config.activity_description as string) || ""}
+                onChange={(e) => updateConfig("activity_description", e.target.value)}
+                placeholder="Additional details about the activity..."
+                rows={3}
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="activity_completed"
+                checked={(config.activity_completed as boolean) ?? true}
+                onChange={(e) => updateConfig("activity_completed", e.target.checked)}
+                className="size-4 rounded border-gray-300"
+              />
+              <Label htmlFor="activity_completed" className="font-normal">
+                Mark as completed
               </Label>
             </div>
           </div>

@@ -14,12 +14,16 @@ export type TriggerType =
   | "activity_logged"
   | "activity_completed"
   | "task_completed"
+  // Call events
+  | "call_received"
+  | "call_completed"
+  | "call_missed"
+  | "voicemail_received"
 
 // Action types - what the workflow does
 export type ActionType =
   // Communication actions
   | "send_sms"
-  | "make_call"
   | "send_email"
   | "send_notification"
   // CRM actions
@@ -30,6 +34,7 @@ export type ActionType =
   | "add_tag"
   | "remove_tag"
   | "move_lead_stage"
+  | "log_activity"
   // Deal actions
   | "create_deal"
   | "update_deal"
@@ -110,7 +115,7 @@ export interface TriggerDefinition {
   label: string
   description: string
   icon: string
-  category: "lead" | "deal" | "activity"
+  category: "lead" | "deal" | "activity" | "call"
 }
 
 // Action metadata for UI
@@ -138,13 +143,17 @@ export const TRIGGERS: TriggerDefinition[] = [
   { type: "activity_logged", label: "Activity Logged", description: "When any activity is logged", icon: "Activity", category: "activity" },
   { type: "activity_completed", label: "Activity Completed", description: "When an activity is completed", icon: "CheckCircle", category: "activity" },
   { type: "task_completed", label: "Task Completed", description: "When a task is completed", icon: "CheckSquare", category: "activity" },
+  // Call triggers
+  { type: "call_received", label: "Call Received", description: "When an inbound call comes in", icon: "PhoneIncoming", category: "call" },
+  { type: "call_completed", label: "Call Completed", description: "When a call ends successfully", icon: "PhoneCall", category: "call" },
+  { type: "call_missed", label: "Call Missed", description: "When a call is missed or unanswered", icon: "PhoneMissed", category: "call" },
+  { type: "voicemail_received", label: "Voicemail Received", description: "When a voicemail recording is ready", icon: "Voicemail", category: "call" },
 ]
 
 // Action definitions
 export const ACTIONS: ActionDefinition[] = [
   // Communication actions
   { type: "send_sms", label: "Send SMS", description: "Send a text message", icon: "MessageSquare", category: "communication" },
-  { type: "make_call", label: "Make Call", description: "Initiate an outbound call", icon: "Phone", category: "communication" },
   { type: "send_email", label: "Send Email", description: "Send an email", icon: "Mail", category: "communication" },
   { type: "send_notification", label: "Send Notification", description: "Send an in-app notification", icon: "Bell", category: "communication" },
   // CRM actions
@@ -155,6 +164,7 @@ export const ACTIONS: ActionDefinition[] = [
   { type: "add_tag", label: "Add Tag", description: "Add tags to the lead", icon: "Tag", category: "crm" },
   { type: "remove_tag", label: "Remove Tag", description: "Remove tags from the lead", icon: "TagOff", category: "crm" },
   { type: "move_lead_stage", label: "Move Lead Stage", description: "Move lead to a pipeline stage", icon: "MoveRight", category: "crm" },
+  { type: "log_activity", label: "Log Activity", description: "Log a call, email, meeting, note, or task", icon: "Activity", category: "crm" },
   { type: "create_deal", label: "Create Opportunity", description: "Create a new opportunity", icon: "Briefcase", category: "crm" },
   { type: "update_deal", label: "Update Opportunity", description: "Update opportunity fields", icon: "PenSquare", category: "crm" },
   { type: "move_deal_stage", label: "Move Opportunity Stage", description: "Move opportunity to a different stage", icon: "ArrowRightCircle", category: "crm" },
@@ -226,6 +236,12 @@ export const TRIGGER_CONDITION_FIELDS: ConditionFieldDefinition[] = [
   // Lead Task fields (for task_completed trigger)
   { path: "leadTask.title", label: "Task Title", category: "activity", fieldType: "string" },
   { path: "leadTask.is_completed", label: "Task Completed", category: "activity", fieldType: "boolean" },
+  // Call fields (for call triggers)
+  { path: "call.direction", label: "Call Direction", category: "activity", fieldType: "string" },
+  { path: "call.status", label: "Call Status", category: "activity", fieldType: "string" },
+  { path: "call.duration_seconds", label: "Call Duration (seconds)", category: "activity", fieldType: "number" },
+  { path: "call.from_number", label: "From Number", category: "activity", fieldType: "string" },
+  { path: "call.to_number", label: "To Number", category: "activity", fieldType: "string" },
 ]
 
 // Helper to get operator definition
@@ -248,6 +264,12 @@ export function getFieldsForTrigger(triggerType: TriggerType): ConditionFieldDef
   }
   // Activity triggers include lead, contact, and activity fields
   if (triggerDef.category === "activity") {
+    return TRIGGER_CONDITION_FIELDS.filter(f =>
+      f.category === "lead" || f.category === "contact" || f.category === "activity"
+    )
+  }
+  // Call triggers include lead, contact, and activity fields (call fields are in activity category)
+  if (triggerDef.category === "call") {
     return TRIGGER_CONDITION_FIELDS.filter(f =>
       f.category === "lead" || f.category === "contact" || f.category === "activity"
     )

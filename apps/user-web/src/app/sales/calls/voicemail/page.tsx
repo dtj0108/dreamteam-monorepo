@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Voicemail, Loader2, Phone, Check, Sparkles } from "lucide-react"
 import { RecordingPlayer } from "@/components/sales/recording-player"
 import { CallItem } from "@/components/mail/calls-list"
+import { toast } from "sonner"
 
 interface VoicemailItem extends CallItem {
   isRead?: boolean
@@ -29,6 +30,9 @@ export default function VoicemailPage() {
         setVoicemails(data)
       } catch (err) {
         console.error("Failed to fetch voicemails:", err)
+        toast.error("Failed to load voicemails", {
+          description: "Please try again or contact support",
+        })
       } finally {
         setLoading(false)
       }
@@ -106,6 +110,9 @@ export default function VoicemailPage() {
       })
     } catch (err) {
       console.error("Failed to initiate call:", err)
+      toast.error("Failed to initiate call", {
+        description: "Please try again or contact support",
+      })
     }
   }
 
@@ -137,6 +144,9 @@ export default function VoicemailPage() {
       }
     } catch (err) {
       console.error("Failed to transcribe:", err)
+      toast.error("Failed to transcribe voicemail", {
+        description: "Please try again or contact support",
+      })
     } finally {
       setTranscribing(null)
     }

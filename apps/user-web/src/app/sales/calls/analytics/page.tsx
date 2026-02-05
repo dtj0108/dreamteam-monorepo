@@ -30,6 +30,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts"
+import { toast } from "sonner"
 
 interface AnalyticsData {
   totals: {
@@ -76,6 +77,9 @@ export default function CallAnalyticsPage() {
         }
       } catch (err) {
         console.error("Failed to fetch analytics:", err)
+        toast.error("Failed to load analytics", {
+          description: "Please try again or contact support",
+        })
       } finally {
         setLoading(false)
       }

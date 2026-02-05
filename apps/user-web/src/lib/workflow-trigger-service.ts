@@ -2,7 +2,7 @@ import { createAdminClient } from './supabase-server'
 import { executeWorkflow, type WorkflowContext } from './workflow-executor'
 import type { Workflow, TriggerType, WorkflowAction } from '@/types/workflow'
 
-interface Lead {
+export interface Lead {
   id: string
   name: string
   status?: string
@@ -10,7 +10,7 @@ interface Lead {
   user_id: string
 }
 
-interface Contact {
+export interface Contact {
   id: string
   first_name: string
   last_name?: string
@@ -46,6 +46,18 @@ interface LeadTask {
   due_date?: string
 }
 
+export interface Call {
+  id: string
+  twilio_sid: string
+  direction: 'inbound' | 'outbound'
+  status: string
+  from_number: string
+  to_number: string
+  duration_seconds?: number
+  recording_url?: string
+  recording_sid?: string
+}
+
 interface TriggerContext {
   userId: string
   lead?: Lead
@@ -53,6 +65,7 @@ interface TriggerContext {
   deal?: Deal
   activity?: Activity
   leadTask?: LeadTask
+  call?: Call
   previousStatus?: string
   previousStageId?: string
 }
@@ -124,6 +137,19 @@ function buildWorkflowContext(triggerContext: TriggerContext): WorkflowContext {
       id: triggerContext.leadTask.id,
       title: triggerContext.leadTask.title,
       is_completed: triggerContext.leadTask.is_completed,
+    }
+  }
+
+  if (triggerContext.call) {
+    context.call = {
+      id: triggerContext.call.id,
+      twilio_sid: triggerContext.call.twilio_sid,
+      direction: triggerContext.call.direction,
+      status: triggerContext.call.status,
+      from_number: triggerContext.call.from_number,
+      to_number: triggerContext.call.to_number,
+      duration_seconds: triggerContext.call.duration_seconds,
+      recording_url: triggerContext.call.recording_url,
     }
   }
 
@@ -393,5 +419,73 @@ export async function triggerTaskCompleted(
     lead,
     contact: contact || undefined,
     leadTask: task,
+  })
+}
+
+/**
+ * Trigger workflows when an inbound call is received
+ */
+export async function triggerCallReceived(
+  call: Call,
+  lead: Lead,
+  contact: Contact | null,
+  userId: string
+): Promise<void> {
+  await triggerWorkflows('call_received', {
+    userId,
+    lead,
+    contact: contact || undefined,
+    call,
+  })
+}
+
+/**
+ * Trigger workflows when a call is completed successfully (duration > 0)
+ */
+export async function triggerCallCompleted(
+  call: Call,
+  lead: Lead | null,
+  contact: Contact | null,
+  userId: string
+): Promise<void> {
+  await triggerWorkflows('call_completed', {
+    userId,
+    lead: lead || undefined,
+    contact: contact || undefined,
+    call,
+  })
+}
+
+/**
+ * Trigger workflows when a call is missed (no-answer, busy, canceled)
+ */
+export async function triggerCallMissed(
+  call: Call,
+  lead: Lead | null,
+  contact: Contact | null,
+  userId: string
+): Promise<void> {
+  await triggerWorkflows('call_missed', {
+    userId,
+    lead: lead || undefined,
+    contact: contact || undefined,
+    call,
+  })
+}
+
+/**
+ * Trigger workflows when a voicemail recording is ready
+ */
+export async function triggerVoicemailReceived(
+  call: Call,
+  lead: Lead | null,
+  contact: Contact | null,
+  userId: string
+): Promise<void> {
+  await triggerWorkflows('voicemail_received', {
+    userId,
+    lead: lead || undefined,
+    contact: contact || undefined,
+    call,
   })
 }
