@@ -29,6 +29,7 @@ export default function TeamMessagesPage() {
     isLoading: messagesLoading,
     hasMore,
     sendMessage,
+    editMessage,
     deleteMessage,
     reactToMessage,
     loadMore,
@@ -74,6 +75,14 @@ export default function TeamMessagesPage() {
     }
   }
 
+  const handleEdit = async (messageId: string, newContent: string) => {
+    try {
+      await editMessage(messageId, newContent)
+    } catch (error) {
+      console.error("Failed to edit message:", error)
+    }
+  }
+
   return (
     <>
       {activeChannel ? (
@@ -111,7 +120,7 @@ export default function TeamMessagesPage() {
               onLoadMore={loadMore}
               onReact={handleReact}
               onReply={handleOpenThread}
-              onEdit={(messageId: string) => { /* TODO: implement edit UI */ }}
+              onEdit={handleEdit}
               onDelete={deleteMessage}
             />
           )}

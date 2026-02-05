@@ -61,6 +61,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Get user's default workspace
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("default_workspace_id")
+      .eq("id", user.id)
+      .single()
+
+    if (!profile?.default_workspace_id) {
+      return NextResponse.json(
+        { error: "No workspace found. Please set up your workspace first." },
+        { status: 400 }
+      )
+    }
+
     // Purchase the number from Twilio
     const result = await purchasePhoneNumber(phoneNumber)
 
@@ -81,6 +95,7 @@ export async function POST(req: NextRequest) {
       .from("twilio_numbers")
       .insert({
         user_id: user.id,
+        workspace_id: profile.default_workspace_id,
         twilio_sid: result.sid,
         phone_number: result.phoneNumber,
         friendly_name: friendlyName || result.friendlyName,

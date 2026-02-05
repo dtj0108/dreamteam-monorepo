@@ -15,6 +15,7 @@ import {
   ArchiveIcon,
   InboxIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 import { CommunicationPanel } from "@/components/sales/communication-panel"
 
 interface Lead {
@@ -101,6 +102,9 @@ export default function CommunicationsPage() {
       }
     } catch (error) {
       console.error("Error fetching threads:", error)
+      toast.error("Failed to load conversations", {
+        description: "Please try again or contact support",
+      })
     } finally {
       setIsLoading(false)
     }

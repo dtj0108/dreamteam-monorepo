@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { validateTwilioWebhook } from '@/lib/twilio'
 import { fireWebhooks } from "@/lib/make-webhooks"
+import { triggerCallCompleted, triggerCallMissed, type Call, type Lead, type Contact } from '@/lib/workflow-trigger-service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -114,6 +115,50 @@ export async function POST(request: NextRequest) {
             lead_id: comm.lead_id,
             contact_id: comm.contact_id,
           }, profile.default_workspace_id)
+        }
+
+        // Trigger workflow events for call completion/missed
+        const durationSeconds = CallDuration ? parseInt(CallDuration) : comm.duration_seconds
+        const callData: Call = {
+          id: comm.id,
+          twilio_sid: CallSid,
+          direction: comm.direction as 'inbound' | 'outbound',
+          status: status,
+          from_number: comm.from_number,
+          to_number: comm.to_number,
+          duration_seconds: durationSeconds,
+        }
+
+        // Fetch lead and contact if available
+        let leadData: Lead | null = null
+        let contactData: Contact | null = null
+
+        if (comm.lead_id) {
+          const { data: lead } = await supabase
+            .from('leads')
+            .select('id, name, status, notes, user_id')
+            .eq('id', comm.lead_id)
+            .single()
+          leadData = lead as Lead | null
+        }
+
+        if (comm.contact_id) {
+          const { data: contact } = await supabase
+            .from('contacts')
+            .select('id, first_name, last_name, email, phone')
+            .eq('id', comm.contact_id)
+            .single()
+          contactData = contact as Contact | null
+        }
+
+        // Trigger call_completed when call ended successfully with duration > 0
+        if (status === 'completed' && durationSeconds && durationSeconds > 0) {
+          triggerCallCompleted(callData, leadData, contactData, comm.user_id)
+        }
+
+        // Trigger call_missed for missed call statuses
+        if (['no-answer', 'busy', 'canceled'].includes(status)) {
+          triggerCallMissed(callData, leadData, contactData, comm.user_id)
         }
       }
     }

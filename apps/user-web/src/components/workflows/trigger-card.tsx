@@ -12,6 +12,10 @@ import {
   CheckCircleIcon,
   CheckSquareIcon,
   ZapIcon,
+  PhoneIncomingIcon,
+  PhoneCallIcon,
+  PhoneMissedIcon,
+  VoicemailIcon,
 } from "lucide-react"
 import { Badge } from "@dreamteam/ui/badge"
 import type { TriggerType } from "@/types/workflow"
@@ -29,6 +33,10 @@ const triggerIcons: Record<TriggerType, React.ReactNode> = {
   activity_logged: <ActivityIcon className="size-5" />,
   activity_completed: <CheckCircleIcon className="size-5" />,
   task_completed: <CheckSquareIcon className="size-5" />,
+  call_received: <PhoneIncomingIcon className="size-5" />,
+  call_completed: <PhoneCallIcon className="size-5" />,
+  call_missed: <PhoneMissedIcon className="size-5" />,
+  voicemail_received: <VoicemailIcon className="size-5" />,
 }
 
 // Get category badge text
@@ -36,6 +44,7 @@ function getTriggerBadge(type: TriggerType): string {
   if (type.startsWith("lead_")) return "LEAD"
   if (type.startsWith("deal_")) return "DEAL"
   if (type.startsWith("activity_") || type.startsWith("task_")) return "ACTIVITY"
+  if (type.startsWith("call_") || type === "voicemail_received") return "CALL"
   return "EVENT"
 }
 

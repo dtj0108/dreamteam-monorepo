@@ -11,7 +11,6 @@ import {
   UserCheckIcon,
   XIcon,
   SearchIcon,
-  PhoneIcon,
   ClockIcon,
   GitBranchIcon,
   TagIcon,
@@ -21,6 +20,7 @@ import {
   ArrowRightCircleIcon,
   CheckCircle2Icon,
   MoveRightIcon,
+  ActivityIcon,
 } from "lucide-react"
 import {
   Dialog,
@@ -33,7 +33,6 @@ import { ACTIONS } from "@/types/workflow"
 
 const actionIcons: Record<ActionType, React.ReactNode> = {
   send_sms: <MessageSquareIcon className="size-5" />,
-  make_call: <PhoneIcon className="size-5" />,
   send_email: <MailIcon className="size-5" />,
   send_notification: <BellIcon className="size-5" />,
   create_task: <ListTodoIcon className="size-5" />,
@@ -43,6 +42,7 @@ const actionIcons: Record<ActionType, React.ReactNode> = {
   add_tag: <TagIcon className="size-5" />,
   remove_tag: <TagsIcon className="size-5" />,
   move_lead_stage: <MoveRightIcon className="size-5" />,
+  log_activity: <ActivityIcon className="size-5" />,
   create_deal: <BriefcaseIcon className="size-5" />,
   update_deal: <PenSquareIcon className="size-5" />,
   move_deal_stage: <ArrowRightCircleIcon className="size-5" />,
