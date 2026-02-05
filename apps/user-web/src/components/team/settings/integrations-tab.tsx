@@ -19,7 +19,7 @@ import { Loader2, Upload, Plug, Trash2, Download, CheckCircle, ExternalLink, Mes
 import { CRM_PROVIDERS, CRM_PROVIDER_IDS, type CRMProvider, type CRMIntegration } from "@/types/crm"
 import { ApiKeyModal } from "@/components/import/api-key-modal"
 import { CRMImportModal } from "@/components/import/crm-import-modal"
-import { CSVImportModal } from "@/components/import/csv-import-modal"
+import { CSVImportPage } from "@/components/import/csv-import-page"
 import { SlackConnectModal } from "@/components/import/slack-connect-modal"
 import { SlackImportModal } from "@/components/import/slack-import-modal"
 
@@ -487,7 +487,7 @@ export function IntegrationsTab({ workspaceId, isOwner, isAdmin }: IntegrationsT
       </Card>
 
       {/* Modals */}
-      <CSVImportModal
+      <CSVImportPage
         open={csvModalOpen}
         onOpenChange={setCsvModalOpen}
         onImportComplete={() => {}}
