@@ -224,7 +224,8 @@ export async function POST(request: Request) {
         .select('id')
 
       if (error) {
-        errors.push(`Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`)
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1
+        errors.push(`Batch ${batchNum} (leads ${i + 1}-${i + batch.length}): ${error.message}`)
       } else if (data) {
         insertedCount += data.length
         insertedLeadIds.push(...data.map((d: { id: string }) => d.id))
@@ -327,7 +328,8 @@ export async function POST(request: Request) {
           .select('id')
 
         if (error) {
-          errors.push(`Contact batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`)
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1
+          errors.push(`Contact batch ${batchNum} (contacts ${i + 1}-${i + batch.length}): ${error.message}`)
         } else if (data) {
           contactsCreated += data.length
         }
@@ -350,9 +352,14 @@ export async function POST(request: Request) {
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error) {
-    console.error('Import error:', error)
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`Import error [${errorId}]:`, error)
     return NextResponse.json(
-      { error: 'Failed to import leads' },
+      {
+        error: 'Failed to import leads',
+        errorId,
+        details: error instanceof Error ? error.message : undefined,
+      },
       { status: 500 }
     )
   }

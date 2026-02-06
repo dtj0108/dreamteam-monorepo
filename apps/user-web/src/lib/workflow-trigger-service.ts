@@ -8,6 +8,7 @@ export interface Lead {
   status?: string
   notes?: string
   user_id: string
+  workspace_id?: string
 }
 
 export interface Contact {
@@ -25,6 +26,7 @@ interface Deal {
   stage_id?: string
   profile_id: string
   contact_id?: string
+  workspace_id?: string
 }
 
 interface Activity {
@@ -60,6 +62,7 @@ export interface Call {
 
 interface TriggerContext {
   userId: string
+  workspaceId?: string
   lead?: Lead
   contact?: Contact
   deal?: Deal
@@ -75,16 +78,23 @@ interface TriggerContext {
  */
 async function findMatchingWorkflows(
   triggerType: TriggerType,
-  userId: string
+  userId: string,
+  workspaceId?: string
 ): Promise<Workflow[]> {
   const supabase = createAdminClient()
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('workflows')
     .select('*')
     .eq('user_id', userId)
     .eq('trigger_type', triggerType)
     .eq('is_active', true)
+
+  if (workspaceId) {
+    query = query.eq('workspace_id', workspaceId)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     console.error('Error finding matching workflows:', error)
@@ -100,6 +110,9 @@ async function findMatchingWorkflows(
 function buildWorkflowContext(triggerContext: TriggerContext): WorkflowContext {
   const context: WorkflowContext = {
     userId: triggerContext.userId,
+    workspaceId: triggerContext.workspaceId
+      || triggerContext.lead?.workspace_id
+      || triggerContext.deal?.workspace_id,
   }
 
   if (triggerContext.lead) {
@@ -204,8 +217,17 @@ export async function triggerWorkflows(
   triggerType: TriggerType,
   triggerContext: TriggerContext
 ): Promise<void> {
+  // Resolve workspaceId from context
+  const workspaceId = triggerContext.workspaceId
+    || triggerContext.lead?.workspace_id
+    || triggerContext.deal?.workspace_id
+
+  if (!workspaceId) {
+    console.warn(`[Workflows] No workspaceId resolved for ${triggerType} trigger — matching unscoped`)
+  }
+
   // Find all matching active workflows
-  const workflows = await findMatchingWorkflows(triggerType, triggerContext.userId)
+  const workflows = await findMatchingWorkflows(triggerType, triggerContext.userId, workspaceId || undefined)
 
   if (workflows.length === 0) {
     return
@@ -219,21 +241,26 @@ export async function triggerWorkflows(
   // Execute each workflow (non-blocking)
   for (const workflow of workflows) {
     // Don't await - fire and forget, results are logged to workflow_executions table
-    executeWorkflow(
-      workflow.id,
-      workflow.actions as WorkflowAction[],
-      workflowContext,
-      triggerType
-    )
-      .then((results) => {
-        const successCount = results.filter(r => r.success).length
-        console.log(
-          `[Workflows] Completed workflow "${workflow.name}" (${workflow.id}): ${successCount}/${results.length} actions succeeded`
-        )
-      })
-      .catch((error) => {
-        console.error(`[Workflows] Error executing workflow "${workflow.name}" (${workflow.id}):`, error)
-      })
+    try {
+      executeWorkflow(
+        workflow.id,
+        workflow.actions as WorkflowAction[],
+        workflowContext,
+        triggerType
+      )
+        .then((results) => {
+          const successCount = results.filter(r => r.success).length
+          console.log(
+            `[Workflows] Completed workflow "${workflow.name}" (${workflow.id}): ${successCount}/${results.length} actions succeeded`
+          )
+        })
+        .catch((error) => {
+          console.error(`[Workflows] Error executing workflow "${workflow.name}" (${workflow.id}):`, error)
+        })
+    } catch (error) {
+      // Catch synchronous errors from executeWorkflow before the promise chain starts
+      console.error(`[Workflows] Failed to start workflow "${workflow.name}" (${workflow.id}):`, error)
+    }
   }
 }
 
@@ -429,10 +456,12 @@ export async function triggerCallReceived(
   call: Call,
   lead: Lead,
   contact: Contact | null,
-  userId: string
+  userId: string,
+  workspaceId?: string
 ): Promise<void> {
   await triggerWorkflows('call_received', {
     userId,
+    workspaceId,
     lead,
     contact: contact || undefined,
     call,
@@ -446,10 +475,12 @@ export async function triggerCallCompleted(
   call: Call,
   lead: Lead | null,
   contact: Contact | null,
-  userId: string
+  userId: string,
+  workspaceId?: string
 ): Promise<void> {
   await triggerWorkflows('call_completed', {
     userId,
+    workspaceId,
     lead: lead || undefined,
     contact: contact || undefined,
     call,
@@ -463,10 +494,12 @@ export async function triggerCallMissed(
   call: Call,
   lead: Lead | null,
   contact: Contact | null,
-  userId: string
+  userId: string,
+  workspaceId?: string
 ): Promise<void> {
   await triggerWorkflows('call_missed', {
     userId,
+    workspaceId,
     lead: lead || undefined,
     contact: contact || undefined,
     call,
@@ -480,10 +513,12 @@ export async function triggerVoicemailReceived(
   call: Call,
   lead: Lead | null,
   contact: Contact | null,
-  userId: string
+  userId: string,
+  workspaceId?: string
 ): Promise<void> {
   await triggerWorkflows('voicemail_received', {
     userId,
+    workspaceId,
     lead: lead || undefined,
     contact: contact || undefined,
     call,

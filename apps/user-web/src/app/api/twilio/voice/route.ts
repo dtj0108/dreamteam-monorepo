@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { validateTwilioWebhook, VoiceResponse } from '@/lib/twilio'
 import { fireWebhooks } from "@/lib/make-webhooks"
 import { triggerCallReceived, type Call, type Lead, type Contact } from '@/lib/workflow-trigger-service'
+import { getJoinedField } from '@/lib/supabase-utils'
+import { reserveCallMinutes } from '@/lib/call-with-minutes'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,19 +21,43 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { CallSid, From, To, CallStatus } = params
+    const { CallSid, From, To, Called, CallStatus } = params
 
     const supabase = createAdminClient()
 
-    // Find the associated contact/lead
-    const { data: contact } = await supabase
-      .from('contacts')
-      .select('id, lead_id, first_name, leads!inner(user_id)')
-      .eq('phone', From)
+    // Look up the receiving phone number to determine workspace
+    const calledNumber = Called || To
+    const { data: twilioNumber } = await supabase
+      .from('twilio_numbers')
+      .select('workspace_id')
+      .eq('phone_number', calledNumber)
       .single()
 
+    const callWorkspaceId = twilioNumber?.workspace_id as string | null
+
+    // Find the associated contact/lead, scoped to workspace if known
+    let contactQuery = supabase
+      .from('contacts')
+      .select('id, lead_id, first_name, leads!inner(user_id, workspace_id)')
+      .eq('phone', From)
+
+    if (callWorkspaceId) {
+      contactQuery = contactQuery.eq('leads.workspace_id', callWorkspaceId)
+    }
+
+    const { data: contact } = await contactQuery.single()
+
     if (contact) {
-      const userId = (contact.leads as unknown as { user_id: string }).user_id
+      const userId = getJoinedField<string>(contact.leads, 'user_id')
+      const leadsWorkspaceId = getJoinedField<string>(contact.leads, 'workspace_id')
+      if (!userId) {
+        console.error('Unexpected leads join shape in inbound call:', contact.leads)
+        const twiml = new VoiceResponse()
+        twiml.say('Sorry, an error occurred. Please try again later.')
+        return new NextResponse(twiml.toString(), {
+          headers: { 'Content-Type': 'text/xml' },
+        })
+      }
 
       // Log the incoming call
       const { data: commRecord } = await supabase.from('communications').insert({
@@ -45,16 +71,30 @@ export async function POST(request: NextRequest) {
         from_number: From,
         to_number: To,
         triggered_by: 'inbound',
+        workspace_id: callWorkspaceId || leadsWorkspaceId || null,
       }).select('id').single()
 
-      // Fire webhook for Make.com integrations
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("default_workspace_id")
-        .eq("id", userId)
-        .single()
+      // Reserve call minutes for inbound call (non-blocking — don't reject callers)
+      const resolvedWorkspaceId = callWorkspaceId || leadsWorkspaceId || null
+      if (resolvedWorkspaceId && commRecord?.id) {
+        reserveCallMinutes(resolvedWorkspaceId, commRecord.id, From, To, 'inbound')
+          .then((reservation) => {
+            if (!reservation.success) {
+              console.warn(`Inbound call minute reservation failed for workspace ${resolvedWorkspaceId}: ${reservation.error}`)
+            }
+          })
+          .catch((err) => {
+            console.warn('Failed to reserve inbound call minutes:', err)
+          })
+      }
 
-      if (profile?.default_workspace_id) {
+      // Fire webhook for Make.com integrations — use workspace from twilio_numbers or lead
+      const voiceWebhookWorkspaceId = callWorkspaceId || leadsWorkspaceId || null
+      if (!voiceWebhookWorkspaceId) {
+        console.warn(`[twilio/voice] No workspace resolved for call ${CallSid} from ${From} — skipping webhook`)
+      }
+
+      if (voiceWebhookWorkspaceId) {
         fireWebhooks("call.received", {
           id: CallSid,
           from: From,
@@ -62,13 +102,13 @@ export async function POST(request: NextRequest) {
           status: CallStatus,
           contact_id: contact.id,
           lead_id: contact.lead_id,
-        }, profile.default_workspace_id)
+        }, voiceWebhookWorkspaceId)
       }
 
       // Trigger call_received workflows
       const { data: lead } = await supabase
         .from('leads')
-        .select('id, name, status, notes, user_id')
+        .select('id, name, status, notes, user_id, workspace_id')
         .eq('id', contact.lead_id)
         .single()
 
@@ -85,7 +125,7 @@ export async function POST(request: NextRequest) {
           id: contact.id,
           first_name: contact.first_name,
         }
-        triggerCallReceived(callData, lead as Lead, contactData, userId)
+        triggerCallReceived(callData, lead as Lead, contactData, userId, resolvedWorkspaceId || undefined)
       }
     }
 
@@ -122,7 +162,8 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'text/xml' },
     })
   } catch (error) {
-    console.error('Error handling incoming call:', error)
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[twilio/voice] Error [${errorId}]:`, error)
     const twiml = new VoiceResponse()
     twiml.say('Sorry, an error occurred. Please try again later.')
     return new NextResponse(twiml.toString(), {

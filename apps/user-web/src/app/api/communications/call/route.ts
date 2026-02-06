@@ -5,6 +5,7 @@ import { makeCall, formatE164, isValidE164 } from '@/lib/twilio'
 import { reserveCallMinutes, updateReservationCallSid, cancelReservation } from '@/lib/call-with-minutes'
 import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
 import { fireWebhooks } from '@/lib/make-webhooks'
+import { triggerLeadContacted } from '@/lib/workflow-trigger-service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
       .select('phone_number')
       .eq('id', fromNumberId)
       .eq('user_id', session.id)
+      .eq('workspace_id', workspaceId)
       .single()
 
     if (numberError || !ownedNumber) {
@@ -73,6 +75,7 @@ export async function POST(request: NextRequest) {
         to_number: formattedPhone,
         twilio_status: 'pending',
         triggered_by: 'manual',
+        workspace_id: workspaceId,
       })
       .select()
       .single()
@@ -146,13 +149,33 @@ export async function POST(request: NextRequest) {
       contact_id: contactId,
     }, workspaceId)
 
+    // Trigger lead_contacted workflow for outbound calls (non-blocking)
+    if (leadId) {
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('id, name, status, notes, user_id')
+        .eq('id', leadId)
+        .single()
+
+      if (lead) {
+        triggerLeadContacted(lead).catch((err) => {
+          console.error("Error triggering lead_contacted workflows:", err)
+        })
+      }
+    }
+
     return NextResponse.json({
       success: true,
       communicationId: comm.id,
       sid: result.sid,
     })
   } catch (error) {
-    console.error('Error making call:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`Error making call [${errorId}]:`, error)
+    return NextResponse.json({
+      error: 'Internal server error',
+      errorId,
+      details: error instanceof Error ? error.message : undefined,
+    }, { status: 500 })
   }
 }

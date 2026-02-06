@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminClient } from '@dreamteam/database/server'
 import { sendVerificationCode } from '@/lib/twilio'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 import { updateBillingFromSubscription, ensureWorkspaceBilling } from '@/lib/billing-queries'
 
 export async function POST(request: NextRequest) {
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
         // If there's a Stripe session from guest checkout, link subscription to this workspace
         if (sessionId && workspace.id) {
           try {
-            const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId)
+            const checkoutSession = await getStripe().checkout.sessions.retrieve(sessionId)
 
             if (checkoutSession.payment_status === 'paid' && checkoutSession.subscription) {
               const subscriptionId = typeof checkoutSession.subscription === 'string'
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
                 }, { onConflict: 'workspace_id' })
 
               // Update subscription metadata to include workspace_id
-              await stripe.subscriptions.update(subscriptionId, {
+              await getStripe().subscriptions.update(subscriptionId, {
                 metadata: {
                   workspace_id: workspace.id,
                   type: 'workspace_plan',
@@ -278,10 +278,8 @@ export async function POST(request: NextRequest) {
       workspaceId: defaultWorkspaceId,
     })
   } catch (error) {
-    console.error('Signup error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[auth/signup] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

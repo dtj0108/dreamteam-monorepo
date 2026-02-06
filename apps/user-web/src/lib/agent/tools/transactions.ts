@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { tool } from "ai"
 import type { ToolContext, TransactionsResult } from "../types"
+import { getJoinedField } from "@/lib/supabase-utils"
 
 export const transactionsSchema = z.object({
   action: z.enum(["query", "categorize", "addNote"]).default("query").describe("Action to perform: query transactions, categorize a transaction, or add a note"),
@@ -20,7 +21,7 @@ export function createTransactionsTool(context: ToolContext) {
   return tool({
     description: "Manage transactions. Query transactions with filters, categorize transactions, or add notes.",
     inputSchema: transactionsSchema,
-    execute: async (params: z.infer<typeof transactionsSchema>): Promise<TransactionsResult | { success: boolean; message: string; transaction?: any }> => {
+    execute: async (params: z.infer<typeof transactionsSchema>): Promise<TransactionsResult | { success: boolean; message: string; transaction?: Record<string, unknown> }> => {
       const { supabase, userId } = context
       const { action } = params
 
@@ -52,7 +53,7 @@ export function createTransactionsTool(context: ToolContext) {
           throw new Error(`Failed to categorize transaction: ${error.message}`)
         }
 
-        const categoryName = (transaction.category as any)?.name || (transaction.category as any)?.[0]?.name
+        const categoryName = getJoinedField<string>(transaction.category, 'name') || 'Uncategorized'
         return {
           success: true,
           message: `Transaction categorized as "${categoryName || "Unknown"}"`,

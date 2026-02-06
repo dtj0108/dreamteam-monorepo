@@ -64,7 +64,7 @@ export function PieChart({
         />
         {showLegend && (
           <Legend 
-            formatter={(value: any, entry: any) => (
+            formatter={(value: string) => (
               <span className="text-sm">{value}</span>
             )}
           />

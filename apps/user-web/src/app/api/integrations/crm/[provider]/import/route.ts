@@ -490,7 +490,12 @@ async function importFromPipedrive(
           workspace_id: workspaceId,
           name: lead.name,
           website: lead.website,
+          notes: lead.description,
           address: lead.address,
+          city: lead.city,
+          state: lead.state,
+          postal_code: lead.zip_code,
+          country: lead.country,
           source: "pipedrive_import",
           pipeline_id: leadPipelineId,
           stage_id: leadStageId,
@@ -522,6 +527,11 @@ async function importFromPipedrive(
         if (!person.add_time) return false
         return new Date(person.add_time) >= createdAfterDate
       })
+    }
+
+    // Apply limit filter
+    if (importLimit > 0 && persons.length > importLimit) {
+      persons = persons.slice(0, importLimit)
     }
 
     const transformedContacts = client.transformPersons(persons, orgIdToName)
@@ -582,6 +592,11 @@ async function importFromPipedrive(
         const dealStatus = deal.status === "open" ? "active" : deal.status || "active"
         return statusFilter.includes(dealStatus)
       })
+    }
+
+    // Apply limit filter
+    if (importLimit > 0 && pipedriveDeals.length > importLimit) {
+      pipedriveDeals = pipedriveDeals.slice(0, importLimit)
     }
 
     const transformedOpportunities = client.transformDeals(pipedriveDeals, orgIdToName)

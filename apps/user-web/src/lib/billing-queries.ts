@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase-server'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 import { autoDeployTeamForPlan } from '@dreamteam/database'
 
 // Type definitions for billing data
@@ -142,7 +142,7 @@ export async function getOrCreateStripeCustomer(
   }
 
   // Create new Stripe customer
-  const customer = await stripe.customers.create({
+  const customer = await getStripe().customers.create({
     email: ownerEmail,
     name: workspaceName,
     metadata: {
@@ -171,16 +171,11 @@ export async function updateBillingFromSubscription(
   const supabase = createAdminClient()
 
   // Get subscription details from Stripe
-  const subscriptionResponse = await stripe.subscriptions.retrieve(subscriptionId)
-  // Access properties from the response
-  const sub = subscriptionResponse as unknown as {
-    status: string
-    current_period_start: number
-    current_period_end: number
-    cancel_at_period_end: boolean
-    trial_start: number | null
-    trial_end: number | null
-  }
+  // Note: current_period_start/end are still returned by the API but removed from SDK types in v20+.
+  // Use indexed access for these deprecated-but-present fields.
+  const sub = await getStripe().subscriptions.retrieve(subscriptionId)
+  // current_period_start/end still returned by API but removed from SDK types in v20+
+  const subRecord = sub as unknown as Record<string, unknown>
 
   // Helper to safely convert Unix timestamp to ISO string
   const timestampToISO = (timestamp: number | null | undefined): string | null => {
@@ -195,8 +190,8 @@ export async function updateBillingFromSubscription(
         stripe_subscription_id: subscriptionId,
         plan: (targetPlan as WorkspacePlan) || 'monthly',
         plan_status: sub.status as SubscriptionStatus,
-        plan_period_start: timestampToISO(sub.current_period_start),
-        plan_period_end: timestampToISO(sub.current_period_end),
+        plan_period_start: timestampToISO(subRecord.current_period_start as number | null),
+        plan_period_end: timestampToISO(subRecord.current_period_end as number | null),
         plan_cancel_at_period_end: sub.cancel_at_period_end,
         trial_start: timestampToISO(sub.trial_start),
         trial_end: timestampToISO(sub.trial_end),
@@ -209,7 +204,7 @@ export async function updateBillingFromSubscription(
         stripe_agent_subscription_id: subscriptionId,
         agent_tier: (targetPlan as AgentTier) || 'startup',
         agent_status: sub.status as SubscriptionStatus,
-        agent_period_end: timestampToISO(sub.current_period_end),
+        agent_period_end: timestampToISO(subRecord.current_period_end as number | null),
       })
       .eq('workspace_id', workspaceId)
   }
@@ -320,7 +315,7 @@ export async function getWorkspaceInvoices(
 
   // Fetch invoices directly from Stripe
   try {
-    const stripeInvoices = await stripe.invoices.list({
+    const stripeInvoices = await getStripe().invoices.list({
       customer: billing.stripe_customer_id,
       limit,
     })
@@ -454,7 +449,7 @@ export async function updateAgentTierSubscription(
 
   try {
     // Get current subscription to find the item ID
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+    const subscription = await getStripe().subscriptions.retrieve(subscriptionId)
     const itemId = subscription.items.data[0]?.id
 
     if (!itemId) {
@@ -462,7 +457,7 @@ export async function updateAgentTierSubscription(
     }
 
     // Update the subscription with proration
-    const updatedSubResponse = await stripe.subscriptions.update(subscriptionId, {
+    const updatedSubResponse = await getStripe().subscriptions.update(subscriptionId, {
       items: [{
         id: itemId,
         price: newPriceId,
@@ -649,7 +644,7 @@ export async function savePaymentMethod(
 
   // Get payment method details from Stripe
   console.log(`[savePaymentMethod] Retrieving payment method from Stripe...`)
-  const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId)
+  const paymentMethod = await getStripe().paymentMethods.retrieve(paymentMethodId)
   console.log(`[savePaymentMethod] Payment method type: ${paymentMethod.type}`)
 
   if (paymentMethod.type !== 'card' || !paymentMethod.card) {
@@ -670,7 +665,7 @@ export async function savePaymentMethod(
 
   // Attach payment method to customer if not already attached
   try {
-    await stripe.paymentMethods.attach(paymentMethodId, {
+    await getStripe().paymentMethods.attach(paymentMethodId, {
       customer: billing.stripe_customer_id,
     })
   } catch (err: unknown) {
@@ -689,7 +684,7 @@ export async function savePaymentMethod(
 
   // Set as default payment method for the customer
   console.log(`[savePaymentMethod] Setting as default payment method for customer...`)
-  await stripe.customers.update(billing.stripe_customer_id, {
+  await getStripe().customers.update(billing.stripe_customer_id, {
     invoice_settings: {
       default_payment_method: paymentMethodId,
     },
@@ -720,6 +715,11 @@ export async function savePaymentMethod(
 /**
  * Save payment method from a completed PaymentIntent
  * Used by webhook after checkout.session.completed
+ *
+ * NOTE: Saved payment method data is a snapshot at save time.
+ * Stripe validates the method at charge time and rejects if invalid.
+ * TODO: Consider listening to `payment_method.detached` / `payment_method.updated`
+ * webhook events to proactively sync stale payment method state.
  */
 export async function savePaymentMethodFromIntent(
   workspaceId: string,
@@ -728,7 +728,7 @@ export async function savePaymentMethodFromIntent(
   console.log(`[savePaymentMethodFromIntent] Starting for workspace ${workspaceId}, PI: ${paymentIntentId}`)
 
   // Get the PaymentIntent to find the payment method
-  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
+  const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId, {
     expand: ['payment_method'],
   })
 
@@ -762,7 +762,7 @@ export async function removePaymentMethod(workspaceId: string): Promise<void> {
   if (billing?.default_payment_method_id) {
     // Detach from Stripe customer
     try {
-      await stripe.paymentMethods.detach(billing.default_payment_method_id)
+      await getStripe().paymentMethods.detach(billing.default_payment_method_id)
     } catch (err) {
       // Ignore if already detached
       console.error('Error detaching payment method:', err)
@@ -817,7 +817,7 @@ export async function createDirectCharge(
 
   try {
     // Create and confirm PaymentIntent in one call
-    const paymentIntent = await stripe.paymentIntents.create({
+    const paymentIntent = await getStripe().paymentIntents.create({
       amount: amountCents,
       currency: 'usd',
       customer: billing.stripe_customer_id,
@@ -905,7 +905,7 @@ export async function createSetupIntent(workspaceId: string): Promise<{ clientSe
     throw new Error('No Stripe customer for workspace')
   }
 
-  const setupIntent = await stripe.setupIntents.create({
+  const setupIntent = await getStripe().setupIntents.create({
     customer: billing.stripe_customer_id,
     payment_method_types: ['card'],
     usage: 'off_session',
@@ -966,7 +966,7 @@ export async function createAgentTierSubscription(
     // This handles database sync issues where stripe_agent_subscription_id is null
     // but an active subscription already exists in Stripe
     console.log(`[createAgentTierSubscription] Checking for existing subscriptions for customer ${billing.stripe_customer_id}`)
-    const existingSubscriptions = await stripe.subscriptions.list({
+    const existingSubscriptions = await getStripe().subscriptions.list({
       customer: billing.stripe_customer_id,
       status: 'active',
       limit: 10,
@@ -982,7 +982,7 @@ export async function createAgentTierSubscription(
       // Update existing subscription instead of creating new
       const itemId = existingAgentSub.items.data[0]?.id
       if (itemId) {
-        const updatedSubResponse = await stripe.subscriptions.update(existingAgentSub.id, {
+        const updatedSubResponse = await getStripe().subscriptions.update(existingAgentSub.id, {
           items: [{ id: itemId, price: priceId }],
           proration_behavior: 'create_prorations',
           metadata: {
@@ -1035,7 +1035,7 @@ export async function createAgentTierSubscription(
     console.log(`[createAgentTierSubscription] No existing subscription found, creating new for workspace ${workspaceId}, tier: ${tier}`)
 
     // Create the subscription with the saved payment method
-    const subscription = await stripe.subscriptions.create({
+    const subscription = await getStripe().subscriptions.create({
       customer: billing.stripe_customer_id,
       items: [{ price: priceId }],
       default_payment_method: billing.default_payment_method_id,

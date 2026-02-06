@@ -130,8 +130,10 @@ export async function executeAnalytics(
       const incomeByCategory: Record<string, number> = {}
       const expensesByCategory: Record<string, number> = {}
 
+      interface TransactionCategory { name: string; type: string; color: string }
       for (const tx of transactions || []) {
-        const category = tx.categories as any
+        const rawCategory = tx.categories as TransactionCategory | TransactionCategory[] | null
+        const category = Array.isArray(rawCategory) ? rawCategory[0] : rawCategory
         const amount = Math.abs(tx.amount)
         const catName = category?.name || "Uncategorized"
 

@@ -4,6 +4,8 @@ import { createAdminClient } from '@dreamteam/database/server'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
 import { startOfMonth, endOfMonth, subMonths, format, eachMonthOfInterval } from 'date-fns'
 
+interface JoinedCategory { type: string }
+
 export async function GET() {
   try {
     const session = await getSession()
@@ -97,7 +99,7 @@ export async function GET() {
     let allTimeIncome = 0
     let allTimeExpenses = 0
     for (const tx of allTransactions || []) {
-      const category = tx.categories as any
+      const category = tx.categories as JoinedCategory | null
       if (category?.type === 'income' || tx.amount > 0) {
         allTimeIncome += Math.abs(tx.amount)
       } else {
@@ -109,7 +111,7 @@ export async function GET() {
     let currentIncome = 0
     let currentExpenses = 0
     for (const tx of currentTransactions || []) {
-      const category = tx.categories as any
+      const category = tx.categories as JoinedCategory | null
       if (category?.type === 'income' || tx.amount > 0) {
         currentIncome += Math.abs(tx.amount)
       } else {
@@ -121,7 +123,7 @@ export async function GET() {
     let lastIncome = 0
     let lastExpenses = 0
     for (const tx of lastTransactions || []) {
-      const category = tx.categories as any
+      const category = tx.categories as JoinedCategory | null
       if (category?.type === 'income' || tx.amount > 0) {
         lastIncome += Math.abs(tx.amount)
       } else {
@@ -138,7 +140,7 @@ export async function GET() {
 
     for (const tx of trendTransactions || []) {
       const monthKey = format(new Date(tx.date), 'yyyy-MM')
-      const category = tx.categories as any
+      const category = tx.categories as JoinedCategory | null
       if (monthlyData[monthKey]) {
         if (category?.type === 'income' || tx.amount > 0) {
           monthlyData[monthKey].income += Math.abs(tx.amount)

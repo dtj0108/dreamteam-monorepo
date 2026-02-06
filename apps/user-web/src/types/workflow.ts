@@ -89,6 +89,7 @@ export interface WorkflowAction {
 export interface Workflow {
   id: string
   user_id: string
+  workspace_id?: string
   name: string
   description?: string
   trigger_type: TriggerType

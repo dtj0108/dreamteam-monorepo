@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@dreamteam/database/server'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 import { getWorkspaceBilling } from '@/lib/billing-queries'
 import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
 
@@ -52,14 +52,15 @@ export async function POST() {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001'
 
     // Create Stripe Customer Portal session
-    const portalSession = await stripe.billingPortal.sessions.create({
+    const portalSession = await getStripe().billingPortal.sessions.create({
       customer: billing.stripe_customer_id,
       return_url: `${appUrl}/billing`,
     })
 
     return NextResponse.json({ url: portalSession.url })
   } catch (error) {
-    console.error('Portal error:', error)
-    return NextResponse.json({ error: 'Failed to create portal session' }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[billing/portal] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

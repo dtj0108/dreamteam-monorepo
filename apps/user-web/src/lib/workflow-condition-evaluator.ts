@@ -33,7 +33,7 @@ export function getFieldValue(
   switch (condition.field_source) {
     case 'trigger':
       // Get value from trigger context (lead, contact, deal)
-      return getNestedValue(context as unknown as Record<string, unknown>, condition.field_path)
+      return getNestedValue({ ...context } as Record<string, unknown>, condition.field_path)
 
     case 'custom_field':
       // Get value from custom field values map
@@ -52,7 +52,7 @@ export function getFieldValue(
 
       // Get the remaining path from the action result
       const resultPath = parts.slice(2).join('.')
-      return getNestedValue(actionResult as unknown as Record<string, unknown>, resultPath)
+      return getNestedValue({ ...actionResult } as Record<string, unknown>, resultPath)
 
     default:
       return undefined

@@ -1,11 +1,21 @@
-import { sendSMS, formatE164, getTwilioPhoneNumber } from './twilio'
+import { formatE164, getTwilioPhoneNumber } from './twilio'
+import { sendSMSWithCredits } from './sms-with-credits'
 import { sendEmail as sendNylasEmail, isNylasConfigured } from './nylas'
 import { createAdminClient } from './supabase-server'
 import type { WorkflowAction, ActionType, TriggerType, ConditionActionConfig } from '@/types/workflow'
 import { evaluateCondition } from './workflow-condition-evaluator'
 
+function isConditionActionConfig(config: Record<string, unknown>): boolean {
+  return (
+    typeof config.condition === 'object' &&
+    config.condition !== null &&
+    Array.isArray(config.if_branch)
+  )
+}
+
 export interface WorkflowContext {
   userId: string
+  workspaceId?: string
   leadId?: string
   contactId?: string
   dealId?: string
@@ -189,33 +199,50 @@ async function resolveOpportunityId(
   }
 
   const supabase = createAdminClient()
-  const { data: opportunity, error } = await supabase
+  let query = supabase
     .from('lead_opportunities')
     .select('id')
     .eq('lead_id', context.leadId)
     .eq('user_id', context.userId)
     .order('updated_at', { ascending: false })
     .limit(1)
-    .single()
 
-  if (error || !opportunity) {
+  if (context.workspaceId) {
+    query = query.eq('workspace_id', context.workspaceId)
+  }
+
+  const { data: opportunity, error } = await query.single()
+
+  if (error) {
+    // PGRST116 = "no rows returned" which is expected; log other errors
+    if (error.code !== 'PGRST116') {
+      console.error('[Workflows] Error resolving opportunity:', error)
+    }
     return null
   }
 
-  return opportunity.id
+  return opportunity?.id || null
 }
 
 /**
  * Get the phone number to use based on action config
  */
 function getPhoneNumber(config: ActionConfig, context: WorkflowContext): string | null {
+  let phone: string | null = null
   switch (config.phone_source) {
     case 'custom':
-      return config.custom_phone || null
+      phone = config.custom_phone || null
+      break
     case 'contact_phone':
     default:
-      return context.contact?.phone || null
+      phone = context.contact?.phone || null
+      break
   }
+  // Basic validation: only digits, spaces, dashes, parens, dots, and optional leading +
+  if (phone && !/^\+?[\d\s\-().]+$/.test(phone)) {
+    return null
+  }
+  return phone
 }
 
 /**
@@ -234,6 +261,7 @@ async function createExecutionRecord(
     .insert({
       workflow_id: workflowId,
       user_id: userId,
+      workspace_id: context.workspaceId || null,
       trigger_type: triggerType,
       trigger_context: {
         leadId: context.leadId,
@@ -318,6 +346,30 @@ export async function executeWorkflowAction(
           }
         }
 
+        // Resolve workspaceId from lead record for credit billing
+        let smsWorkspaceId: string | null = null
+        if (context.leadId) {
+          const { data: leadRecord } = await supabase
+            .from('leads')
+            .select('workspace_id')
+            .eq('id', context.leadId)
+            .single()
+          smsWorkspaceId = leadRecord?.workspace_id || null
+        }
+
+        if (!smsWorkspaceId) {
+          console.warn(`[Workflows] No workspace found for SMS action in workflow ${workflowId}`)
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No workspace found for billing — cannot send SMS',
+            executedAt,
+          }
+        }
+
+        const fromNumber = getTwilioPhoneNumber()
+
         // Create communication record
         const { data: comm } = await supabase
           .from('communications')
@@ -327,32 +379,43 @@ export async function executeWorkflowAction(
             contact_id: context.contactId || null,
             type: 'sms',
             direction: 'outbound',
-            from_number: getTwilioPhoneNumber(),
+            from_number: fromNumber,
             to_number: formattedPhone,
             body: message,
             twilio_status: 'pending',
             triggered_by: 'workflow',
             workflow_id: workflowId,
+            workspace_id: smsWorkspaceId,
           })
           .select()
           .single()
 
-        // Send via Twilio
-        const result = await sendSMS({
+        // Send via Twilio with credit check and deduction
+        const result = await sendSMSWithCredits({
+          workspaceId: smsWorkspaceId,
           to: formattedPhone,
+          from: fromNumber,
           body: message,
         })
 
         // Update status
         if (comm) {
-          await supabase
+          const { error: updateError } = await supabase
             .from('communications')
             .update({
-              twilio_sid: result.sid,
-              twilio_status: result.success ? result.status : 'failed',
+              twilio_sid: result.messageSid || null,
+              twilio_status: result.success ? 'queued' : 'failed',
               error_message: result.error,
             })
             .eq('id', comm.id)
+
+          if (updateError) {
+            console.error(`[Workflows] Error updating communication ${comm.id}:`, updateError)
+          }
+        }
+
+        if (!result.success) {
+          console.warn(`[Workflows] SMS credit check failed in workflow ${workflowId}: ${result.error}`)
         }
 
         return {
@@ -360,7 +423,7 @@ export async function executeWorkflowAction(
           actionType: action.type,
           actionId: action.id,
           error: result.error,
-          data: { sid: result.sid, communicationId: comm?.id },
+          data: { messageSid: result.messageSid, communicationId: comm?.id, creditsUsed: result.creditsUsed },
           executedAt,
         }
       }
@@ -481,6 +544,7 @@ export async function executeWorkflowAction(
           .from('activities')
           .insert({
             profile_id: context.userId,
+            workspace_id: context.workspaceId || null,
             type: 'note',
             subject: 'Workflow Note',
             description: noteContent,
@@ -539,6 +603,7 @@ export async function executeWorkflowAction(
             .insert({
               lead_id: context.leadId,
               user_id: context.userId,
+              workspace_id: context.workspaceId || null,
               title: taskTitle,
               description: taskDescription || null,
               is_completed: false,
@@ -588,14 +653,22 @@ export async function executeWorkflowAction(
 
         let assignedUserId = config.assigned_user_id
 
-        // For round_robin or least_leads, we'd need to implement the logic
-        // For now, we'll just handle specific user assignment
-        if (config.assignment_type !== 'specific' || !assignedUserId) {
+        if (config.assignment_type !== 'specific') {
           return {
             success: false,
             actionType: action.type,
             actionId: action.id,
-            error: 'Only specific user assignment is currently supported',
+            error: `Assignment type "${config.assignment_type}" is not yet implemented. Use "specific" with an assigned_user_id.`,
+            executedAt,
+          }
+        }
+
+        if (!assignedUserId) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: 'No assigned_user_id provided for specific assignment',
             executedAt,
           }
         }
@@ -658,6 +731,8 @@ export async function executeWorkflowAction(
       }
 
       case 'send_email': {
+        // Email sending is intentionally unmetered — messages are sent through the
+        // user's own connected Nylas/email account, not a platform credit system.
         // Check if Nylas is configured
         if (!isNylasConfigured()) {
           return {
@@ -825,11 +900,21 @@ export async function executeWorkflowAction(
         }
 
         // Get stage details to update status
-        const { data: stage } = await supabase
+        const { data: stage, error: stageError } = await supabase
           .from('lead_pipeline_stages')
           .select('name, is_won, is_lost')
           .eq('id', config.stage_id)
           .single()
+
+        if (stageError || !stage) {
+          return {
+            success: false,
+            actionType: action.type,
+            actionId: action.id,
+            error: `Stage not found: ${stageError?.message || config.stage_id}`,
+            executedAt,
+          }
+        }
 
         // Update lead with new pipeline, stage, and derived status
         const { error } = await supabase
@@ -1364,6 +1449,7 @@ export async function executeWorkflowAction(
           .from('activities')
           .insert({
             profile_id: context.userId,
+            workspace_id: context.workspaceId || null,
             type: activityType,
             subject: activitySubject,
             description: activityDescription,
@@ -1461,6 +1547,7 @@ async function createScheduledAction(
     execution_id: executionId,
     workflow_id: workflowId,
     user_id: userId,
+    workspace_id: context.workspaceId || null,
     action_index: actionIndex,
     remaining_actions: remainingActions,
     workflow_context: context,
@@ -1523,6 +1610,18 @@ async function executeActionsRecursive(
 
     // Handle condition actions - evaluate and execute appropriate branch
     if (action.type === 'condition') {
+      if (!isConditionActionConfig(action.config)) {
+        results.push({
+          success: false,
+          actionType: action.type,
+          actionId: action.id,
+          error: 'Invalid condition configuration',
+          executedAt,
+        })
+        continue
+      }
+
+      // Safe to cast — shape validated by isConditionActionConfig above
       const condConfig = action.config as unknown as ConditionActionConfig
 
       // Validate condition is configured
@@ -1583,7 +1682,9 @@ async function executeActionsRecursive(
           }
         }
 
-        // Branch completed, update results
+        // Branch completed — replace results with branch output.
+        // branchResult.results is a superset (it was seeded with `results` via previousResults),
+        // so this avoids double-counting earlier actions.
         results.length = 0
         results.push(...branchResult.results)
       }

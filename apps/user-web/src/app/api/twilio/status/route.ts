@@ -53,27 +53,41 @@ export async function POST(request: NextRequest) {
       updateData.error_message = ErrorMessage
     }
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('communications')
       .update(updateData)
       .eq('twilio_sid', sid)
+
+    if (updateError) {
+      console.error(`[twilio/status] Failed to update communication ${sid}: ${updateError.message}`)
+      return NextResponse.json({ error: 'Failed to update status' }, { status: 500 })
+    }
 
     // Fire webhooks for delivery failures and call endings
     if (MessageSid && (status === 'failed' || status === 'undelivered')) {
       const { data: comm } = await supabase
         .from('communications')
-        .select('id, user_id, from_number, to_number, body, lead_id, contact_id')
+        .select('id, user_id, from_number, to_number, body, lead_id, contact_id, workspace_id')
         .eq('twilio_sid', MessageSid)
         .single()
 
       if (comm) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("default_workspace_id")
-          .eq("id", comm.user_id)
-          .single()
+        // Resolve workspace: comm record → twilio_numbers → skip
+        let commWorkspaceId = comm.workspace_id as string | null
+        if (!commWorkspaceId) {
+          const { data: numLookup } = await supabase
+            .from('twilio_numbers')
+            .select('workspace_id')
+            .or(`phone_number.eq.${comm.from_number},phone_number.eq.${comm.to_number}`)
+            .limit(1)
+            .single()
+          commWorkspaceId = (numLookup?.workspace_id as string) || null
+          if (!commWorkspaceId) {
+            console.warn(`[twilio/status] No workspace resolved for SMS ${MessageSid} — skipping webhook`)
+          }
+        }
 
-        if (profile?.default_workspace_id) {
+        if (commWorkspaceId) {
           fireWebhooks("sms.delivery_failed", {
             id: comm.id,
             twilio_sid: MessageSid,
@@ -85,7 +99,7 @@ export async function POST(request: NextRequest) {
             error_message: ErrorMessage,
             lead_id: comm.lead_id,
             contact_id: comm.contact_id,
-          }, profile.default_workspace_id)
+          }, commWorkspaceId)
         }
       }
     }
@@ -104,18 +118,27 @@ export async function POST(request: NextRequest) {
 
       const { data: comm } = await supabase
         .from('communications')
-        .select('id, user_id, from_number, to_number, direction, lead_id, contact_id, duration_seconds')
+        .select('id, user_id, from_number, to_number, direction, lead_id, contact_id, duration_seconds, workspace_id')
         .eq('twilio_sid', CallSid)
         .single()
 
       if (comm) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("default_workspace_id")
-          .eq("id", comm.user_id)
-          .single()
+        // Resolve workspace: comm record → twilio_numbers → skip
+        let callWorkspaceId = comm.workspace_id as string | null
+        if (!callWorkspaceId) {
+          const { data: numLookup } = await supabase
+            .from('twilio_numbers')
+            .select('workspace_id')
+            .or(`phone_number.eq.${comm.from_number},phone_number.eq.${comm.to_number}`)
+            .limit(1)
+            .single()
+          callWorkspaceId = (numLookup?.workspace_id as string) || null
+          if (!callWorkspaceId) {
+            console.warn(`[twilio/status] No workspace resolved for call ${CallSid} — skipping webhook`)
+          }
+        }
 
-        if (profile?.default_workspace_id) {
+        if (callWorkspaceId) {
           fireWebhooks("call.ended", {
             id: comm.id,
             twilio_sid: CallSid,
@@ -126,7 +149,7 @@ export async function POST(request: NextRequest) {
             duration_seconds: CallDuration ? parseInt(CallDuration) : comm.duration_seconds,
             lead_id: comm.lead_id,
             contact_id: comm.contact_id,
-          }, profile.default_workspace_id)
+          }, callWorkspaceId)
         }
 
         // Trigger workflow events for call completion/missed
@@ -148,7 +171,7 @@ export async function POST(request: NextRequest) {
         if (comm.lead_id) {
           const { data: lead } = await supabase
             .from('leads')
-            .select('id, name, status, notes, user_id')
+            .select('id, name, status, notes, user_id, workspace_id')
             .eq('id', comm.lead_id)
             .single()
           leadData = lead as Lead | null
@@ -165,19 +188,20 @@ export async function POST(request: NextRequest) {
 
         // Trigger call_completed when call ended successfully with duration > 0
         if (status === 'completed' && durationSeconds && durationSeconds > 0) {
-          triggerCallCompleted(callData, leadData, contactData, comm.user_id)
+          triggerCallCompleted(callData, leadData, contactData, comm.user_id, callWorkspaceId || undefined)
         }
 
         // Trigger call_missed for missed call statuses
         if (['no-answer', 'busy', 'canceled'].includes(status)) {
-          triggerCallMissed(callData, leadData, contactData, comm.user_id)
+          triggerCallMissed(callData, leadData, contactData, comm.user_id, callWorkspaceId || undefined)
         }
       }
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error handling status callback:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[twilio/status] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

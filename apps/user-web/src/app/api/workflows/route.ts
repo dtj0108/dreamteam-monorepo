@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 import { getSession } from "@/lib/session"
+import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
 
 export async function GET() {
   try {
@@ -9,11 +10,17 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
+    }
+
     const supabase = createAdminClient()
     const { data, error } = await supabase
       .from("workflows")
       .select("*")
       .eq("user_id", session.id)
+      .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -23,8 +30,9 @@ export async function GET() {
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error in workflows GET:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[workflows/list] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }
 
@@ -33,6 +41,11 @@ export async function POST(request: NextRequest) {
     const session = await getSession()
     if (!session?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
     }
 
     const body = await request.json()
@@ -51,6 +64,7 @@ export async function POST(request: NextRequest) {
       .from("workflows")
       .insert({
         user_id: session.id,
+        workspace_id: workspaceId,
         name,
         description,
         trigger_type,
@@ -68,7 +82,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(data, { status: 201 })
   } catch (error) {
-    console.error("Error in workflows POST:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[workflows/create] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

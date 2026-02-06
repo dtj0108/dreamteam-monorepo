@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createServerSupabaseClient } from "@/lib/supabase-server"
+import { createServerSupabaseClient, createAdminClient } from "@/lib/supabase-server"
+import { triggerActivityCompleted } from "@/lib/workflow-trigger-service"
 
 // GET /api/activities/[id] - Get a single activity
 export async function GET(
@@ -63,6 +64,16 @@ export async function PATCH(
     completed_at,
     assignees,
   } = body
+
+  // Fetch previous state to detect completion transition
+  const { data: previousActivity } = await supabase
+    .from("activities")
+    .select("is_completed, contact_id")
+    .eq("id", id)
+    .eq("profile_id", user.id)
+    .single()
+
+  const wasCompleted = previousActivity?.is_completed ?? false
 
   // Build update object with only provided fields
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -134,6 +145,44 @@ export async function PATCH(
     `)
     .eq("id", id)
     .single()
+
+  // Trigger activity_completed workflow if activity was just completed (non-blocking)
+  if (is_completed === true && !wasCompleted) {
+    const activityContactId = activity.contact_id || previousActivity?.contact_id
+    if (activityContactId) {
+      const adminSupabase = createAdminClient()
+      const { data: contact } = await adminSupabase
+        .from("contacts")
+        .select("id, lead_id")
+        .eq("id", activityContactId)
+        .single()
+
+      if (contact?.lead_id) {
+        const { data: lead } = await adminSupabase
+          .from("leads")
+          .select("id, name, status, notes, user_id")
+          .eq("id", contact.lead_id)
+          .single()
+
+        if (lead) {
+          triggerActivityCompleted(
+            {
+              id: activity.id,
+              type: activity.type,
+              subject: activity.subject || "",
+              description: activity.description,
+              is_completed: activity.is_completed,
+              completed_at: activity.completed_at,
+            },
+            lead,
+            user.id
+          ).catch((err) => {
+            console.error("Error triggering activity_completed workflows:", err)
+          })
+        }
+      }
+    }
+  }
 
   return NextResponse.json({ activity: completeActivity || activity })
 }

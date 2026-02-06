@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 import { getSession } from "@/lib/session"
+import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
 
 // GET - List all pipelines for current user (with stages)
 export async function GET() {
@@ -8,6 +9,11 @@ export async function GET() {
     const session = await getSession()
     if (!session?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
     }
 
     const supabase = createAdminClient()
@@ -19,6 +25,7 @@ export async function GET() {
         stages:lead_pipeline_stages(*)
       `)
       .eq("user_id", session.id)
+      .eq("workspace_id", workspaceId)
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: true })
 
@@ -50,6 +57,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
+    }
+
     const body = await request.json()
     const { name, description, is_default, stages } = body
 
@@ -72,6 +84,7 @@ export async function POST(request: NextRequest) {
       .from("lead_pipelines")
       .insert({
         user_id: session.id,
+        workspace_id: workspaceId,
         name,
         description: description || null,
         is_default: is_default || false,
