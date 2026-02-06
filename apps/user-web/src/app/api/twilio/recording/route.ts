@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
       if (fullComm.lead_id) {
         const { data: lead } = await supabase
           .from('leads')
-          .select('id, name, status, notes, user_id')
+          .select('id, name, status, notes, user_id, workspace_id')
           .eq('id', fullComm.lead_id)
           .single()
         leadData = lead as Lead | null
@@ -145,13 +145,26 @@ export async function POST(request: NextRequest) {
         contactData = contact as Contact | null
       }
 
+      // Resolve workspace for workflow scoping
+      let recordingWorkspaceId: string | undefined = leadData?.workspace_id || undefined
+      if (!recordingWorkspaceId) {
+        const { data: numLookup } = await supabase
+          .from('twilio_numbers')
+          .select('workspace_id')
+          .or(`phone_number.eq.${fullComm.from_number},phone_number.eq.${fullComm.to_number}`)
+          .limit(1)
+          .single()
+        recordingWorkspaceId = (numLookup?.workspace_id as string) || undefined
+      }
+
       // Trigger voicemail workflow
-      triggerVoicemailReceived(callData, leadData, contactData, communication.user_id)
+      triggerVoicemailReceived(callData, leadData, contactData, communication.user_id, recordingWorkspaceId)
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error handling recording callback:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[twilio/recording] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

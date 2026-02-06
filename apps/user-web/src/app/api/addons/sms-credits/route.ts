@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@dreamteam/database/server'
-import { stripe, STRIPE_PRICES } from '@/lib/stripe'
+import { getStripe, STRIPE_PRICES } from '@/lib/stripe'
 import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
 import { getOrCreateStripeCustomer } from '@/lib/billing-queries'
 import {
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
 
     // Create Stripe checkout session for one-time payment
     // setup_future_usage saves the card for future off-session charges (auto-replenish, quick purchases)
-    const checkoutSession = await stripe.checkout.sessions.create({
+    const checkoutSession = await getStripe().checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
       mode: 'payment',

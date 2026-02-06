@@ -66,15 +66,16 @@ export async function POST(req: Request) {
           .eq("agent_id", agentId)
 
         // Append active skills to system prompt
+        interface SkillData { id: string; name: string; display_name: string; content: string; is_active: boolean }
         if (assignedSkills && assignedSkills.length > 0) {
-          const activeSkills = assignedSkills
-            .filter((s: any) => s.skill?.is_active !== false)
-            .map((s: any) => s.skill)
-            .filter(Boolean)
+          const activeSkills: SkillData[] = assignedSkills
+            .filter((s: { skill: SkillData | null }) => s.skill?.is_active !== false)
+            .map((s: { skill: SkillData | null }) => s.skill)
+            .filter((skill: SkillData | null): skill is SkillData => skill != null)
 
           if (activeSkills.length > 0) {
             const skillsContent = activeSkills
-              .map((skill: any) => `## Skill: ${skill.display_name}\n\n${skill.content}`)
+              .map((skill) => `## Skill: ${skill.display_name}\n\n${skill.content}`)
               .join("\n\n---\n\n")
 
             systemPrompt = `${systemPrompt}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { validateTwilioWebhook, MessagingResponse } from '@/lib/twilio'
 import { fireWebhooks } from "@/lib/make-webhooks"
+import { getJoinedField } from '@/lib/supabase-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,16 +37,30 @@ export async function POST(request: NextRequest) {
       if (url) mediaUrls.push(url)
     }
 
-    // Find existing conversation thread for this phone number
-    const { data: thread } = await supabase
+    // Look up the receiving phone number to determine workspace
+    const { data: twilioNumber } = await supabase
+      .from('twilio_numbers')
+      .select('workspace_id')
+      .eq('phone_number', To)
+      .single()
+
+    const smsWorkspaceId = twilioNumber?.workspace_id as string | null
+
+    // Find existing conversation thread for this phone number, scoped to workspace
+    let threadQuery = supabase
       .from('conversation_threads')
       .select('id, user_id, lead_id, contact_id, unread_count')
       .eq('phone_number', From)
-      .single()
+
+    if (smsWorkspaceId) {
+      threadQuery = threadQuery.eq('workspace_id', smsWorkspaceId)
+    }
+
+    const { data: thread } = await threadQuery.single()
 
     if (thread) {
       // Log the incoming message
-      await supabase.from('communications').insert({
+      const { error: insertCommsError } = await supabase.from('communications').insert({
         user_id: thread.user_id,
         lead_id: thread.lead_id,
         contact_id: thread.contact_id,
@@ -58,25 +73,30 @@ export async function POST(request: NextRequest) {
         body: Body,
         media_urls: mediaUrls,
         triggered_by: 'inbound',
+        workspace_id: smsWorkspaceId || null,
       })
+      if (insertCommsError) {
+        console.warn(`[twilio/sms] Failed to insert communication for thread ${thread.id}:`, insertCommsError.message)
+      }
 
       // Update conversation thread
-      await supabase
+      const { error: updateThreadError } = await supabase
         .from('conversation_threads')
         .update({
           last_message_at: new Date().toISOString(),
           unread_count: (thread.unread_count || 0) + 1,
         })
         .eq('id', thread.id)
+      if (updateThreadError) {
+        console.warn(`[twilio/sms] Failed to update thread ${thread.id}:`, updateThreadError.message)
+      }
 
-      // Fire webhook for Make.com integrations
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("default_workspace_id")
-        .eq("id", thread.user_id)
-        .single()
+      // Fire webhook for Make.com integrations — use workspace from twilio_numbers
+      if (!smsWorkspaceId) {
+        console.warn(`[twilio/sms] No workspace resolved from twilio_numbers for ${To} — skipping webhook`)
+      }
 
-      if (profile?.default_workspace_id) {
+      if (smsWorkspaceId) {
         fireWebhooks("sms.received", {
           id: MessageSid,
           from: From,
@@ -85,21 +105,33 @@ export async function POST(request: NextRequest) {
           media_urls: mediaUrls,
           contact_id: thread.contact_id,
           lead_id: thread.lead_id,
-        }, profile.default_workspace_id)
+        }, smsWorkspaceId)
       }
     } else {
-      // Try to find contact by phone number
-      const { data: contact } = await supabase
+      // Try to find contact by phone number, scoped to workspace if known
+      let contactQuery = supabase
         .from('contacts')
-        .select('id, lead_id, leads!inner(user_id)')
+        .select('id, lead_id, leads!inner(user_id, workspace_id)')
         .eq('phone', From)
-        .single()
+
+      if (smsWorkspaceId) {
+        contactQuery = contactQuery.eq('leads.workspace_id', smsWorkspaceId)
+      }
+
+      const { data: contact } = await contactQuery.single()
 
       if (contact) {
-        const userId = (contact.leads as unknown as { user_id: string }).user_id
+        const userId = getJoinedField<string>(contact.leads, 'user_id')
+        const leadsWorkspaceId = getJoinedField<string>(contact.leads, 'workspace_id')
+        if (!userId) {
+          console.error('Unexpected leads join shape in inbound SMS:', contact.leads)
+          return new NextResponse(new MessagingResponse().toString(), {
+            headers: { 'Content-Type': 'text/xml' },
+          })
+        }
 
         // Create conversation thread
-        await supabase
+        const { error: insertThreadError } = await supabase
           .from('conversation_threads')
           .insert({
             user_id: userId,
@@ -109,9 +141,12 @@ export async function POST(request: NextRequest) {
             last_message_at: new Date().toISOString(),
             unread_count: 1,
           })
+        if (insertThreadError) {
+          console.warn(`[twilio/sms] Failed to create thread for contact ${contact.id}:`, insertThreadError.message)
+        }
 
         // Log the message
-        await supabase.from('communications').insert({
+        const { error: insertCommsError2 } = await supabase.from('communications').insert({
           user_id: userId,
           lead_id: contact.lead_id,
           contact_id: contact.id,
@@ -124,16 +159,19 @@ export async function POST(request: NextRequest) {
           body: Body,
           media_urls: mediaUrls,
           triggered_by: 'inbound',
+          workspace_id: smsWorkspaceId || leadsWorkspaceId || null,
         })
+        if (insertCommsError2) {
+          console.warn(`[twilio/sms] Failed to insert communication for contact ${contact.id}:`, insertCommsError2.message)
+        }
 
-        // Fire webhook for Make.com integrations
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("default_workspace_id")
-          .eq("id", userId)
-          .single()
+        // Fire webhook for Make.com integrations — use workspace from twilio_numbers or lead
+        const contactWebhookWorkspaceId = smsWorkspaceId || leadsWorkspaceId || null
+        if (!contactWebhookWorkspaceId) {
+          console.warn(`[twilio/sms] No workspace resolved for contact ${contact.id} from ${From} — skipping webhook`)
+        }
 
-        if (profile?.default_workspace_id) {
+        if (contactWebhookWorkspaceId) {
           fireWebhooks("sms.received", {
             id: MessageSid,
             from: From,
@@ -142,7 +180,7 @@ export async function POST(request: NextRequest) {
             media_urls: mediaUrls,
             contact_id: contact.id,
             lead_id: contact.lead_id,
-          }, profile.default_workspace_id)
+          }, contactWebhookWorkspaceId)
         }
       }
       // If no contact found, we can't associate the message - skip logging
@@ -155,7 +193,8 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'text/xml' },
     })
   } catch (error) {
-    console.error('Error handling incoming SMS:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[twilio/sms] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

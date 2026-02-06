@@ -3,6 +3,19 @@
 import { useState, useCallback, useEffect } from "react"
 import { type WorkspaceFile, type FileCategory } from "@/types/files"
 
+interface ApiFileResponse {
+  id: string
+  fileName: string
+  fileType: string | null
+  fileSize: number
+  fileUrl: string
+  storagePath: string
+  thumbnailUrl?: string
+  createdAt: string
+  uploader?: { id: string; name: string; avatarUrl: string | null }
+  source?: { messageId?: string; channelId?: string; channelName?: string; dmConversationId?: string }
+}
+
 interface UseWorkspaceFilesOptions {
   workspaceId?: string
   type?: FileCategory
@@ -62,7 +75,7 @@ export function useWorkspaceFiles({
           throw new Error(data.error || "Failed to fetch files")
         }
 
-        const transformedFiles: WorkspaceFile[] = data.files.map((file: any) => ({
+        const transformedFiles: WorkspaceFile[] = data.files.map((file: ApiFileResponse) => ({
           id: file.id,
           workspaceId: workspaceId,
           fileName: file.fileName,

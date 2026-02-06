@@ -51,8 +51,9 @@ export async function PATCH(
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error in custom fields PATCH:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[custom-field/update] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }
 
@@ -93,7 +94,8 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error in custom fields DELETE:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[custom-field/delete] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

@@ -140,7 +140,7 @@ export async function sendSMSWithCredits(
         .single()
 
       if (current) {
-        await supabase
+        const { error: refundError } = await supabase
           .from('workspace_sms_credits')
           .update({
             balance: current.balance + creditsNeeded,
@@ -148,7 +148,13 @@ export async function sendSMSWithCredits(
           })
           .eq('workspace_id', workspaceId)
 
-        console.log(`Refunded ${creditsNeeded} SMS credits to workspace ${workspaceId}`)
+        if (refundError) {
+          console.error('[sms-credits] Failed to refund credits — manual reconciliation needed', {
+            workspaceId, creditsNeeded, error: refundError.message,
+          })
+        } else {
+          console.log(`Refunded ${creditsNeeded} SMS credits to workspace ${workspaceId}`)
+        }
       }
     } catch (refundError) {
       console.error('Failed to refund SMS credits:', refundError)

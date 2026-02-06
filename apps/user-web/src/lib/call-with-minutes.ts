@@ -56,7 +56,7 @@ export async function reserveCallMinutes(
   // Store reservation in call_usage_log with status='reserved'
   // duration_seconds holds the reserved amount until finalization
   const supabase = createAdminClient()
-  await supabase.from('call_usage_log').insert({
+  const { error: insertError } = await supabase.from('call_usage_log').insert({
     workspace_id: workspaceId,
     call_sid: reservationId,
     direction,
@@ -66,6 +66,25 @@ export async function reserveCallMinutes(
     to_number: to,
     status: 'reserved',
   })
+
+  if (insertError) {
+    // Reservation log failed — refund the already-deducted minutes
+    console.error('[call-minutes] Failed to insert reservation log, refunding minutes', {
+      workspaceId, reservationId, reserveMinutes, error: insertError.message,
+    })
+    const { data: current } = await supabase
+      .from('workspace_call_minutes')
+      .select('balance_seconds, lifetime_used_seconds')
+      .eq('workspace_id', workspaceId)
+      .single()
+    if (current) {
+      await supabase.from('workspace_call_minutes').update({
+        balance_seconds: current.balance_seconds + reserveSeconds,
+        lifetime_used_seconds: Math.max(0, current.lifetime_used_seconds - reserveSeconds),
+      }).eq('workspace_id', workspaceId)
+    }
+    return { success: false, error: 'Failed to create reservation record.' }
+  }
 
   return { success: true }
 }
@@ -78,11 +97,17 @@ export async function updateReservationCallSid(
   newCallSid: string
 ): Promise<void> {
   const supabase = createAdminClient()
-  await supabase
+  const { error } = await supabase
     .from('call_usage_log')
     .update({ call_sid: newCallSid })
     .eq('call_sid', oldId)
     .eq('status', 'reserved')
+
+  if (error) {
+    console.warn('[call-minutes] Failed to update reservation SID', {
+      oldId, newCallSid, error: error.message,
+    })
+  }
 }
 
 /**
@@ -122,7 +147,7 @@ export async function finalizeCall(
         .single()
 
       if (current) {
-        await supabase
+        const { error: refundError } = await supabase
           .from('workspace_call_minutes')
           .update({
             balance_seconds: current.balance_seconds + difference,
@@ -130,9 +155,15 @@ export async function finalizeCall(
           })
           .eq('workspace_id', reservation.workspace_id)
 
-        console.log(
-          `Refunded ${Math.ceil(difference / 60)} minutes (${difference}s) to workspace ${reservation.workspace_id}`
-        )
+        if (refundError) {
+          console.error('[call-minutes] Failed to refund difference — manual reconciliation needed', {
+            workspaceId: reservation.workspace_id, callSid, differenceSeconds: difference, error: refundError.message,
+          })
+        } else {
+          console.log(
+            `Refunded ${Math.ceil(difference / 60)} minutes (${difference}s) to workspace ${reservation.workspace_id}`
+          )
+        }
       }
     } catch (error) {
       console.error('Failed to refund call minutes:', error)
@@ -141,7 +172,7 @@ export async function finalizeCall(
 
   // Update the reservation record with actual values
   const actualMinutes = Math.ceil(actualDurationSeconds / 60)
-  await supabase
+  const { error: finalizeError } = await supabase
     .from('call_usage_log')
     .update({
       duration_seconds: actualDurationSeconds,
@@ -150,6 +181,12 @@ export async function finalizeCall(
     })
     .eq('call_sid', callSid)
     .eq('status', 'reserved')
+
+  if (finalizeError) {
+    console.warn('[call-minutes] Failed to finalize usage log', {
+      callSid, actualDurationSeconds, status, error: finalizeError.message,
+    })
+  }
 }
 
 /**
@@ -182,7 +219,7 @@ export async function cancelReservation(callSid: string): Promise<void> {
       .single()
 
     if (current) {
-      await supabase
+      const { error: refundError } = await supabase
         .from('workspace_call_minutes')
         .update({
           balance_seconds: current.balance_seconds + reservedSeconds,
@@ -190,16 +227,22 @@ export async function cancelReservation(callSid: string): Promise<void> {
         })
         .eq('workspace_id', reservation.workspace_id)
 
-      console.log(
-        `Canceled reservation: refunded ${Math.ceil(reservedSeconds / 60)} minutes to workspace ${reservation.workspace_id}`
-      )
+      if (refundError) {
+        console.error('[call-minutes] Failed to refund canceled reservation — manual reconciliation needed', {
+          workspaceId: reservation.workspace_id, callSid, reservedSeconds, error: refundError.message,
+        })
+      } else {
+        console.log(
+          `Canceled reservation: refunded ${Math.ceil(reservedSeconds / 60)} minutes to workspace ${reservation.workspace_id}`
+        )
+      }
     }
   } catch (error) {
     console.error('Failed to refund canceled reservation:', error)
   }
 
   // Mark the reservation record as canceled
-  await supabase
+  const { error: cancelError } = await supabase
     .from('call_usage_log')
     .update({
       duration_seconds: 0,
@@ -208,6 +251,12 @@ export async function cancelReservation(callSid: string): Promise<void> {
     })
     .eq('call_sid', callSid)
     .eq('status', 'reserved')
+
+  if (cancelError) {
+    console.warn('[call-minutes] Failed to mark reservation as canceled', {
+      callSid, error: cancelError.message,
+    })
+  }
 }
 
 /**

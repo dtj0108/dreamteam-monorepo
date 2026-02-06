@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
       .select("phone_number")
       .eq("id", from_number_id)
       .eq("user_id", apiKey.created_by)
+      .eq("workspace_id", auth.workspaceId)
       .single()
 
     if (numberError || !ownedNumber) {
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
         body: message,
         twilio_status: "pending",
         triggered_by: "workflow",
+        workspace_id: auth.workspaceId,
       })
       .select()
       .single()

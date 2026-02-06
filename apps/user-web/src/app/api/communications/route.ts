@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { getSession } from '@dreamteam/auth/session'
+import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
 
 interface CommunicationRecord {
   id: string
@@ -16,6 +17,11 @@ export async function GET(request: NextRequest) {
     const session = await getSession()
     if (!session?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'No workspace selected' }, { status: 400 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -39,6 +45,7 @@ export async function GET(request: NextRequest) {
         recordings:call_recordings(*)
       `)
       .eq('user_id', session.id)
+      .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 

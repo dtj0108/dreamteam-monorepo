@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
+import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
 
 // GET /api/pipelines - List all pipelines with their stages
 export async function GET() {
@@ -10,6 +11,11 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  const workspaceId = await getCurrentWorkspaceId(user.id)
+  if (!workspaceId) {
+    return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
+  }
+
   const { data: pipelines, error } = await supabase
     .from("pipelines")
     .select(`
@@ -17,6 +23,7 @@ export async function GET() {
       stages:pipeline_stages(*)
     `)
     .eq("profile_id", user.id)
+    .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
 
   if (error) {
@@ -41,6 +48,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  const workspaceId = await getCurrentWorkspaceId(user.id)
+  if (!workspaceId) {
+    return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
+  }
+
   const body = await request.json()
   const { name, description, is_default, stages } = body
 
@@ -61,6 +73,7 @@ export async function POST(request: NextRequest) {
     .from("pipelines")
     .insert({
       profile_id: user.id,
+      workspace_id: workspaceId,
       name,
       description,
       is_default: is_default || false,
@@ -76,6 +89,7 @@ export async function POST(request: NextRequest) {
   if (stages && stages.length > 0) {
     const stagesWithPipelineId = stages.map((stage: { name: string; color?: string; win_probability?: number }, index: number) => ({
       pipeline_id: pipeline.id,
+      workspace_id: workspaceId,
       name: stage.name,
       color: stage.color || null,
       position: index,
