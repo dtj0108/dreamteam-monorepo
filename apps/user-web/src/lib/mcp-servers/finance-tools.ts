@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { MCPToolContext, MCPToolResponse, ResponseFormat } from "./types"
 import { formatActionableError, formatCurrency, truncateText } from "./types"
 import { conciseFormatters } from "./adapters/tool-adapter"
+import { getJoinedField } from "@/lib/supabase-utils"
 
 // ============================================================================
 // TRANSACTIONS TOOL
@@ -52,7 +53,7 @@ async function executeTransactions(
 
       if (error) throw new Error(error.message)
 
-      const categoryName = (transaction.category as any)?.name
+      const categoryName = getJoinedField<string>(transaction.category, 'name')
       return {
         success: true,
         data: { message: `Categorized as "${categoryName}"`, transaction },
@@ -111,7 +112,12 @@ async function executeTransactions(
     let totalIncome = 0
     let totalExpenses = 0
 
-    const formatted = (transactions || []).map((tx: any) => {
+    interface TransactionRow {
+      id: string; date: string; description: string; amount: number;
+      notes: string | null; category: { id: string; name: string }[] | { id: string; name: string } | null;
+    }
+    const formatted = (transactions || []).map((tx: TransactionRow) => {
+      const cat = Array.isArray(tx.category) ? tx.category[0] : tx.category
       if (tx.amount > 0) totalIncome += tx.amount
       else totalExpenses += Math.abs(tx.amount)
 
@@ -120,8 +126,8 @@ async function executeTransactions(
         date: tx.date,
         description: tx.description,
         amount: tx.amount,
-        category: tx.category?.name || null,
-        categoryId: tx.category?.id || null,
+        category: cat?.name || null,
+        categoryId: cat?.id || null,
       }
     })
 
@@ -241,7 +247,7 @@ async function executeBudgets(
 
       if (error) throw new Error(error.message)
 
-      const categoryName = (budget.category as any)?.name
+      const categoryName = getJoinedField<string>(budget.category, 'name')
       return {
         success: true,
         data: { message: `Budget of ${formatCurrency(amount)} created for ${categoryName}` },

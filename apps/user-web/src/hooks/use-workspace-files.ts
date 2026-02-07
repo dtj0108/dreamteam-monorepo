@@ -3,11 +3,25 @@
 import { useState, useCallback, useEffect } from "react"
 import { type WorkspaceFile, type FileCategory } from "@/types/files"
 
+interface ApiFileResponse {
+  id: string
+  fileName: string
+  fileType: string | null
+  fileSize: number
+  fileUrl: string
+  storagePath: string
+  thumbnailUrl?: string
+  createdAt: string
+  uploader?: { id: string; name: string; avatarUrl: string | null }
+  source?: { messageId?: string; channelId?: string; channelName?: string; dmConversationId?: string }
+}
+
 interface UseWorkspaceFilesOptions {
   workspaceId?: string
   type?: FileCategory
   query?: string
   channelId?: string
+  dmConversationId?: string
   uploaderId?: string
 }
 
@@ -26,6 +40,7 @@ export function useWorkspaceFiles({
   type,
   query,
   channelId,
+  dmConversationId,
   uploaderId,
 }: UseWorkspaceFilesOptions): UseWorkspaceFilesReturn {
   const [files, setFiles] = useState<WorkspaceFile[]>([])
@@ -49,6 +64,7 @@ export function useWorkspaceFiles({
         if (type) params.set("type", type)
         if (query) params.set("q", query)
         if (channelId) params.set("channelId", channelId)
+        if (dmConversationId) params.set("dmConversationId", dmConversationId)
         if (uploaderId) params.set("uploaderId", uploaderId)
         if (loadMore && cursor) params.set("cursor", cursor)
 
@@ -59,7 +75,7 @@ export function useWorkspaceFiles({
           throw new Error(data.error || "Failed to fetch files")
         }
 
-        const transformedFiles: WorkspaceFile[] = data.files.map((file: any) => ({
+        const transformedFiles: WorkspaceFile[] = data.files.map((file: ApiFileResponse) => ({
           id: file.id,
           workspaceId: workspaceId,
           fileName: file.fileName,
@@ -93,14 +109,14 @@ export function useWorkspaceFiles({
         setIsLoading(false)
       }
     },
-    [workspaceId, type, query, channelId, uploaderId, cursor]
+    [workspaceId, type, query, channelId, dmConversationId, uploaderId, cursor]
   )
 
   // Refetch when filters change
   useEffect(() => {
     setCursor(null) // Reset cursor when filters change
     fetchFiles(false)
-  }, [workspaceId, type, query, channelId, uploaderId])
+  }, [workspaceId, type, query, channelId, dmConversationId, uploaderId])
 
   const loadMore = useCallback(() => {
     if (hasMore && !isLoading) {

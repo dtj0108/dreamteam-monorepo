@@ -16,13 +16,14 @@ export function getStripe(): Stripe {
   return stripeInstance
 }
 
-// Legacy export for backwards compatibility (use getStripe() instead)
-export const stripe = process.env.STRIPE_SECRET_KEY 
+// Legacy export — returns null when STRIPE_SECRET_KEY is not set.
+// Prefer getStripe() which throws a clear error instead of returning null.
+export const stripe: Stripe | null = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
       apiVersion: '2025-12-15.clover',
       typescript: true,
     })
-  : null as unknown as Stripe
+  : null
 
 // Price IDs from Stripe Dashboard (set in environment variables)
 // NOTE: These are now used as FALLBACK only. Primary source of truth is the

@@ -144,6 +144,95 @@ async function validateApiKey(
       }
     }
 
+    if (provider === "hubspot") {
+      // HubSpot uses Bearer token (Private App token or OAuth access token)
+      const response = await fetch("https://api.hubapi.com/crm/v3/objects/contacts?limit=1", {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          return { valid: false, error: "Invalid access token" }
+        }
+        return { valid: false, error: "Failed to verify access token" }
+      }
+
+      // Get account info
+      const accountResponse = await fetch("https://api.hubapi.com/account-info/v3/details", {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      })
+
+      let accountName = "HubSpot Account"
+      let accountId: string | undefined
+      if (accountResponse.ok) {
+        const accountData = await accountResponse.json()
+        accountId = String(accountData.portalId)
+        accountName = accountData.companyName || accountData.portalId || "HubSpot Account"
+      }
+
+      return { valid: true, accountId, accountName }
+    }
+
+    if (provider === "freshsales") {
+      // Freshsales requires subdomain:apikey format
+      const colonIndex = apiKey.indexOf(":")
+      if (colonIndex === -1) {
+        return { valid: false, error: "Invalid format. Use: subdomain:apikey" }
+      }
+
+      const subdomain = apiKey.substring(0, colonIndex)
+      const token = apiKey.substring(colonIndex + 1)
+
+      if (!subdomain || !token) {
+        return { valid: false, error: "Invalid format. Use: subdomain:apikey" }
+      }
+
+      // Try Freshsales Suite (myfreshworks.com) first, then classic (freshsales.io)
+      let response = await fetch(
+        `https://${subdomain}.myfreshworks.com/crm/sales/api/sales_accounts/view/1?per_page=1`,
+        {
+          headers: {
+            Authorization: `Token token=${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      // Fallback to classic domain if Suite returns 404
+      if (response.status === 404) {
+        response = await fetch(
+          `https://${subdomain}.freshsales.io/api/sales_accounts/view/1?per_page=1`,
+          {
+            headers: {
+              Authorization: `Token token=${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        )
+      }
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          return { valid: false, error: "Invalid API key" }
+        }
+        if (response.status === 404) {
+          return { valid: false, error: "Invalid subdomain or API endpoint" }
+        }
+        return { valid: false, error: "Failed to verify API key" }
+      }
+
+      return {
+        valid: true,
+        accountId: subdomain,
+        accountName: subdomain,
+      }
+    }
+
     return { valid: false, error: "Unsupported provider" }
   } catch (error) {
     console.error("API key validation error:", error)

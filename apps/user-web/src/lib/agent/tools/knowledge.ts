@@ -2,6 +2,12 @@ import { z } from "zod"
 import { tool } from "ai"
 import type { ToolContext, KnowledgeResult } from "../types"
 
+interface BlockNoteBlock {
+  type: string
+  content?: Array<{ type: string; text?: string; styles?: Record<string, boolean> }>
+  props?: Record<string, unknown>
+}
+
 export const knowledgeSchema = z.object({
   action: z.enum(["query", "create", "update"]).default("query").describe("Action to perform: query pages, create a new page, or update an existing page"),
   // Query params
@@ -17,9 +23,9 @@ export const knowledgeSchema = z.object({
 })
 
 // Convert markdown-like text to BlockNote JSON format
-function textToBlockNoteContent(text: string): any[] {
+function textToBlockNoteContent(text: string): BlockNoteBlock[] {
   const lines = text.split("\n")
-  const blocks: any[] = []
+  const blocks: BlockNoteBlock[] = []
 
   for (const line of lines) {
     const trimmed = line.trim()
@@ -80,18 +86,18 @@ function textToBlockNoteContent(text: string): any[] {
 }
 
 // Convert BlockNote JSON to plain text for display
-function blockNoteToText(content: any[]): string {
+function blockNoteToText(content: BlockNoteBlock[]): string {
   if (!Array.isArray(content)) return ""
 
   return content
-    .map((block: any) => {
+    .map((block) => {
       const text = block.content
-        ?.map((c: any) => c.text || "")
+        ?.map((c) => c.text || "")
         .join("") || ""
 
       switch (block.type) {
         case "heading":
-          const level = block.props?.level || 1
+          const level = (block.props?.level as number) || 1
           return "#".repeat(level) + " " + text
         case "bulletListItem":
           return "- " + text
@@ -111,7 +117,7 @@ export function createKnowledgeTool(context: ToolContext) {
   return tool({
     description: "Manage knowledge base pages. Query existing pages, create new SOPs and documentation, or update page content.",
     inputSchema: knowledgeSchema,
-    execute: async (params: z.infer<typeof knowledgeSchema>): Promise<KnowledgeResult | { success: boolean; message: string; page?: any }> => {
+    execute: async (params: z.infer<typeof knowledgeSchema>): Promise<KnowledgeResult | { success: boolean; message: string; page?: { id: string; title: string; icon: string } }> => {
       const { supabase, userId, workspaceId } = context
       const { action } = params
 
@@ -166,7 +172,7 @@ export function createKnowledgeTool(context: ToolContext) {
           throw new Error("Page ID is required to update a page")
         }
 
-        const updates: any = {
+        const updates: Record<string, unknown> = {
           last_edited_by: userId,
         }
 
@@ -226,7 +232,7 @@ export function createKnowledgeTool(context: ToolContext) {
         throw new Error(`Failed to fetch pages: ${error.message}`)
       }
 
-      const formattedPages = (pages || []).map((page: any) => ({
+      const formattedPages = (pages || []).map((page) => ({
         id: page.id,
         title: page.title,
         icon: page.icon,

@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { tool } from "ai"
 import type { ToolContext, BudgetsResult } from "../types"
+import { getJoinedField } from "@/lib/supabase-utils"
 
 export const budgetsSchema = z.object({
   action: z.enum(["query", "create", "update"]).default("query").describe("Action to perform: query budgets, create a new budget, or update budget amount"),
@@ -18,7 +19,7 @@ export function createBudgetsTool(context: ToolContext) {
   return tool({
     description: "Manage budgets. Query budgets with spending status, create new budgets for categories, or adjust budget amounts.",
     inputSchema: budgetsSchema,
-    execute: async (params: z.infer<typeof budgetsSchema>): Promise<BudgetsResult | { success: boolean; message: string; budget?: any }> => {
+    execute: async (params: z.infer<typeof budgetsSchema>): Promise<BudgetsResult | { success: boolean; message: string; budget?: Record<string, unknown> }> => {
       const { supabase, userId } = context
       const { action } = params
 
@@ -55,7 +56,7 @@ export function createBudgetsTool(context: ToolContext) {
           throw new Error(`Failed to create budget: ${error.message}`)
         }
 
-        const categoryName = (budget.category as any)?.name || (budget.category as any)?.[0]?.name
+        const categoryName = getJoinedField<string>(budget.category, 'name') || 'category'
         return {
           success: true,
           message: `Budget of $${amount.toLocaleString()} created for ${categoryName || "category"}`,

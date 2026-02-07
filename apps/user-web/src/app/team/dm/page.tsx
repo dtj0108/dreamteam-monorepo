@@ -84,7 +84,7 @@ export default function DirectMessagesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium">{dm.participant.name}</h3>
-                      {dm.unreadCount && dm.unreadCount > 0 && (
+                      {(dm.unreadCount ?? 0) > 0 && (
                         <span className="size-5 rounded-full bg-sky-500 text-white text-xs flex items-center justify-center">
                           {dm.unreadCount}
                         </span>

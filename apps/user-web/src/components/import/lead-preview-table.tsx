@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { AlertCircle, CheckCircle2, Copy, Building2, Globe, MapPin } from "lucide-react"
+import { AlertCircle, CheckCircle2, Copy, Building2, Globe, MapPin, Users, X } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -29,9 +29,10 @@ export interface LeadWithDuplicate extends ParsedLead {
 interface LeadPreviewTableProps {
   leads: LeadWithDuplicate[]
   maxRows?: number
+  onRemove?: (index: number) => void
 }
 
-export function LeadPreviewTable({ leads, maxRows = 15 }: LeadPreviewTableProps) {
+export function LeadPreviewTable({ leads, maxRows = 15, onRemove }: LeadPreviewTableProps) {
   const displayLeads = leads.slice(0, maxRows)
   const hasMore = leads.length > maxRows
 
@@ -41,6 +42,9 @@ export function LeadPreviewTable({ leads, maxRows = 15 }: LeadPreviewTableProps)
     const duplicates = leads.filter((l) => l.duplicateInfo?.isDuplicate).length
     const withWebsite = leads.filter((l) => l.website).length
     const withIndustry = leads.filter((l) => l.industry).length
+    const withContactData = leads.filter((l) => l.hasContactData).length
+    // Count total contacts across all leads
+    const totalContacts = leads.reduce((sum, l) => sum + (l.contactCount || (l.hasContactData ? 1 : 0)), 0)
 
     // Count by source
     const sources: Record<string, number> = {}
@@ -49,8 +53,11 @@ export function LeadPreviewTable({ leads, maxRows = 15 }: LeadPreviewTableProps)
       sources[source] = (sources[source] || 0) + 1
     })
 
-    return { valid, invalid, duplicates, withWebsite, withIndustry, sources }
+    return { valid, invalid, duplicates, withWebsite, withIndustry, withContactData, totalContacts, sources }
   }, [leads])
+
+  // Determine if we should show contact columns (any lead has contact data)
+  const showContactColumns = stats.totalContacts > 0
 
   const getMatchReasonText = (reason: string | null): string => {
     switch (reason) {
@@ -97,7 +104,7 @@ export function LeadPreviewTable({ leads, maxRows = 15 }: LeadPreviewTableProps)
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Stats Summary */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="rounded-lg border p-3">
             <p className="text-xs text-muted-foreground">Total Leads</p>
             <p className="text-lg font-semibold">{leads.length}</p>
@@ -120,6 +127,12 @@ export function LeadPreviewTable({ leads, maxRows = 15 }: LeadPreviewTableProps)
             <p className="text-xs text-muted-foreground">With Industry</p>
             <p className="text-lg font-semibold text-violet-600">{stats.withIndustry}</p>
           </div>
+          <div className="rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">Contacts</p>
+            <p className={`text-lg font-semibold ${stats.totalContacts > 0 ? 'text-indigo-600' : 'text-muted-foreground'}`}>
+              {stats.totalContacts}
+            </p>
+          </div>
         </div>
 
         {/* Table */}
@@ -134,6 +147,12 @@ export function LeadPreviewTable({ leads, maxRows = 15 }: LeadPreviewTableProps)
                   <TableHead>Industry</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Location</TableHead>
+                  {showContactColumns && (
+                    <TableHead>Contacts</TableHead>
+                  )}
+                  {onRemove && (
+                    <TableHead className="w-[50px]"></TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -236,6 +255,63 @@ export function LeadPreviewTable({ leads, maxRows = 15 }: LeadPreviewTableProps)
                           <span className="text-muted-foreground text-xs">-</span>
                         )}
                       </TableCell>
+                      {showContactColumns && (
+                        <TableCell>
+                          {lead.hasContactData ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center gap-1.5">
+                                    <Users className="h-3 w-3 text-indigo-500 shrink-0" />
+                                    <Badge variant="secondary" className="text-xs px-1.5">
+                                      {lead.contactCount || 1}
+                                    </Badge>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-xs">
+                                  <div className="space-y-1">
+                                    {lead.contacts && lead.contacts.length > 0 ? (
+                                      lead.contacts.map((contact, idx) => (
+                                        <div key={idx} className="text-xs">
+                                          <p className="font-medium">
+                                            {[contact.first_name, contact.last_name].filter(Boolean).join(' ')}
+                                          </p>
+                                          {contact.email && (
+                                            <p className="text-muted-foreground">{contact.email}</p>
+                                          )}
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div className="text-xs">
+                                        <p className="font-medium">
+                                          {[lead.contact_first_name, lead.contact_last_name].filter(Boolean).join(' ')}
+                                        </p>
+                                        {lead.contact_email && (
+                                          <p className="text-muted-foreground">{lead.contact_email}</p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </TableCell>
+                      )}
+                      {onRemove && (
+                        <TableCell>
+                          <button
+                            type="button"
+                            onClick={() => onRemove(index)}
+                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Remove lead"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   )
                 })}

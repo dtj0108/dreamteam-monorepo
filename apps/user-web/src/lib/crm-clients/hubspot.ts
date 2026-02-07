@@ -125,16 +125,34 @@ export class HubSpotClient {
     return response.json()
   }
 
+  private async postSearch<T>(objectType: string): Promise<T> {
+    const url = `${this.baseUrl}/crm/v3/objects/${objectType}/search`
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ limit: 1, filterGroups: [] }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`HubSpot API error: ${response.status} - ${errorText}`)
+    }
+
+    return response.json()
+  }
+
   /**
    * Get counts of all data types
    */
   async getCounts(): Promise<HubSpotDataCounts> {
-    // HubSpot doesn't have a direct count endpoint, so we fetch with limit=0
-    // and use the total from the response
     const [companies, contacts, deals] = await Promise.all([
-      this.fetch<{ total: number }>("/crm/v3/objects/companies", { limit: "1" }),
-      this.fetch<{ total: number }>("/crm/v3/objects/contacts", { limit: "1" }),
-      this.fetch<{ total: number }>("/crm/v3/objects/deals", { limit: "1" }),
+      this.postSearch<{ total: number }>("companies"),
+      this.postSearch<{ total: number }>("contacts"),
+      this.postSearch<{ total: number }>("deals"),
     ])
 
     return {

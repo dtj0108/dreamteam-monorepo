@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 import { getSession } from "@/lib/session"
+import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
 
 export async function GET(
   request: NextRequest,
@@ -12,6 +13,11 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
+    }
+
     const { id } = await params
     const supabase = createAdminClient()
 
@@ -20,6 +26,7 @@ export async function GET(
       .select("*")
       .eq("id", id)
       .eq("user_id", session.id)
+      .eq("workspace_id", workspaceId)
       .single()
 
     if (error) {
@@ -33,8 +40,9 @@ export async function GET(
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error in workflow GET:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[workflow/get] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }
 
@@ -46,6 +54,11 @@ export async function PATCH(
     const session = await getSession()
     if (!session?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
     }
 
     const { id } = await params
@@ -73,6 +86,7 @@ export async function PATCH(
       .update(updateData)
       .eq("id", id)
       .eq("user_id", session.id)
+      .eq("workspace_id", workspaceId)
       .select()
       .single()
 
@@ -83,8 +97,9 @@ export async function PATCH(
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error in workflow PATCH:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[workflow/update] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }
 
@@ -98,6 +113,11 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
+    }
+
     const { id } = await params
     const supabase = createAdminClient()
 
@@ -106,6 +126,7 @@ export async function DELETE(
       .delete()
       .eq("id", id)
       .eq("user_id", session.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) {
       console.error("Error deleting workflow:", error)
@@ -114,7 +135,8 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error in workflow DELETE:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[workflow/delete] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

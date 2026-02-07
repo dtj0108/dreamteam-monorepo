@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase-server'
-import { sendSMS } from '@/lib/twilio'
+import { sendSMSWithCredits } from '@/lib/sms-with-credits'
 import { fireWebhooks } from '@/lib/make-webhooks'
 import type { ScheduledSMS } from '@/types/scheduled-sms'
 
@@ -61,8 +61,44 @@ export async function processScheduledSMS(): Promise<ProcessResult> {
     }
 
     try {
-      // 3. Send via Twilio
-      const smsResult = await sendSMS({
+      // 3. Resolve workspaceId for billing
+      let scheduledWorkspaceId: string | null = null
+      if (scheduled.lead_id) {
+        const { data: leadRecord } = await supabase
+          .from('leads')
+          .select('workspace_id')
+          .eq('id', scheduled.lead_id)
+          .single()
+        scheduledWorkspaceId = leadRecord?.workspace_id || null
+      }
+
+      if (!scheduledWorkspaceId) {
+        // Fall back to profile default workspace
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('default_workspace_id')
+          .eq('id', scheduled.user_id)
+          .single()
+        scheduledWorkspaceId = profile?.default_workspace_id || null
+      }
+
+      if (!scheduledWorkspaceId) {
+        await supabase
+          .from('scheduled_sms')
+          .update({
+            status: 'failed',
+            error_message: 'No workspace found for billing',
+          })
+          .eq('id', scheduled.id)
+
+        result.errors.push({ id: scheduled.id, error: 'No workspace found for billing' })
+        result.failed++
+        continue
+      }
+
+      // Send via Twilio with credit check and deduction
+      const smsResult = await sendSMSWithCredits({
+        workspaceId: scheduledWorkspaceId,
         to: scheduled.to_number,
         from: scheduled.from_number,
         body: scheduled.body,
@@ -95,9 +131,10 @@ export async function processScheduledSMS(): Promise<ProcessResult> {
           from_number: scheduled.from_number,
           to_number: scheduled.to_number,
           body: scheduled.body,
-          twilio_sid: smsResult.sid,
-          twilio_status: smsResult.status || 'sent',
+          twilio_sid: smsResult.messageSid || null,
+          twilio_status: 'queued',
           triggered_by: 'scheduled',
+          workspace_id: scheduledWorkspaceId,
         })
         .select()
         .single()
@@ -132,24 +169,18 @@ export async function processScheduledSMS(): Promise<ProcessResult> {
         .eq('id', scheduled.id)
 
       // Fire webhooks for Make.com integrations
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('default_workspace_id')
-        .eq('id', scheduled.user_id)
-        .single()
-
-      if (profile?.default_workspace_id && comm) {
+      if (comm) {
         fireWebhooks('sms.sent', {
           id: comm.id,
-          twilio_sid: smsResult.sid,
+          twilio_sid: smsResult.messageSid,
           from: scheduled.from_number,
           to: scheduled.to_number,
           body: scheduled.body,
-          status: smsResult.status,
+          status: 'queued',
           lead_id: scheduled.lead_id,
           contact_id: scheduled.contact_id,
           scheduled: true,
-        }, profile.default_workspace_id)
+        }, scheduledWorkspaceId)
       }
 
       result.sent++

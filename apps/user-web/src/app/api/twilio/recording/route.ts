@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { validateTwilioWebhook, downloadRecording } from '@/lib/twilio'
 import { fireWebhooks } from "@/lib/make-webhooks"
+import { triggerVoicemailReceived, type Call, type Lead, type Contact } from '@/lib/workflow-trigger-service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -102,9 +103,68 @@ export async function POST(request: NextRequest) {
       }, profile.default_workspace_id)
     }
 
+    // Trigger voicemail_received workflow
+    // Fetch full communication details to get lead_id and contact_id
+    const { data: fullComm } = await supabase
+      .from('communications')
+      .select('id, lead_id, contact_id, direction, twilio_status, from_number, to_number')
+      .eq('id', communication.id)
+      .single()
+
+    if (fullComm) {
+      const callData: Call = {
+        id: fullComm.id,
+        twilio_sid: CallSid,
+        direction: fullComm.direction as 'inbound' | 'outbound',
+        status: fullComm.twilio_status || 'completed',
+        from_number: fullComm.from_number,
+        to_number: fullComm.to_number,
+        duration_seconds: parseInt(RecordingDuration),
+        recording_url: RecordingUrl,
+        recording_sid: RecordingSid,
+      }
+
+      let leadData: Lead | null = null
+      let contactData: Contact | null = null
+
+      if (fullComm.lead_id) {
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('id, name, status, notes, user_id, workspace_id')
+          .eq('id', fullComm.lead_id)
+          .single()
+        leadData = lead as Lead | null
+      }
+
+      if (fullComm.contact_id) {
+        const { data: contact } = await supabase
+          .from('contacts')
+          .select('id, first_name, last_name, email, phone')
+          .eq('id', fullComm.contact_id)
+          .single()
+        contactData = contact as Contact | null
+      }
+
+      // Resolve workspace for workflow scoping
+      let recordingWorkspaceId: string | undefined = leadData?.workspace_id || undefined
+      if (!recordingWorkspaceId) {
+        const { data: numLookup } = await supabase
+          .from('twilio_numbers')
+          .select('workspace_id')
+          .or(`phone_number.eq.${fullComm.from_number},phone_number.eq.${fullComm.to_number}`)
+          .limit(1)
+          .single()
+        recordingWorkspaceId = (numLookup?.workspace_id as string) || undefined
+      }
+
+      // Trigger voicemail workflow
+      triggerVoicemailReceived(callData, leadData, contactData, communication.user_id, recordingWorkspaceId)
+    }
+
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error handling recording callback:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[twilio/recording] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

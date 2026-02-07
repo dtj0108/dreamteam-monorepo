@@ -28,10 +28,8 @@ export async function GET() {
 
     return NextResponse.json({ token: result.token })
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7246/ingest/f4f05322-bb7d-4d7a-b25d-8aaed8531e84',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/twilio/token:GET:error',message:'Token API error',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
-    console.error('Error generating voice token:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[twilio/token] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

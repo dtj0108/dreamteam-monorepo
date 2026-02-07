@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { getSession } from '@dreamteam/auth/session'
+import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession()
     if (!session?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'No workspace selected' }, { status: 400 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -24,6 +30,7 @@ export async function GET(request: NextRequest) {
         contact:contacts(id, first_name, last_name)
       `)
       .eq('user_id', session.id)
+      .eq('workspace_id', workspaceId)
       .order('last_message_at', { ascending: false, nullsFirst: false })
       .range(offset, offset + limit - 1)
 
@@ -45,6 +52,7 @@ export async function GET(request: NextRequest) {
           .from('communications')
           .select('id, type, direction, body, created_at')
           .eq('user_id', session.id)
+          .eq('workspace_id', workspaceId)
           .or(`from_number.eq.${thread.phone_number},to_number.eq.${thread.phone_number}`)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -71,6 +79,11 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'No workspace selected' }, { status: 400 })
+    }
+
     const body = await request.json()
     const { threadId, markAsRead, archive } = body
 
@@ -95,6 +108,7 @@ export async function PATCH(request: NextRequest) {
       .update(updateData)
       .eq('id', threadId)
       .eq('user_id', session.id)
+      .eq('workspace_id', workspaceId)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })

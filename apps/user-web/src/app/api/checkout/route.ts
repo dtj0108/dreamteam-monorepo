@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@dreamteam/database/server'
 import {
-  stripe,
+  getStripe,
   STRIPE_PRICES,
   TRIAL_DAYS,
   type WorkspacePlanType,
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
 
     // Create Stripe Checkout Session for guest checkout
     // Note: No customer is created yet - Stripe will collect email
-    const checkoutSession = await stripe.checkout.sessions.create({
+    const checkoutSession = await getStripe().checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'subscription',
       line_items: [

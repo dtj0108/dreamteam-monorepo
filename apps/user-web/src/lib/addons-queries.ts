@@ -82,13 +82,20 @@ export async function addSMSCredits(
         .single()
 
       if (current) {
-        await supabase
+        const { error: manualError } = await supabase
           .from('workspace_sms_credits')
           .update({
             balance: current.balance + credits,
             lifetime_credits: current.lifetime_credits + credits,
           })
           .eq('workspace_id', workspaceId)
+
+        if (manualError) {
+          console.error('[addons] Failed to add SMS credits after purchase — manual reconciliation needed', {
+            workspaceId, credits, error: manualError.message,
+          })
+          return false
+        }
       }
     }
   }
@@ -312,13 +319,20 @@ export async function addCallMinutes(
     .single()
 
   if (current) {
-    await supabase
+    const { error: minutesError } = await supabase
       .from('workspace_call_minutes')
       .update({
         balance_seconds: current.balance_seconds + seconds,
         lifetime_seconds: current.lifetime_seconds + seconds,
       })
       .eq('workspace_id', workspaceId)
+
+    if (minutesError) {
+      console.error('[addons] Failed to add call minutes after purchase — manual reconciliation needed', {
+        workspaceId, minutes, seconds, error: minutesError.message,
+      })
+      return false
+    }
   }
 
   // Update purchase record if provided

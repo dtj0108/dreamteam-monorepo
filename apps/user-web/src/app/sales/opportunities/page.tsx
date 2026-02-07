@@ -17,6 +17,25 @@ import {
 } from "@/components/sales/opportunities-filter-bar"
 import { OpportunityForm, type LeadOpportunity } from "@/components/sales/opportunity-form"
 import { useWorkspace } from "@/providers/workspace-provider"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 // Raw opportunity from API
 interface RawOpportunity {
@@ -72,6 +91,14 @@ export default function OpportunitiesPage() {
   // State for editing/creating opportunity
   const [editingOpportunity, setEditingOpportunity] = useState<KanbanOpportunity | null>(null)
   const [creatingForStageId, setCreatingForStageId] = useState<string | null>(null)
+
+  // State for add opportunity dialog
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [addDialogStep, setAddDialogStep] = useState<"select-lead" | "create-opportunity">("select-lead")
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
+  const [availableLeads, setAvailableLeads] = useState<{ id: string; name: string }[]>([])
+  const [loadingLeads, setLoadingLeads] = useState(false)
+  const [selectedLeadContacts, setSelectedLeadContacts] = useState<{ id: string; first_name: string | null; last_name: string | null; email: string | null }[]>([])
 
   // Get selected pipeline (null means "All Pipelines" - will show table view)
   const selectedPipeline = useMemo(() => {
@@ -299,12 +326,106 @@ export default function OpportunitiesPage() {
     })
   }, [])
 
-  // Handle add opportunity - navigate to leads page
+  // Fetch leads for the add opportunity dialog
+  const fetchLeadsForDialog = useCallback(async () => {
+    setLoadingLeads(true)
+    try {
+      const params = new URLSearchParams()
+      if (filters.pipelineId) {
+        params.set("pipeline_id", filters.pipelineId)
+      }
+      const response = await fetch(`/api/leads?${params.toString()}`)
+      if (!response.ok) throw new Error("Failed to fetch leads")
+      const data = await response.json()
+      setAvailableLeads(
+        (data.leads || []).map((lead: RawLead) => ({
+          id: lead.id,
+          name: lead.name,
+        }))
+      )
+    } catch (error) {
+      console.error("Error fetching leads:", error)
+      toast.error("Failed to load leads", {
+        description: "Please try again or contact support",
+      })
+    } finally {
+      setLoadingLeads(false)
+    }
+  }, [filters.pipelineId])
+
+  // Fetch contacts for selected lead
+  const fetchContactsForLead = useCallback(async (leadId: string) => {
+    try {
+      const response = await fetch(`/api/leads/${leadId}/contacts`)
+      if (response.ok) {
+        const data = await response.json()
+        setSelectedLeadContacts(data.contacts || [])
+      }
+    } catch (error) {
+      console.error("Error fetching contacts:", error)
+    }
+  }, [])
+
+  // Handle add opportunity - open dialog
   const handleAddOpportunity = useCallback((stageId: string) => {
     setCreatingForStageId(stageId)
-    // Navigate to leads page to create an opportunity on a lead
-    window.location.href = "/sales/leads"
-  }, [])
+    setAddDialogStep("select-lead")
+    setSelectedLeadId(null)
+    setSelectedLeadContacts([])
+    setAddDialogOpen(true)
+    fetchLeadsForDialog()
+  }, [fetchLeadsForDialog])
+
+  // Handle lead selection in dialog
+  const handleLeadSelect = useCallback(async (leadId: string) => {
+    setSelectedLeadId(leadId)
+    await fetchContactsForLead(leadId)
+    setAddDialogStep("create-opportunity")
+  }, [fetchContactsForLead])
+
+  // Handle new opportunity submit
+  const handleNewOpportunitySubmit = async (formData: LeadOpportunity) => {
+    if (!selectedLeadId) return
+
+    try {
+      const response = await fetch(`/api/leads/${selectedLeadId}/opportunities`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || "Failed to create opportunity")
+      }
+
+      const { opportunity: newOpp } = await response.json()
+
+      // Update local state - add to the lead's opportunities
+      setLeads((prev) =>
+        prev.map((lead) => {
+          if (lead.id !== selectedLeadId) return lead
+          return {
+            ...lead,
+            opportunities: [...lead.opportunities, newOpp],
+          }
+        })
+      )
+
+      toast.success("Opportunity created successfully")
+      setAddDialogOpen(false)
+      setAddDialogStep("select-lead")
+      setSelectedLeadId(null)
+      setSelectedLeadContacts([])
+      setCreatingForStageId(null)
+    } catch (error) {
+      console.error("Error creating opportunity:", error)
+      toast.error("Failed to create opportunity", {
+        description: error instanceof Error ? error.message : "Please try again",
+      })
+      throw error
+    }
+  }
 
   // Handle delete opportunity
   const handleDeleteOpportunity = useCallback(
@@ -493,6 +614,84 @@ export default function OpportunitiesPage() {
             : undefined
         }
         onSubmit={handleOpportunitySubmit}
+      />
+
+      {/* Add Opportunity Dialog - Step 1: Select Lead */}
+      <Dialog
+        open={addDialogOpen && addDialogStep === "select-lead"}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddDialogOpen(false)
+            setAddDialogStep("select-lead")
+            setSelectedLeadId(null)
+            setSelectedLeadContacts([])
+            setCreatingForStageId(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add Opportunity</DialogTitle>
+            <DialogDescription>
+              Select a lead to create a new opportunity for.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {loadingLeads ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : availableLeads.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No leads found in this pipeline.</p>
+                <p className="text-sm mt-2">Create a lead first to add opportunities.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="lead-select">Lead</Label>
+                <Select onValueChange={handleLeadSelect}>
+                  <SelectTrigger id="lead-select">
+                    <SelectValue placeholder="Select a lead..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableLeads.map((lead) => (
+                      <SelectItem key={lead.id} value={lead.id}>
+                        {lead.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddDialogOpen(false)
+                setCreatingForStageId(null)
+              }}
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Opportunity Dialog - Step 2: Opportunity Form */}
+      <OpportunityForm
+        open={addDialogOpen && addDialogStep === "create-opportunity"}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddDialogOpen(false)
+            setAddDialogStep("select-lead")
+            setSelectedLeadId(null)
+            setSelectedLeadContacts([])
+            setCreatingForStageId(null)
+          }
+        }}
+        onSubmit={handleNewOpportunitySubmit}
+        contacts={selectedLeadContacts}
       />
     </div>
   )

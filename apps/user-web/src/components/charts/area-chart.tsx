@@ -12,7 +12,7 @@ import {
 } from "recharts"
 
 interface AreaChartProps {
-  data: any[]
+  data: Array<Record<string, string | number>>
   xKey: string
   areas: {
     dataKey: string

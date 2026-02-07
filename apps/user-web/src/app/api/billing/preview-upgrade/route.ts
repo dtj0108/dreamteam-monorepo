@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@dreamteam/database/server'
-import { stripe, STRIPE_PRICES, type AgentTierType } from '@/lib/stripe'
+import { getStripe, STRIPE_PRICES, type AgentTierType } from '@/lib/stripe'
 import { getWorkspaceBilling } from '@/lib/billing-queries'
-import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
+import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
 
 /**
  * POST /api/billing/preview-upgrade
@@ -24,6 +24,11 @@ export async function POST(request: NextRequest) {
     const workspaceId = await getCurrentWorkspaceId(user.id)
     if (!workspaceId) {
       return NextResponse.json({ error: 'No workspace selected' }, { status: 400 })
+    }
+
+    const { isValid } = await validateWorkspaceAccess(workspaceId, user.id)
+    if (!isValid) {
+      return NextResponse.json({ error: 'Not a workspace member' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -64,7 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get current subscription to find item ID
-    const subscription = await stripe.subscriptions.retrieve(billing.stripe_agent_subscription_id)
+    const subscription = await getStripe().subscriptions.retrieve(billing.stripe_agent_subscription_id)
     const itemId = subscription.items.data[0]?.id
 
     if (!itemId) {
@@ -73,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     // Get upcoming invoice preview with the new price
     // Note: Stripe v20+ uses createPreview instead of retrieveUpcoming
-    const upcomingInvoice = await stripe.invoices.createPreview({
+    const upcomingInvoice = await getStripe().invoices.createPreview({
       customer: billing.stripe_customer_id,
       subscription: billing.stripe_agent_subscription_id,
       subscription_details: {
@@ -123,7 +128,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the full price for the new tier (for next billing cycle)
-    const price = await stripe.prices.retrieve(newPriceId)
+    const price = await getStripe().prices.retrieve(newPriceId)
     const nextBillingAmount = price.unit_amount || 0
 
     return NextResponse.json({
@@ -136,10 +141,8 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('Preview upgrade error:', error)
-    return NextResponse.json(
-      { error: 'Failed to preview upgrade' },
-      { status: 500 }
-    )
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[billing/preview-upgrade] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

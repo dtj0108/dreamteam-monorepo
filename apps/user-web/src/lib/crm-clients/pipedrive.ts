@@ -8,6 +8,12 @@ export interface PipedriveOrganizationRaw {
   name: string
   address?: string
   address_formatted_address?: string
+  address_route?: string
+  address_subpremise?: string
+  address_locality?: string
+  address_admin_area_level_1?: string
+  address_postal_code?: string
+  address_country?: string
   cc_email?: string
   owner_id?: number
   add_time?: string
@@ -222,10 +228,10 @@ export class PipedriveClient {
         description: null,
         status: null,
         address: address,
-        city: null,
-        state: null,
-        zip_code: null,
-        country: null,
+        city: org.address_locality || null,
+        state: org.address_admin_area_level_1 || null,
+        zip_code: org.address_postal_code || null,
+        country: org.address_country || null,
       }
     })
   }

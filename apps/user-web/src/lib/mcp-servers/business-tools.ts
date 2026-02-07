@@ -93,7 +93,12 @@ async function executeCRM(input: CRMInput, context: MCPToolContext): Promise<MCP
       if (error) throw new Error(error.message)
 
       const statusCounts: Record<string, number> = {}
-      const formatted = (leads || []).map((lead: any) => {
+      interface LeadRow {
+        id: string; name: string; website: string | null; industry: string | null;
+        status: string; notes: string | null; created_at: string;
+        contacts: Array<{ first_name: string; last_name: string | null; email: string | null }>;
+      }
+      const formatted = (leads || []).map((lead: LeadRow) => {
         statusCounts[lead.status] = (statusCounts[lead.status] || 0) + 1
         const contact = lead.contacts?.[0]
         return {
@@ -176,10 +181,17 @@ async function executeCRM(input: CRMInput, context: MCPToolContext): Promise<MCP
       let weightedValue = 0
       const stageCounts: Record<string, number> = {}
 
-      const formatted = (opps || []).map((opp: any) => {
+      interface OpportunityRow {
+        id: string; name: string; value: number | null; stage: string | null;
+        probability: number | null; expected_close_date: string | null;
+        lead: { name: string }[] | { name: string } | null;
+      }
+      const formatted = (opps || []).map((opp: OpportunityRow) => {
         totalValue += opp.value || 0
         weightedValue += (opp.value || 0) * ((opp.probability || 0) / 100)
-        stageCounts[opp.stage] = (stageCounts[opp.stage] || 0) + 1
+        const stageKey = opp.stage || 'unknown'
+        stageCounts[stageKey] = (stageCounts[stageKey] || 0) + 1
+        const leadObj = Array.isArray(opp.lead) ? opp.lead[0] : opp.lead
 
         return {
           id: opp.id,
@@ -188,12 +200,12 @@ async function executeCRM(input: CRMInput, context: MCPToolContext): Promise<MCP
           stage: opp.stage,
           probability: opp.probability,
           expectedClose: opp.expected_close_date,
-          lead: opp.lead?.name || null,
+          lead: leadObj?.name || null,
         }
       })
 
       if (responseFormat === "concise") {
-        const lines = formatted.slice(0, 5).map((o) => `${o.name}: ${formatCurrency(o.value)} (${o.stage}, ${o.probability}%)`)
+        const lines = formatted.slice(0, 5).map((o) => `${o.name}: ${formatCurrency(o.value || 0)} (${o.stage}, ${o.probability}%)`)
         const summary = `${formatted.length} opportunities | Total: ${formatCurrency(totalValue)} | Weighted: ${formatCurrency(weightedValue)}`
         return { success: true, data: { summary, opportunities: lines.join("\n") } }
       }
@@ -261,16 +273,22 @@ async function executeCRM(input: CRMInput, context: MCPToolContext): Promise<MCP
       let overdueCount = 0
       let pendingCount = 0
 
+      interface TaskRow {
+        id: string; title: string; description: string | null;
+        due_date: string | null; is_completed: boolean; completed_at: string | null;
+        lead: { name: string }[] | { name: string } | null;
+      }
       const formatted = (tasks || [])
-        .filter((t: any) => {
+        .filter((t: TaskRow) => {
           if (overdueOnly && t.is_completed) return false
           if (overdueOnly && (!t.due_date || new Date(t.due_date) >= now)) return false
           return true
         })
-        .map((task: any) => {
+        .map((task: TaskRow) => {
           const isOverdue = !task.is_completed && task.due_date && new Date(task.due_date) < now
           if (isOverdue) overdueCount++
           if (!task.is_completed) pendingCount++
+          const leadObj = Array.isArray(task.lead) ? task.lead[0] : task.lead
 
           return {
             id: task.id,
@@ -278,7 +296,7 @@ async function executeCRM(input: CRMInput, context: MCPToolContext): Promise<MCP
             dueDate: task.due_date,
             isCompleted: task.is_completed,
             isOverdue,
-            lead: task.lead?.name || null,
+            lead: leadObj?.name || null,
           }
         })
 

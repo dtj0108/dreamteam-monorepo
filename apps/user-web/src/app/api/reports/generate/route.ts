@@ -3,6 +3,13 @@ import { cookies } from 'next/headers'
 import { createAdminClient } from '@dreamteam/database/server'
 import { format } from 'date-fns'
 
+interface JoinedCategory { id: string; name: string; type: string; color: string }
+interface JoinedAccount { id: string; name: string }
+interface TransactionRow {
+  id: string; date: string; description: string; notes: string | null
+  amount: number; accounts: unknown; categories: unknown
+}
+
 interface ReportRequest {
   startDate?: string
   endDate?: string
@@ -137,16 +144,18 @@ export async function POST(request: Request) {
             groupKey = format(new Date(tx.date), 'yyyy-MM')
             groupLabel = format(new Date(tx.date), 'MMM yyyy')
             break
-          case 'category':
-            const cat = tx.categories as any
+          case 'category': {
+            const cat = tx.categories as JoinedCategory | null
             groupKey = cat?.id || 'uncategorized'
             groupLabel = cat?.name || 'Uncategorized'
             break
-          case 'account':
-            const acc = tx.accounts as any
+          }
+          case 'account': {
+            const acc = tx.accounts as JoinedAccount | null
             groupKey = acc?.id || 'unknown'
             groupLabel = acc?.name || 'Unknown Account'
             break
+          }
           default:
             groupKey = 'all'
             groupLabel = 'All'
@@ -174,15 +183,15 @@ export async function POST(request: Request) {
     }
 
     // Format transactions for response
-    const formattedTransactions = includeTransactions ? (transactions || []).map((tx: any) => ({
+    const formattedTransactions = includeTransactions ? (transactions || []).map((tx: TransactionRow) => ({
       id: tx.id,
       date: tx.date,
       description: tx.description,
       notes: tx.notes,
       amount: tx.amount,
-      accountName: (tx.accounts as any)?.name || 'Unknown',
-      categoryName: (tx.categories as any)?.name || 'Uncategorized',
-      categoryColor: (tx.categories as any)?.color || '#6b7280',
+      accountName: (tx.accounts as JoinedAccount | null)?.name || 'Unknown',
+      categoryName: (tx.categories as JoinedCategory | null)?.name || 'Uncategorized',
+      categoryColor: (tx.categories as JoinedCategory | null)?.color || '#6b7280',
       type: tx.amount > 0 ? 'income' : 'expense',
     })) : []
 

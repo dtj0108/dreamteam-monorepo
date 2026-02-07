@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import Stripe from 'stripe'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 import { createAdminClient } from '@/lib/supabase-server'
 import {
   updateBillingFromSubscription,
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   let event: Stripe.Event
 
   try {
-    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET)
+    event = getStripe().webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET)
   } catch (err) {
     console.error('Webhook signature verification failed:', err)
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
@@ -181,7 +181,13 @@ export async function POST(request: NextRequest) {
         }
 
         // Mark checkout session as completed
-        await completeCheckoutSession(session.id)
+        try {
+          await completeCheckoutSession(session.id)
+        } catch (checkoutError) {
+          console.error('[billing/webhook] Failed to mark checkout session as completed — continuing with subscription', {
+            sessionId: session.id, error: checkoutError instanceof Error ? checkoutError.message : checkoutError,
+          })
+        }
 
         // Update billing from subscription
         await updateBillingFromSubscription(
@@ -192,7 +198,7 @@ export async function POST(request: NextRequest) {
         )
 
         // Retrieve subscription once for status + logging
-        const fullSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+        const fullSubscription = await getStripe().subscriptions.retrieve(subscriptionId)
 
         // Auto-deploy team for agent tier subscriptions (active only)
         if (sessionType === 'agent_tier' && targetPlan && fullSubscription.status === 'active') {
@@ -709,7 +715,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ received: true })
   } catch (error) {
-    console.error('Webhook handler error:', error)
-    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[billing/webhook] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

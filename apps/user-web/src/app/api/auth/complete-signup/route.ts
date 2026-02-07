@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminClient } from '@dreamteam/database/server'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 import { sendVerificationCode } from '@/lib/twilio'
 import { updateBillingFromSubscription, ensureWorkspaceBilling } from '@/lib/billing-queries'
 import { autoDeployTeamForPlan } from '@dreamteam/database'
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Fetch and validate Stripe checkout session
-    const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId, {
+    const checkoutSession = await getStripe().checkout.sessions.retrieve(sessionId, {
       expand: ['subscription'],
     })
 
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Update subscription metadata to include workspace_id
-      await stripe.subscriptions.update(subscriptionId, {
+      await getStripe().subscriptions.update(subscriptionId, {
         metadata: {
           workspace_id: workspace.id,
           type: subscriptionType,
@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
       )
 
       // Mark checkout session as completed
-      await adminSupabase
+      const { error: sessionError } = await adminSupabase
         .from('billing_checkout_sessions')
         .update({
           workspace_id: workspace.id,
@@ -234,6 +234,12 @@ export async function POST(request: NextRequest) {
           completed_at: new Date().toISOString(),
         })
         .eq('stripe_session_id', sessionId)
+
+      if (sessionError) {
+        console.warn('[complete-signup] Failed to mark checkout session as completed — workspace and subscription are OK', {
+          sessionId, workspaceId: workspace.id, error: sessionError.message,
+        })
+      }
 
       console.log(`Linked Stripe subscription ${subscriptionId} to workspace ${workspace.id}`)
     }
@@ -330,10 +336,8 @@ export async function POST(request: NextRequest) {
       phone,
     })
   } catch (error) {
-    console.error('Complete signup error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[auth/complete-signup] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

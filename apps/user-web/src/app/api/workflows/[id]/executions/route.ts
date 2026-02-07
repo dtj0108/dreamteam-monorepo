@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 import { getSession } from "@/lib/session"
+import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
 
 export async function GET(
   request: NextRequest,
@@ -12,6 +13,11 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const workspaceId = await getCurrentWorkspaceId(session.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
+    }
+
     const { id: workflowId } = await params
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get("limit") || "20", 10)
@@ -19,12 +25,13 @@ export async function GET(
 
     const supabase = createAdminClient()
 
-    // First verify the workflow belongs to this user
+    // First verify the workflow belongs to this user and workspace
     const { data: workflow, error: workflowError } = await supabase
       .from("workflows")
       .select("id")
       .eq("id", workflowId)
       .eq("user_id", session.id)
+      .eq("workspace_id", workspaceId)
       .single()
 
     if (workflowError || !workflow) {
@@ -37,6 +44,7 @@ export async function GET(
       .select("*", { count: "exact" })
       .eq("workflow_id", workflowId)
       .eq("user_id", session.id)
+      .eq("workspace_id", workspaceId)
       .order("started_at", { ascending: false })
       .range(offset, offset + limit - 1)
 

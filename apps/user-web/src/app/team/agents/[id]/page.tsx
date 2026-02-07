@@ -371,10 +371,10 @@ export default function AgentChatPage() {
             currentUserId={currentUserId}
             isLoading={status === "connecting" || status === "streaming"}
             scrollContainerRef={messagesContainerRef}
-            onReact={() => {}}
-            onReply={() => {}}
-            onEdit={() => {}}
-            onDelete={() => {}}
+            onReact={undefined}
+            onReply={undefined}
+            onEdit={undefined}
+            onDelete={undefined}
           />
         )}
       </div>

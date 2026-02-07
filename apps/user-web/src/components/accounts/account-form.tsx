@@ -21,10 +21,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { createAccount, updateAccount } from "@/lib/queries"
 import { useUser } from "@/hooks/use-user"
-import type { Account, AccountType, CreateAccountInput } from "@/lib/types"
+import type { Account, AccountType, CreateAccountInput, UpdateAccountInput } from "@/lib/types"
 
 const ACCOUNT_TYPES: { value: AccountType; label: string; icon: React.ElementType }[] = [
   { value: 'checking', label: 'Checking', icon: Landmark },
@@ -47,13 +48,14 @@ export function AccountForm({ account, onSuccess }: AccountFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [formData, setFormData] = useState<CreateAccountInput>({
+  const [formData, setFormData] = useState<CreateAccountInput & { is_active?: boolean }>({
     name: account?.name || '',
     type: account?.type || 'checking',
     balance: account?.balance || 0,
     institution: account?.institution || '',
     last_four: account?.last_four || '',
     currency: account?.currency || 'USD',
+    is_active: account?.is_active ?? true,
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,6 +112,22 @@ export function AccountForm({ account, onSuccess }: AccountFormProps) {
               required
             />
           </div>
+
+          {account && (
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="is_active" className="font-medium">Active Account</Label>
+                <p className="text-sm text-muted-foreground">
+                  Include this account in totals and reports
+                </p>
+              </div>
+              <Switch
+                id="is_active"
+                checked={formData.is_active ?? true}
+                onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="type">Account Type</Label>

@@ -1,16 +1,18 @@
 "use client"
 
 import { useCallback, useState } from "react"
-import { Upload, FileText, X, AlertCircle } from "lucide-react"
+import { Upload, FileText, X, AlertCircle, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { downloadCSVTemplate, type TemplateDataType } from "@/lib/csv-template-generator"
 
 interface CSVUploaderProps {
   onFileSelect: (file: File, content: string) => void
   disabled?: boolean
+  dataType?: TemplateDataType
 }
 
-export function CSVUploader({ onFileSelect, disabled }: CSVUploaderProps) {
+export function CSVUploader({ onFileSelect, disabled, dataType }: CSVUploaderProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -152,8 +154,22 @@ export function CSVUploader({ onFileSelect, disabled }: CSVUploaderProps) {
               </p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Supports bank statements, Stripe exports, and more (max 5MB)
+              CSV files up to 5MB
             </p>
+            {dataType && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  downloadCSVTemplate(dataType)
+                }}
+                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download sample template
+              </button>
+            )}
             <input
               id="csv-upload"
               type="file"

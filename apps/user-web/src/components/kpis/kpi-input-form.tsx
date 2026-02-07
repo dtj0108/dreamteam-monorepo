@@ -81,8 +81,7 @@ export function KPIInputForm({
       fields.forEach(field => {
         const val = values[field.key]
         if (val !== "") {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (input as any)[field.key] = parseFloat(val)
+          ;(input as unknown as Record<string, string | number | undefined>)[field.key] = parseFloat(val)
         }
       })
       

@@ -5,6 +5,8 @@ import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-
 import { syncTransactions, fireSandboxWebhook, getPlaidEnvironment } from '@/lib/plaid'
 import { getAccessToken } from '@/lib/encryption'
 import { logPlaidEvent } from '@/lib/audit'
+import { checkRateLimit, getRateLimitHeaders } from '@dreamteam/auth/rate-limit'
+import { getSuggestedCategoryFromPlaid } from '@/lib/plaid-category-mapping'
 
 export async function POST(request: Request) {
   try {
@@ -33,6 +35,21 @@ export async function POST(request: Request) {
 
     if (!plaidItemId) {
       return NextResponse.json({ error: 'Plaid item ID is required' }, { status: 400 })
+    }
+
+    // Rate limit: 5 syncs per minute per user per plaid item
+    const rateLimitKey = `${auth.type === 'session' ? auth.userId : auth.keyId}:${plaidItemId}`
+    const rateLimitResult = checkRateLimit(rateLimitKey, {
+      windowMs: 60 * 1000,
+      maxRequests: 5,
+      keyPrefix: 'plaid_sync',
+    })
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please wait before syncing again.' },
+        { status: 429, headers: getRateLimitHeaders(rateLimitResult) }
+      )
     }
 
     const supabase = createAdminClient()
@@ -74,7 +91,40 @@ export async function POST(request: Request) {
     console.log(`Account mapping: ${accounts?.length || 0} accounts found for plaid_item_id ${plaidItem.id}`)
     console.log('Account map entries:', Array.from(accountMap.entries()))
 
+    // Fetch workspace categories for auto-categorization
+    const { data: categories } = await supabase
+      .from('categories')
+      .select('id, name, type')
+      .or(`is_system.eq.true,workspace_id.eq.${workspaceId}`)
+
+    // Create a map from category name (lowercase) to category object
+    const categoryMap = new Map<string, { id: string; name: string; type: string }>()
+    for (const cat of categories || []) {
+      categoryMap.set(cat.name.toLowerCase(), cat)
+    }
+    console.log(`Category mapping: ${categoryMap.size} categories available for auto-categorization`)
+
+    // Helper function to find category ID from Plaid category
+    const findCategoryId = (plaidCategory: string[] | null | undefined, amount: number): string | null => {
+      const suggestedName = getSuggestedCategoryFromPlaid(plaidCategory)
+      if (!suggestedName) return null
+
+      const category = categoryMap.get(suggestedName.toLowerCase())
+      if (!category) return null
+
+      // Verify category type matches transaction direction
+      // Positive amount (in our system) = income, negative = expense
+      const isIncome = amount > 0
+      if ((isIncome && category.type === 'income') || (!isIncome && category.type === 'expense')) {
+        return category.id
+      }
+
+      // If type doesn't match, still return it (better than uncategorized)
+      return category.id
+    }
+
     let totalAdded = 0
+    let totalCategorized = 0
     let totalModified = 0
     let totalRemoved = 0
     let cursor = cursorData?.cursor || null
@@ -133,26 +183,42 @@ export async function POST(request: Request) {
         // Our system: negative amount = expense, positive = income
         // So we negate to match our convention
 
-        // Check if transaction already exists
+        // Check if transaction already exists (include category_id to check if uncategorized)
         const { data: existing } = await supabase
           .from('transactions')
-          .select('id')
+          .select('id, category_id')
           .eq('plaid_transaction_id', tx.transactionId)
           .single()
 
+        // Calculate the amount in our system (negated from Plaid)
+        const transactionAmount = -tx.amount
+
+        // Try to auto-categorize based on Plaid category
+        const categoryId = findCategoryId(tx.category, transactionAmount)
+
         if (existing) {
           // Update existing transaction
+          // Also set category if it was previously uncategorized and we have a suggestion
+          const updateData: Record<string, unknown> = {
+            amount: transactionAmount,
+            date: tx.date,
+            description: tx.merchantName || tx.name,
+            plaid_pending: tx.pending,
+            plaid_merchant_name: tx.merchantName,
+            plaid_category: tx.category,
+            plaid_payment_channel: tx.paymentChannel,
+          }
+
+          // Only set category if transaction is uncategorized and we have a mapping
+          if (!existing.category_id && categoryId) {
+            updateData.category_id = categoryId
+            totalCategorized++
+            console.log(`Auto-categorized existing transaction: ${tx.merchantName || tx.name}`)
+          }
+
           const { error: updateError } = await supabase
             .from('transactions')
-            .update({
-              amount: -tx.amount,
-              date: tx.date,
-              description: tx.merchantName || tx.name,
-              plaid_pending: tx.pending,
-              plaid_merchant_name: tx.merchantName,
-              plaid_category: tx.category,
-              plaid_payment_channel: tx.paymentChannel,
-            })
+            .update(updateData)
             .eq('id', existing.id)
 
           if (!updateError) {
@@ -160,12 +226,13 @@ export async function POST(request: Request) {
             console.log(`Updated transaction: ${tx.merchantName || tx.name} - $${tx.amount}`)
           }
         } else {
-          // Insert new transaction
+          // Insert new transaction with auto-categorization
           const { error: insertError } = await supabase.from('transactions').insert({
             account_id: localAccountId,
-            amount: -tx.amount,
+            amount: transactionAmount,
             date: tx.date,
             description: tx.merchantName || tx.name,
+            category_id: categoryId,
             plaid_transaction_id: tx.transactionId,
             plaid_pending: tx.pending,
             plaid_merchant_name: tx.merchantName,
@@ -175,7 +242,12 @@ export async function POST(request: Request) {
 
           if (!insertError) {
             totalAdded++
-            console.log(`Inserted transaction: ${tx.merchantName || tx.name} - $${tx.amount}`)
+            if (categoryId) {
+              totalCategorized++
+              console.log(`Inserted transaction: ${tx.merchantName || tx.name} - $${tx.amount} [Auto-categorized]`)
+            } else {
+              console.log(`Inserted transaction: ${tx.merchantName || tx.name} - $${tx.amount} [Uncategorized]`)
+            }
           } else {
             console.error(`Failed to insert transaction: ${insertError.message}`, insertError)
           }
@@ -242,7 +314,7 @@ export async function POST(request: Request) {
       workspaceId,
       userId!,
       request,
-      { added: totalAdded, modified: totalModified, removed: totalRemoved }
+      { added: totalAdded, modified: totalModified, removed: totalRemoved, categorized: totalCategorized }
     )
 
     return NextResponse.json({
@@ -250,6 +322,7 @@ export async function POST(request: Request) {
       added: totalAdded,
       modified: totalModified,
       removed: totalRemoved,
+      categorized: totalCategorized,
     })
   } catch (error) {
     console.error('Sync error:', error)

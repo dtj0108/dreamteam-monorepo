@@ -10,7 +10,6 @@ import {
   UserCheckIcon,
   PlayIcon,
   AlertTriangleIcon,
-  PhoneIcon,
   ClockIcon,
   GitBranchIcon,
   PencilIcon,
@@ -21,6 +20,7 @@ import {
   ArrowRightCircleIcon,
   CheckCircle2Icon,
   MoveRightIcon,
+  ActivityIcon,
 } from "lucide-react"
 import {
   Tooltip,
@@ -32,7 +32,6 @@ import { getActionDefinition, getOperatorDefinition } from "@/types/workflow"
 
 const actionIcons: Record<ActionType, React.ReactNode> = {
   send_sms: <MessageSquareIcon className="size-5" />,
-  make_call: <PhoneIcon className="size-5" />,
   send_email: <MailIcon className="size-5" />,
   send_notification: <BellIcon className="size-5" />,
   create_task: <ListTodoIcon className="size-5" />,
@@ -42,6 +41,7 @@ const actionIcons: Record<ActionType, React.ReactNode> = {
   add_tag: <TagIcon className="size-5" />,
   remove_tag: <TagsIcon className="size-5" />,
   move_lead_stage: <MoveRightIcon className="size-5" />,
+  log_activity: <ActivityIcon className="size-5" />,
   create_deal: <BriefcaseIcon className="size-5" />,
   update_deal: <PenSquareIcon className="size-5" />,
   move_deal_stage: <ArrowRightCircleIcon className="size-5" />,
@@ -64,8 +64,6 @@ function getActionSummary(action: WorkflowAction): string | null {
       return config.subject ? `${config.subject}` : null
     case "send_sms":
       return config.message ? `${String(config.message).slice(0, 40)}...` : null
-    case "make_call":
-      return config.record ? "With recording" : "No recording"
     case "create_task":
       return config.title ? `${config.title}` : null
     case "update_status":
@@ -152,6 +150,17 @@ function getActionSummary(action: WorkflowAction): string | null {
       if (outcome === "won") return "Mark as Won"
       if (outcome === "lost") return "Mark as Lost"
       return "Close opportunity"
+    }
+    case "log_activity": {
+      const actType = config.activity_type as string | undefined
+      const actSubject = config.activity_subject as string | undefined
+      if (actType && actSubject) {
+        return `Log ${actType}: ${actSubject.slice(0, 30)}${actSubject.length > 30 ? "..." : ""}`
+      }
+      if (actType) {
+        return `Log ${actType}`
+      }
+      return "Log activity (not configured)"
     }
     default:
       return null

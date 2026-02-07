@@ -39,6 +39,7 @@ import { SearchIcon, UsersIcon, Trash2, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { getContactColumns, type ContactRow } from "./columns"
 import { BulkActionBar, type BulkAction } from "@/components/sales/bulk-action-bar"
+import { toast } from "sonner"
 
 export default function ContactsPage() {
   const { currentWorkspace, isLoading: workspaceLoading } = useWorkspace()
@@ -73,6 +74,9 @@ export default function ContactsPage() {
       }
     } catch (error) {
       console.error("Error fetching contacts:", error)
+      toast.error("Failed to load contacts", {
+        description: "Please try again or contact support",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -172,6 +176,9 @@ export default function ContactsPage() {
       setRowSelection({})
     } catch (error) {
       console.error("Bulk delete error:", error)
+      toast.error("Failed to delete contacts", {
+        description: "Please try again or contact support",
+      })
     } finally {
       setIsBulkDeleting(false)
       setBulkDeleteDialogOpen(false)

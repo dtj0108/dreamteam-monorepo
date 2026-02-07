@@ -214,6 +214,7 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type") // image, document, video, audio, archive, other
     const query = searchParams.get("q")
     const channelId = searchParams.get("channelId")
+    const dmConversationId = searchParams.get("dmConversationId")
     const uploaderId = searchParams.get("uploaderId")
     const cursor = searchParams.get("cursor")
     const limit = parseInt(searchParams.get("limit") || "50")
@@ -294,6 +295,11 @@ export async function GET(request: NextRequest) {
     // Filter by channel
     if (channelId) {
       dbQuery = dbQuery.eq("source_channel_id", channelId)
+    }
+
+    // Filter by DM conversation
+    if (dmConversationId) {
+      dbQuery = dbQuery.eq("source_dm_conversation_id", dmConversationId)
     }
 
     // Filter by uploader

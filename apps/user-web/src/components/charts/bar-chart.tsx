@@ -13,7 +13,7 @@ import {
 } from "recharts"
 
 interface BarChartProps {
-  data: any[]
+  data: Record<string, string | number>[]
   xKey: string
   bars: {
     dataKey: string
@@ -89,7 +89,7 @@ export function BarChart({
               radius={[0, 4, 4, 0]}
             >
               {useDataColors && data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color || bar.color} />
+                <Cell key={`cell-${index}`} fill={String(entry.color || bar.color)} />
               ))}
             </Bar>
           ))}
@@ -136,7 +136,7 @@ export function BarChart({
             radius={[4, 4, 0, 0]}
           >
             {useDataColors && data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color || bar.color} />
+              <Cell key={`cell-${index}`} fill={String(entry.color || bar.color)} />
             ))}
           </Bar>
         ))}

@@ -135,7 +135,7 @@ export async function processScheduledWorkflows(): Promise<ProcessResult> {
 /**
  * Get statistics about scheduled workflow actions
  */
-export async function getScheduledWorkflowStats(): Promise<{
+export async function getScheduledWorkflowStats(workspaceId?: string): Promise<{
   pending: number
   processing: number
   completed: number
@@ -143,9 +143,15 @@ export async function getScheduledWorkflowStats(): Promise<{
 }> {
   const supabase = createAdminClient()
 
-  const { data: stats } = await supabase
+  let query = supabase
     .from('workflow_scheduled_actions')
     .select('status')
+
+  if (workspaceId) {
+    query = query.eq('workspace_id', workspaceId)
+  }
+
+  const { data: stats } = await query
 
   if (!stats) {
     return { pending: 0, processing: 0, completed: 0, failed: 0 }

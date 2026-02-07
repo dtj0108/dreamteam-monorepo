@@ -7,6 +7,17 @@ import {
   type ExistingLead,
 } from '@/lib/lead-duplicate-detector'
 
+// Extend timeout for large CSV imports
+export const maxDuration = 300
+
+interface ImportContact {
+  first_name: string
+  last_name?: string | null
+  email?: string | null
+  phone?: string | null
+  title?: string | null
+}
+
 interface ImportLead {
   name: string
   website?: string | null
@@ -19,6 +30,14 @@ interface ImportLead {
   country?: string | null
   postal_code?: string | null
   source?: string | null
+  // Legacy single contact fields (optional, for backward compatibility)
+  contact_first_name?: string | null
+  contact_last_name?: string | null
+  contact_email?: string | null
+  contact_phone?: string | null
+  contact_title?: string | null
+  // NEW: Multiple contacts array
+  contacts?: ImportContact[]
 }
 
 interface ImportRequest {
@@ -124,19 +143,32 @@ export async function POST(request: Request) {
     let leadsToInsert = body.leads
     let skippedDuplicates = 0
 
+    // Track leads that are duplicates but have contact data (we'll add contacts to existing leads)
+    const duplicateLeadsWithContacts: Array<{ existingLeadId: string; lead: ImportLead }> = []
+
+    // Fetch existing leads for comparison (needed for both duplicate detection and contact addition)
+    const { data: existingLeadsData } = await supabase
+      .from('leads')
+      .select('id, name, website')
+      .eq('workspace_id', workspaceId)
+
+    const existingLeads: ExistingLead[] = (existingLeadsData || []).map((lead: { id: string; name: string | null; website: string | null }) => ({
+      id: lead.id,
+      name: lead.name || '',
+      website: lead.website,
+    }))
+
+    // Helper to check if a lead has any contact data
+    const hasContactData = (lead: ImportLead): boolean => {
+      // Check new contacts array format
+      if (lead.contacts && Array.isArray(lead.contacts)) {
+        return lead.contacts.some(c => c.first_name?.trim())
+      }
+      // Check legacy single contact fields
+      return !!lead.contact_first_name?.trim()
+    }
+
     if (skipDuplicates) {
-      // Fetch existing leads for comparison
-      const { data: existingLeadsData } = await supabase
-        .from('leads')
-        .select('id, name, website')
-        .eq('workspace_id', workspaceId)
-
-      const existingLeads: ExistingLead[] = (existingLeadsData || []).map((lead: { id: string; name: string | null; website: string | null }) => ({
-        id: lead.id,
-        name: lead.name || '',
-        website: lead.website,
-      }))
-
       leadsToInsert = body.leads.filter((lead) => {
         const result = checkLeadDuplicate(
           { name: lead.name, website: lead.website || null },
@@ -144,16 +176,22 @@ export async function POST(request: Request) {
         )
         if (result.isDuplicate) {
           skippedDuplicates++
+          // If this duplicate lead has contact data, save it so we can add contact to existing lead
+          if (hasContactData(lead) && result.matchedLead) {
+            duplicateLeadsWithContacts.push({
+              existingLeadId: result.matchedLead.id,
+              lead,
+            })
+          }
           return false
         }
         return true
       })
     }
 
-    // Prepare leads for insert
-    const formattedLeads = leadsToInsert
-      .filter((lead) => lead.name && lead.name.trim()) // Filter out leads without names
-      .map((lead) => ({
+    // Prepare leads for insert, preserving original lead data for contact creation
+    const validLeads = leadsToInsert.filter((lead) => lead.name && lead.name.trim())
+    const formattedLeads = validLeads.map((lead) => ({
         user_id: ownerId,
         workspace_id: workspaceId,
         name: lead.name.trim(),
@@ -175,6 +213,7 @@ export async function POST(request: Request) {
     const BATCH_SIZE = 100
     let insertedCount = 0
     const errors: string[] = []
+    const insertedLeadIds: string[] = [] // Track IDs for contact creation
 
     for (let i = 0; i < formattedLeads.length; i += BATCH_SIZE) {
       const batch = formattedLeads.slice(i, i + BATCH_SIZE)
@@ -182,13 +221,124 @@ export async function POST(request: Request) {
       const { data, error } = await supabase
         .from('leads')
         .insert(batch)
-        .select()
+        .select('id')
 
       if (error) {
-        errors.push(`Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`)
-      } else {
-        insertedCount += data?.length || 0
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1
+        errors.push(`Batch ${batchNum} (leads ${i + 1}-${i + batch.length}): ${error.message}`)
+      } else if (data) {
+        insertedCount += data.length
+        insertedLeadIds.push(...data.map((d: { id: string }) => d.id))
       }
+    }
+
+    // Create contacts for newly inserted leads that have contact data
+    let contactsCreated = 0
+    let contactsForExistingLeads = 0
+
+    const contactsToInsert: Array<{
+      lead_id: string
+      workspace_id: string
+      first_name: string
+      last_name: string | null
+      email: string | null
+      phone: string | null
+      title: string | null
+    }> = []
+
+    // Helper function to extract contacts from a lead (handles both legacy and array format)
+    const extractContacts = (lead: ImportLead): ImportContact[] => {
+      const contacts: ImportContact[] = []
+
+      // First, check for new contacts array format
+      if (lead.contacts && Array.isArray(lead.contacts)) {
+        for (const contact of lead.contacts) {
+          if (contact.first_name?.trim()) {
+            contacts.push({
+              first_name: contact.first_name.trim(),
+              last_name: contact.last_name?.trim() || null,
+              email: contact.email?.trim() || null,
+              phone: contact.phone?.trim() || null,
+              title: contact.title?.trim() || null,
+            })
+          }
+        }
+      }
+
+      // Fall back to legacy single contact fields if no contacts array provided
+      // Only if the array is empty (to avoid duplicates)
+      if (contacts.length === 0 && lead.contact_first_name?.trim()) {
+        contacts.push({
+          first_name: lead.contact_first_name.trim(),
+          last_name: lead.contact_last_name?.trim() || null,
+          email: lead.contact_email?.trim() || null,
+          phone: lead.contact_phone?.trim() || null,
+          title: lead.contact_title?.trim() || null,
+        })
+      }
+
+      return contacts
+    }
+
+    // Add contacts for newly created leads
+    for (let i = 0; i < insertedLeadIds.length; i++) {
+      const originalLead = validLeads[i]
+      const leadId = insertedLeadIds[i]
+
+      if (!originalLead || !leadId) continue
+
+      const contacts = extractContacts(originalLead)
+      for (const contact of contacts) {
+        contactsToInsert.push({
+          lead_id: leadId,
+          workspace_id: workspaceId,
+          first_name: contact.first_name,
+          last_name: contact.last_name || null,
+          email: contact.email || null,
+          phone: contact.phone || null,
+          title: contact.title || null,
+        })
+      }
+    }
+
+    // Add contacts for existing leads (duplicates with contact data)
+    for (const { existingLeadId, lead } of duplicateLeadsWithContacts) {
+      const contacts = extractContacts(lead)
+      for (const contact of contacts) {
+        contactsToInsert.push({
+          lead_id: existingLeadId,
+          workspace_id: workspaceId,
+          first_name: contact.first_name,
+          last_name: contact.last_name || null,
+          email: contact.email || null,
+          phone: contact.phone || null,
+          title: contact.title || null,
+        })
+      }
+    }
+
+    // Insert contacts in batches
+    if (contactsToInsert.length > 0) {
+      for (let i = 0; i < contactsToInsert.length; i += BATCH_SIZE) {
+        const batch = contactsToInsert.slice(i, i + BATCH_SIZE)
+
+        const { data, error } = await supabase
+          .from('contacts')
+          .insert(batch)
+          .select('id')
+
+        if (error) {
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1
+          errors.push(`Contact batch ${batchNum} (contacts ${i + 1}-${i + batch.length}): ${error.message}`)
+        } else if (data) {
+          contactsCreated += data.length
+        }
+      }
+
+      // Count contacts added to existing leads (duplicates)
+      contactsForExistingLeads = duplicateLeadsWithContacts.reduce((count, { lead }) => {
+        return count + extractContacts(lead).length
+      }, 0)
     }
 
     return NextResponse.json({
@@ -197,12 +347,19 @@ export async function POST(request: Request) {
       total: body.leads.length,
       failed: body.leads.length - insertedCount - skippedDuplicates,
       skipped_duplicates: skippedDuplicates,
+      contacts_created: contactsCreated,
+      contacts_for_existing_leads: contactsForExistingLeads,
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error) {
-    console.error('Import error:', error)
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`Import error [${errorId}]:`, error)
     return NextResponse.json(
-      { error: 'Failed to import leads' },
+      {
+        error: 'Failed to import leads',
+        errorId,
+        details: error instanceof Error ? error.message : undefined,
+      },
       { status: 500 }
     )
   }

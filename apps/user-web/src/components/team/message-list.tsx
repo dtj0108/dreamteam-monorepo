@@ -43,7 +43,7 @@ interface MessageListProps {
   onLoadMore?: () => void
   onReact?: (messageId: string, emoji: string) => void
   onReply?: (messageId: string) => void
-  onEdit?: (messageId: string) => void
+  onEdit?: (messageId: string, newContent: string) => Promise<void>
   onDelete?: (messageId: string) => void
 }
 
