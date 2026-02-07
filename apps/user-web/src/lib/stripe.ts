@@ -9,7 +9,7 @@ export function getStripe(): Stripe {
       throw new Error('Missing STRIPE_SECRET_KEY environment variable')
     }
     stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-12-15.clover',
+      apiVersion: '2025-12-15.clover' as Stripe.LatestApiVersion,
       typescript: true,
     })
   }
@@ -20,7 +20,7 @@ export function getStripe(): Stripe {
 // Prefer getStripe() which throws a clear error instead of returning null.
 export const stripe: Stripe | null = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-12-15.clover',
+      apiVersion: '2025-12-15.clover' as Stripe.LatestApiVersion,
       typescript: true,
     })
   : null
