@@ -20,6 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { Search, Loader2, AlertCircle, X, MessageCircle, Mail } from "lucide-react"
 import { GoogleSignInButton, MicrosoftSignInButton } from "@/components/nylas"
+import { toast } from "sonner"
 
 export default function ConversationsPage() {
   const {
@@ -110,9 +111,15 @@ export default function ConversationsPage() {
       } else {
         const data = await res.json().catch(() => ({}))
         console.error('Failed to send SMS:', data.error)
+        toast.error("Failed to send text message", {
+          description: data.error || "Please try again or contact support",
+        })
       }
     } catch (err) {
       console.error('Failed to send SMS:', err)
+      toast.error("Failed to send text message", {
+        description: "Please try again or contact support",
+      })
     } finally {
       setSendingSms(false)
     }
@@ -138,9 +145,15 @@ export default function ConversationsPage() {
       } else {
         const data = await res.json().catch(() => ({}))
         console.error('Failed to initiate call:', data.error)
+        toast.error("Failed to initiate call", {
+          description: data.error || "Please try again or contact support",
+        })
       }
     } catch (err) {
       console.error('Failed to initiate call:', err)
+      toast.error("Failed to initiate call", {
+        description: "Please try again or contact support",
+      })
     }
   }, [timelineContact, refreshTimeline])
 

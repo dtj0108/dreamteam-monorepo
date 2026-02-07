@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ChevronRight, FileText, Plus, Star, Search, Tag, X, PenTool } from "lucide-react"
+import { ChevronLeft, ChevronRight, FileText, Plus, Star, Search, Tag, X, PenTool } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -196,6 +196,18 @@ export function KnowledgeSidebar({
                 ))}
                 {isAddingCategory ? (
                   <div className="px-2 py-1.5 space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingCategory(false)
+                        setNewCategoryName("")
+                        setNewCategoryColor("#6b7280")
+                      }}
+                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      <span>Back</span>
+                    </button>
                     <Input
                       placeholder="Category name"
                       value={newCategoryName}
@@ -211,7 +223,7 @@ export function KnowledgeSidebar({
                         }
                       }}
                       autoFocus
-                      className="h-9"
+                      className="h-8"
                     />
                     {/* Color picker grid */}
                     <div className="flex flex-wrap gap-1">
@@ -231,28 +243,14 @@ export function KnowledgeSidebar({
                         />
                       ))}
                     </div>
-                    <div className="flex gap-1.5">
-                      <Button
-                        size="sm"
-                        className="flex-1 h-8"
-                        onClick={handleCreateCategory}
-                        disabled={!newCategoryName.trim()}
-                      >
-                        Add
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8"
-                        onClick={() => {
-                          setIsAddingCategory(false)
-                          setNewCategoryName("")
-                          setNewCategoryColor("#6b7280")
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
+                    <Button
+                      size="sm"
+                      className="w-full h-8"
+                      onClick={handleCreateCategory}
+                      disabled={!newCategoryName.trim()}
+                    >
+                      Add
+                    </Button>
                   </div>
                 ) : (
                   <button
@@ -269,24 +267,24 @@ export function KnowledgeSidebar({
 
           {/* Whiteboards Section */}
           <Collapsible open={whiteboardsOpen} onOpenChange={setWhiteboardsOpen}>
-            <div className="flex items-center">
-              <CollapsibleTrigger className="flex-1 flex items-center gap-1 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+            <div className="flex items-center pr-1">
+              <CollapsibleTrigger className="flex-1 min-w-0 flex items-center gap-1 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
                 <ChevronRight
                   className={cn(
-                    "h-3.5 w-3.5 transition-transform",
+                    "h-3.5 w-3.5 shrink-0 transition-transform",
                     whiteboardsOpen && "rotate-90"
                   )}
                 />
-                <PenTool className="h-3.5 w-3.5" />
-                <span className="font-medium">Whiteboards</span>
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {whiteboards.length}
-                </span>
+                <PenTool className="h-3.5 w-3.5 shrink-0" />
+                <span className="font-medium truncate">Whiteboards</span>
               </CollapsibleTrigger>
+              <span className="text-xs text-muted-foreground shrink-0">
+                {whiteboards.length}
+              </span>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 mr-1 hover:bg-primary/10 hover:text-primary"
+                className="h-8 w-8 shrink-0 hover:bg-primary/10 hover:text-primary"
                 onClick={onCreateWhiteboard}
                 title="Create whiteboard"
               >
@@ -328,19 +326,21 @@ export function KnowledgeSidebar({
 
           {/* All Pages Section */}
           <Collapsible open={pagesOpen} onOpenChange={setPagesOpen}>
-            <CollapsibleTrigger className="flex items-center gap-1 px-2 py-1.5 w-full text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-              <ChevronRight
-                className={cn(
-                  "h-3.5 w-3.5 transition-transform",
-                  pagesOpen && "rotate-90"
-                )}
-              />
-              <FileText className="h-3.5 w-3.5" />
-              <span className="font-medium">All Pages</span>
-              <span className="ml-auto text-xs text-muted-foreground">
+            <div className="flex items-center pr-1">
+              <CollapsibleTrigger className="flex-1 min-w-0 flex items-center gap-1 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                <ChevronRight
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0 transition-transform",
+                    pagesOpen && "rotate-90"
+                  )}
+                />
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                <span className="font-medium truncate">All Pages</span>
+              </CollapsibleTrigger>
+              <span className="text-xs text-muted-foreground shrink-0 mr-2">
                 {pages.length}
               </span>
-            </CollapsibleTrigger>
+            </div>
             <CollapsibleContent>
               <div className="pl-4 space-y-0.5">
                 {rootPages.length === 0 ? (

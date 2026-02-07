@@ -4,6 +4,9 @@ import { decryptCRMToken } from "@/lib/crm-encryption"
 import { SlackClient } from "@/lib/slack-client"
 import type { SlackImportFilters, SlackImportResult, SlackUserMapping, SlackMessage } from "@/types/slack"
 
+// Extend timeout for large imports (Vercel Pro supports up to 300s)
+export const maxDuration = 300
+
 // POST /api/integrations/slack/import - Import channels and messages from Slack
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabaseClient()

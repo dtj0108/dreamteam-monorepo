@@ -8,8 +8,10 @@ import { useTeamMessages } from "@/hooks/use-team-messages"
 import { useChannelMeetings } from "@/hooks/use-channel-meetings"
 import { useTeam } from "@/providers/team-provider"
 import { useMeeting } from "@/providers/meeting-provider"
-import { Hash } from "lucide-react"
+import { Hash, MessageSquare, Paperclip } from "lucide-react"
 import { type UploadedFile } from "@/types/files"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { FileBrowser } from "@/components/team/files"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,6 +63,7 @@ export default function ChannelPage({ params }: { params: Promise<{ id: string }
   const [channel, setChannel] = useState<ChannelData | null>(null)
   const [isStarred, setIsStarred] = useState(false)
   const [showMembersDialog, setShowMembersDialog] = useState(false)
+  const [activeTab, setActiveTab] = useState<"messages" | "files">("messages")
   const [activeMeeting, setActiveMeeting] = useState<ActiveMeetingData | null>(null)
   const [isStartingCall, setIsStartingCall] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -72,6 +75,7 @@ export default function ChannelPage({ params }: { params: Promise<{ id: string }
     messages,
     isLoading: messagesLoading,
     sendMessage,
+    editMessage,
     deleteMessage,
     reactToMessage,
     loadMore,
@@ -201,9 +205,12 @@ export default function ChannelPage({ params }: { params: Promise<{ id: string }
     }
   }
 
-  const handleEdit = async (messageId: string) => {
-    // TODO: Implement edit UI
-    console.log("Edit message:", messageId)
+  const handleEdit = async (messageId: string, newContent: string) => {
+    try {
+      await editMessage(messageId, newContent)
+    } catch (error) {
+      console.error("Failed to edit message:", error)
+    }
   }
 
   const handleDelete = async (messageId: string) => {
@@ -312,46 +319,76 @@ export default function ChannelPage({ params }: { params: Promise<{ id: string }
         onDelete={() => setShowDeleteDialog(true)}
       />
 
-      {/* Messages - scrollable area */}
-      <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto">
-        {messages.length === 0 && !messagesLoading ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <div className="size-20 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
-              <Hash className="size-10 text-purple-500" />
-            </div>
-            <h2 className="text-xl font-semibold mb-2">
-              Welcome to #{displayName}
-            </h2>
-            <p className="text-muted-foreground max-w-md mb-4">
-              {displayDescription || "This is the beginning of this channel. Send a message to start the conversation!"}
-            </p>
-          </div>
-        ) : (
-          <MessageList
-            messages={messages}
-            meetings={meetings}
-            currentUserId={user?.id}
-            isLoading={messagesLoading}
-            hasMore={hasMore}
-            typingUsers={typingUsers}
-            scrollContainerRef={messagesContainerRef}
-            onLoadMore={loadMore}
-            onReact={handleReact}
-            onReply={() => {}}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
-        )}
-      </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as "messages" | "files")}
+        className="flex-1 flex flex-col min-h-0"
+      >
+        <div className="border-b px-4">
+          <TabsList variant="line">
+            <TabsTrigger value="messages">
+              <MessageSquare className="size-4" />
+              Messages
+            </TabsTrigger>
+            <TabsTrigger value="files">
+              <Paperclip className="size-4" />
+              Files
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-      {/* Message Input */}
-      <MessageInput
-        placeholder={`Message #${displayName}`}
-        onSend={handleSendMessage}
-        onTyping={setTyping}
-        workspaceId={workspaceId || ""}
-        channelId={channelId}
-      />
+        <TabsContent value="messages" className="flex-1 flex flex-col min-h-0 mt-0">
+          {/* Messages - scrollable area */}
+          <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto">
+            {messages.length === 0 && !messagesLoading ? (
+              <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                <div className="size-20 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
+                  <Hash className="size-10 text-purple-500" />
+                </div>
+                <h2 className="text-xl font-semibold mb-2">
+                  Welcome to #{displayName}
+                </h2>
+                <p className="text-muted-foreground max-w-md mb-4">
+                  {displayDescription || "This is the beginning of this channel. Send a message to start the conversation!"}
+                </p>
+              </div>
+            ) : (
+              <MessageList
+                messages={messages}
+                meetings={meetings}
+                currentUserId={user?.id}
+                isLoading={messagesLoading}
+                hasMore={hasMore}
+                typingUsers={typingUsers}
+                scrollContainerRef={messagesContainerRef}
+                onLoadMore={loadMore}
+                onReact={handleReact}
+                onReply={() => {}}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            )}
+          </div>
+
+          {/* Message Input */}
+          <MessageInput
+            placeholder={`Message #${displayName}`}
+            onSend={handleSendMessage}
+            onTyping={setTyping}
+            workspaceId={workspaceId || ""}
+            channelId={channelId}
+          />
+        </TabsContent>
+
+        <TabsContent value="files" className="flex-1 min-h-0 mt-0">
+          <FileBrowser
+            workspaceId={workspaceId || ""}
+            channelId={channelId}
+            currentUserId={user?.id}
+            isAdmin={userRole === "admin" || userRole === "owner"}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Members Dialog */}
       <ChannelMembersDialog

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@dreamteam/database/server'
 import {
-  stripe,
+  getStripe,
   STRIPE_PRICES,
   TRIAL_DAYS,
   type WorkspacePlanType,
@@ -16,7 +16,7 @@ import {
   getTierLevel,
   resolveAgentTierSubscription,
 } from '@/lib/billing-queries'
-import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
+import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
 
 /**
  * Timeout wrapper for operations that might hang
@@ -50,6 +50,11 @@ export async function POST(request: NextRequest) {
     const workspaceId = await getCurrentWorkspaceId(user.id)
     if (!workspaceId) {
       return NextResponse.json({ error: 'No workspace selected' }, { status: 400 })
+    }
+
+    const { isValid } = await validateWorkspaceAccess(workspaceId, user.id)
+    if (!isValid) {
+      return NextResponse.json({ error: 'Not a workspace member' }, { status: 403 })
     }
 
     // Verify user is workspace owner (only owner can manage billing)
@@ -320,7 +325,7 @@ export async function POST(request: NextRequest) {
     const shouldAddTrial = type === 'workspace_plan' && !billing?.trial_end
 
     // Create Stripe Checkout Session
-    const checkoutSession = await stripe.checkout.sessions.create({
+    const checkoutSession = await getStripe().checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
       mode: 'subscription',
@@ -351,7 +356,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: checkoutSession.url })
   } catch (error) {
-    console.error('Checkout error:', error)
-    return NextResponse.json({ error: 'Failed to create checkout session' }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[billing/checkout] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }

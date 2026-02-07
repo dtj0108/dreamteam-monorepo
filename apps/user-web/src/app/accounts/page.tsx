@@ -82,6 +82,26 @@ export default function AccountsPage() {
     }
   }
 
+  const handleToggleActive = async (account: Account) => {
+    try {
+      const supabase = getSupabaseClient()
+      const newActiveState = !account.is_active
+      const { error } = await supabase
+        .from('accounts')
+        .update({ is_active: newActiveState })
+        .eq('id', account.id)
+
+      if (error) throw error
+
+      // Update local state
+      setAccounts(accounts.map(a =>
+        a.id === account.id ? { ...a, is_active: newActiveState } : a
+      ))
+    } catch (error) {
+      console.error('Failed to toggle account active status:', error)
+    }
+  }
+
   const summary = calculateBalanceSummary(accounts)
 
   // Group accounts by type
@@ -181,6 +201,7 @@ export default function AccountsPage() {
                   <AccountCard
                     key={account.id}
                     account={account}
+                    onToggleActive={handleToggleActive}
                     onDelete={(acc) => {
                       setAccountToDelete(acc)
                       setDeleteDialogOpen(true)

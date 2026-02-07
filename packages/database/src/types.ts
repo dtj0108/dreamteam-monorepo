@@ -84,6 +84,13 @@ export interface Account {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // Plaid integration fields
+  plaid_account_id?: string | null;
+  plaid_item_id?: string | null;
+  plaid_available_balance?: number | null;
+  plaid_current_balance?: number | null;
+  plaid_limit?: number | null;
+  is_plaid_linked?: boolean;
 }
 
 export interface Category {
@@ -112,6 +119,12 @@ export interface Transaction {
   recurring_rule_id: string | null;
   created_at: string;
   updated_at: string;
+  // Plaid integration fields
+  plaid_transaction_id?: string | null;
+  plaid_pending?: boolean;
+  plaid_merchant_name?: string | null;
+  plaid_category?: string[] | null;
+  plaid_payment_channel?: string | null;
 }
 
 export interface RecurringRule {

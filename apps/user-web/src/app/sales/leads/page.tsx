@@ -38,7 +38,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DataTablePagination } from "@/components/ui/data-table-pagination"
 import { PlusIcon, SearchIcon, BuildingIcon, TableIcon, KanbanIcon, Upload, Trash2, GitBranch, UserPlus, Tags, Loader2 } from "lucide-react"
 import { LeadForm, type Lead } from "@/components/sales/lead-form"
-import { CSVImportModal } from "@/components/import/csv-import-modal"
+import { CSVImportPage } from "@/components/import/csv-import-page"
 import { LeadsKanbanBoard } from "@/components/sales/leads-kanban-board"
 import { LeadsFilterBar, type LeadsFilters, type LeadTag, type WorkspaceMember } from "@/components/sales/leads-filter-bar"
 import { BulkActionBar, type BulkAction } from "@/components/sales/bulk-action-bar"
@@ -819,11 +819,12 @@ export default function LeadsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* CSV Import Modal */}
-      <CSVImportModal
+      {/* CSV Import */}
+      <CSVImportPage
         open={importModalOpen}
         onOpenChange={setImportModalOpen}
         onImportComplete={fetchLeads}
+        defaultDataType="leads"
       />
 
       {/* Bulk Delete Dialog */}

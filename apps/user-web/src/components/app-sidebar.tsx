@@ -139,6 +139,9 @@ const financeNav = [
       { title: "General", url: "/customize" },
       { title: "Categories", url: "/customize/categories" },
       { title: "Recurring", url: "/customize/recurring" },
+      { title: "Notifications", url: "/customize/notifications" },
+      { title: "Security", url: "/customize/security" },
+      { title: "Billing", url: "/customize/billing" },
     ],
   },
 ]
@@ -188,6 +191,16 @@ const salesNav = [
     title: "Conversations",
     url: "/sales/conversations",
     icon: MessageCircle,
+  },
+  {
+    title: "Calls",
+    url: "/sales/calls",
+    icon: Phone,
+    items: [
+      { title: "All Calls", url: "/sales/calls" },
+      { title: "Voicemail", url: "/sales/calls/voicemail" },
+      { title: "Analytics", url: "/sales/calls/analytics" },
+    ],
   },
   {
     title: "Activities",

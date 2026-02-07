@@ -115,11 +115,9 @@ export async function GET(request: Request) {
       }
     )
   } catch (error) {
-    console.error('Transactions API error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[transactions/list] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }
 
@@ -197,8 +195,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ transaction }, { status: 201 })
   } catch (error) {
-    console.error('Transactions POST error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const errorId = crypto.randomUUID().slice(0, 8)
+    console.error(`[transactions/create] Error [${errorId}]:`, error)
+    return NextResponse.json({ error: 'Internal server error', errorId }, { status: 500 })
   }
 }
 

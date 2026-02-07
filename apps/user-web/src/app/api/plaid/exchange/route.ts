@@ -30,10 +30,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Not a workspace member' }, { status: 403 })
     }
 
-    const { publicToken, institutionId, institutionName } = await request.json()
+    const { publicToken, institutionId, institutionName, forceNew, replaceExisting } = await request.json()
 
     if (!publicToken) {
       return NextResponse.json({ error: 'Public token is required' }, { status: 400 })
+    }
+
+    const supabase = createAdminClient()
+
+    // Check for existing connection with same institution (duplicate detection)
+    if (institutionId && !forceNew && !replaceExisting) {
+      const { data: existingItem } = await supabase
+        .from('plaid_items')
+        .select('id, institution_name, status')
+        .eq('workspace_id', workspaceId)
+        .eq('plaid_institution_id', institutionId)
+        .single()
+
+      if (existingItem) {
+        // Get account count for display
+        const { count } = await supabase
+          .from('accounts')
+          .select('*', { count: 'exact', head: true })
+          .eq('plaid_item_id', existingItem.id)
+
+        return NextResponse.json({
+          duplicateDetected: true,
+          existingItem: {
+            id: existingItem.id,
+            institutionName: existingItem.institution_name,
+            accountCount: count || 0,
+            status: existingItem.status,
+          }
+        })
+      }
     }
 
     // Exchange public token for access token
@@ -46,19 +76,64 @@ export async function POST(request: Request) {
     }
 
     const { accessToken, itemId } = exchangeResult.data!
-    const supabase = createAdminClient()
 
     // Encrypt the access token before storing
     const encryptedAccessToken = encryptToken(accessToken)
 
-    // Store the Plaid Item with encrypted token
+    // Handle replaceExisting - update existing connection with new credentials
+    if (replaceExisting) {
+      const { data: updatedItem, error: updateError } = await supabase
+        .from('plaid_items')
+        .update({
+          plaid_item_id: itemId,
+          encrypted_access_token: encryptedAccessToken,
+          status: 'good',
+          error_code: null,
+          error_message: null,
+          consent_expiration_time: null,
+        })
+        .eq('id', replaceExisting)
+        .eq('workspace_id', workspaceId)
+        .select()
+        .single()
+
+      if (updateError) {
+        console.error('Failed to update Plaid item:', updateError)
+        return NextResponse.json(
+          { error: 'Failed to update connection' },
+          { status: 500 }
+        )
+      }
+
+      // Audit log: Bank connection credentials refreshed
+      await logPlaidEvent(
+        'plaid.connected',
+        updatedItem.id,
+        workspaceId,
+        session.id,
+        request,
+        {
+          institution: institutionName,
+          credentialsRefreshed: true,
+        }
+      )
+
+      return NextResponse.json({
+        success: true,
+        updated: true,
+        itemId: updatedItem.id,
+      })
+    }
+
+    // Proceed with normal creation (forceNew or no duplicate)
+
+    // Store the Plaid Item with encrypted token only (no plaintext)
     const { data: plaidItem, error: itemError } = await supabase
       .from('plaid_items')
       .insert({
         workspace_id: workspaceId,
         user_id: session.id,
         plaid_item_id: itemId,
-        plaid_access_token: accessToken, // Keep during migration, will be dropped
         encrypted_access_token: encryptedAccessToken,
         plaid_institution_id: institutionId || null,
         institution_name: institutionName || 'Unknown Institution',
@@ -116,6 +191,7 @@ export async function POST(request: Request) {
           plaid_current_balance: plaidAccount.balances.current,
           plaid_limit: plaidAccount.balances.limit,
           is_plaid_linked: true,
+          is_active: true,
           plaid_last_balance_update: new Date().toISOString(),
         })
         .select()

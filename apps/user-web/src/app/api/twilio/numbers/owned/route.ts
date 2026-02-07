@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
 import { releasePhoneNumber, updatePhoneNumber } from "@/lib/twilio"
+import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
 
-// GET /api/twilio/numbers/owned - List user's owned phone numbers
+// GET /api/twilio/numbers/owned - List workspace's phone numbers
 export async function GET() {
   try {
     const supabase = await createServerSupabaseClient()
@@ -12,10 +13,18 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Get user's current workspace
+    const workspaceId = await getCurrentWorkspaceId(user.id)
+
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspace found" }, { status: 400 })
+    }
+
+    // Fetch numbers for this workspace (RLS will also enforce this)
     const { data: numbers, error } = await supabase
       .from("twilio_numbers")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -56,12 +65,19 @@ export async function DELETE(req: NextRequest) {
       )
     }
 
-    // Verify ownership
+    // Get user's current workspace
+    const workspaceId = await getCurrentWorkspaceId(user.id)
+
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspace found" }, { status: 400 })
+    }
+
+    // Verify number belongs to user's workspace
     const { data: number, error: fetchError } = await supabase
       .from("twilio_numbers")
       .select("*")
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
       .single()
 
     if (fetchError || !number) {
@@ -122,12 +138,19 @@ export async function PATCH(req: NextRequest) {
       )
     }
 
-    // Verify ownership
+    // Get user's current workspace
+    const workspaceId = await getCurrentWorkspaceId(user.id)
+
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No workspace found" }, { status: 400 })
+    }
+
+    // Verify number belongs to user's workspace
     const { data: number, error: fetchError } = await supabase
       .from("twilio_numbers")
       .select("*")
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
       .single()
 
     if (fetchError || !number) {

@@ -68,15 +68,16 @@ export async function POST(req: Request) {
           .eq("agent_id", agentId)
 
         // Append active skills to system prompt
+        interface SkillData { id: string; name: string; display_name: string; content: string; is_active: boolean }
         if (assignedSkills && assignedSkills.length > 0) {
-          const activeSkills = assignedSkills
-            .filter((s: any) => s.skill?.is_active !== false)
-            .map((s: any) => s.skill)
-            .filter(Boolean)
+          const activeSkills: SkillData[] = assignedSkills
+            .filter((s: { skill: SkillData | null }) => s.skill?.is_active !== false)
+            .map((s: { skill: SkillData | null }) => s.skill)
+            .filter((skill: SkillData | null): skill is SkillData => skill != null)
 
           if (activeSkills.length > 0) {
             const skillsContent = activeSkills
-              .map((skill: any) => `## Skill: ${skill.display_name}\n\n${skill.content}`)
+              .map((skill) => `## Skill: ${skill.display_name}\n\n${skill.content}`)
               .join("\n\n---\n\n")
 
             systemPrompt = `${systemPrompt}
@@ -162,7 +163,7 @@ ${skillsContent}`
               case "text-delta": {
                 const textEvent = `event: text\ndata: ${JSON.stringify({
                   type: "text",
-                  content: (chunk as any).text,
+                  content: chunk.text,
                 })}\n\n`
                 controller.enqueue(encoder.encode(textEvent))
                 break
@@ -171,9 +172,9 @@ ${skillsContent}`
               case "tool-call": {
                 const toolStartEvent = `event: tool_start\ndata: ${JSON.stringify({
                   type: "tool_start",
-                  toolCallId: (chunk as any).toolCallId,
-                  toolName: (chunk as any).toolName,
-                  args: (chunk as any).input || (chunk as any).args,
+                  toolCallId: chunk.toolCallId,
+                  toolName: chunk.toolName,
+                  args: chunk.input,
                 })}\n\n`
                 controller.enqueue(encoder.encode(toolStartEvent))
                 break
@@ -182,8 +183,8 @@ ${skillsContent}`
               case "tool-result": {
                 const toolResultEvent = `event: tool_result\ndata: ${JSON.stringify({
                   type: "tool_result",
-                  toolCallId: (chunk as any).toolCallId,
-                  result: (chunk as any).output || (chunk as any).result,
+                  toolCallId: chunk.toolCallId,
+                  result: chunk.output,
                   success: true,
                 })}\n\n`
                 controller.enqueue(encoder.encode(toolResultEvent))

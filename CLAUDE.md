@@ -72,6 +72,18 @@ See nested CLAUDE.md files for app-specific guidance:
 - `apps/admin/CLAUDE.md` - Admin dashboard specifics
 - `apps/user-mobile/CLAUDE.md` - Mobile app development guide
 
+## UI/UX Guidelines
+
+When redesigning UI components, preserve the existing UX feel for initial/simple states (e.g., small modals for simple inputs) and only expand to larger layouts for complex multi-step flows. Always ask for clarification on which states should change before implementing.
+
+## Quality Checks
+
+After implementing UI changes, always verify the component renders without runtime errors by checking for missing imports, undefined props, and type mismatches before presenting the result.
+
+## Bug Fixes
+
+When working on cross-cutting concerns (billing, permissions, visibility rules), always audit ALL workspaces/contexts for the same issue pattern, not just the one reported. Use grep to find all related usage sites.
+
 ## Safety & Boundaries
 
 Rules for safe operation within this project:

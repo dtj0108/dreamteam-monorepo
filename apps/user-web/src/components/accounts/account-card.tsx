@@ -1,18 +1,20 @@
 "use client"
 
 import Link from "next/link"
-import { 
-  Landmark, 
-  PiggyBank, 
-  CreditCard, 
-  Banknote, 
-  TrendingUp, 
-  HandCoins, 
+import {
+  Landmark,
+  PiggyBank,
+  CreditCard,
+  Banknote,
+  TrendingUp,
+  HandCoins,
   Wallet,
   MoreHorizontal,
   Pencil,
   Trash2,
-  Eye
+  Eye,
+  Power,
+  PowerOff
 } from "lucide-react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -60,9 +62,10 @@ interface AccountCardProps {
   account: Account
   onEdit?: (account: Account) => void
   onDelete?: (account: Account) => void
+  onToggleActive?: (account: Account) => void
 }
 
-export function AccountCard({ account, onEdit, onDelete }: AccountCardProps) {
+export function AccountCard({ account, onEdit, onDelete, onToggleActive }: AccountCardProps) {
   const Icon = ACCOUNT_ICONS[account.type]
   const colorClass = ACCOUNT_COLORS[account.type]
   const isNegative = account.balance < 0
@@ -108,10 +111,10 @@ export function AccountCard({ account, onEdit, onDelete }: AccountCardProps) {
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="icon-sm"
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              className="text-muted-foreground hover:text-foreground"
             >
               <MoreHorizontal className="h-4 w-4" />
             </Button>
@@ -127,6 +130,21 @@ export function AccountCard({ account, onEdit, onDelete }: AccountCardProps) {
               <DropdownMenuItem onClick={() => onEdit(account)}>
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit
+              </DropdownMenuItem>
+            )}
+            {onToggleActive && (
+              <DropdownMenuItem onClick={() => onToggleActive(account)}>
+                {account.is_active ? (
+                  <>
+                    <PowerOff className="mr-2 h-4 w-4" />
+                    Deactivate
+                  </>
+                ) : (
+                  <>
+                    <Power className="mr-2 h-4 w-4 text-emerald-600" />
+                    <span className="text-emerald-600">Activate</span>
+                  </>
+                )}
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
@@ -154,6 +172,23 @@ export function AccountCard({ account, onEdit, onDelete }: AccountCardProps) {
             </Badge>
           )}
         </div>
+        {/* Credit card limit and available credit */}
+        {account.type === 'credit_card' && account.plaid_limit != null && account.plaid_limit > 0 && (
+          <div className="mt-3 pt-3 border-t text-sm space-y-1">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Credit Limit</span>
+              <span>{formatBalance(account.plaid_limit)}</span>
+            </div>
+            {account.plaid_available_balance != null && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Available Credit</span>
+                <span className="text-emerald-600 font-medium">
+                  {formatBalance(account.plaid_available_balance)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

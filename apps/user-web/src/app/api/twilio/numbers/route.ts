@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
 import { searchAvailableNumbers, purchasePhoneNumber } from "@/lib/twilio"
+import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
 
 // GET /api/twilio/numbers - Search for available phone numbers
 export async function GET(req: NextRequest) {
@@ -61,6 +62,16 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Get user's current workspace
+    const workspaceId = await getCurrentWorkspaceId(user.id)
+
+    if (!workspaceId) {
+      return NextResponse.json(
+        { error: "No workspace found. Please set up your workspace first." },
+        { status: 400 }
+      )
+    }
+
     // Purchase the number from Twilio
     const result = await purchasePhoneNumber(phoneNumber)
 
@@ -68,11 +79,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500 })
     }
 
-    // Check if user has any existing numbers
+    // Check if workspace has any existing numbers
     const { count } = await supabase
       .from("twilio_numbers")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     const isFirst = count === 0
 
@@ -81,6 +92,7 @@ export async function POST(req: NextRequest) {
       .from("twilio_numbers")
       .insert({
         user_id: user.id,
+        workspace_id: workspaceId,
         twilio_sid: result.sid,
         phone_number: result.phoneNumber,
         friendly_name: friendlyName || result.friendlyName,

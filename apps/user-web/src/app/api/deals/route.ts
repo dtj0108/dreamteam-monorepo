@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
 import { triggerDealCreated } from "@/lib/workflow-trigger-service"
+import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
 
 // GET /api/deals - List all deals, optionally filtered by pipeline
 export async function GET(request: NextRequest) {
@@ -13,6 +14,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  const workspaceId = await getCurrentWorkspaceId(user.id)
+  if (!workspaceId) {
+    return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
+  }
+
   let query = supabase
     .from("deals")
     .select(`
@@ -21,6 +27,7 @@ export async function GET(request: NextRequest) {
       stage:pipeline_stages(id, name, color, position, win_probability)
     `)
     .eq("profile_id", user.id)
+    .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
 
   if (pipelineId) {
@@ -43,6 +50,11 @@ export async function POST(request: NextRequest) {
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const workspaceId = await getCurrentWorkspaceId(user.id)
+  if (!workspaceId) {
+    return NextResponse.json({ error: "No workspace selected" }, { status: 400 })
   }
 
   const body = await request.json()
@@ -80,6 +92,7 @@ export async function POST(request: NextRequest) {
     .from("deals")
     .insert({
       profile_id: user.id,
+      workspace_id: workspaceId,
       name,
       contact_id,
       pipeline_id,

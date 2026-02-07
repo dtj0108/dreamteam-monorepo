@@ -89,6 +89,7 @@ export async function GET(request: NextRequest) {
       .select('id, contact_id, type, direction, body, created_at')
       .in('contact_id', contactIds)
       .eq('user_id', session.id)
+      .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false })
 
     if (commsError) {
@@ -116,6 +117,7 @@ export async function GET(request: NextRequest) {
         .from('communications')
         .select('id, from_number, to_number, type, direction, body, created_at')
         .eq('user_id', session.id)
+        .eq('workspace_id', workspaceId)
         .or(`from_number.in.(${phonesToCheck.join(',')}),to_number.in.(${phonesToCheck.join(',')})`)
         .order('created_at', { ascending: false })
 

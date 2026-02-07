@@ -552,25 +552,46 @@ export default function LeadDetailPage() {
                         lead.tasks?.map((task) => (
                           <div
                             key={task.id}
-                            className="flex items-center gap-2 group"
+                            className="flex items-start gap-2 group"
                           >
                             <Checkbox
                               checked={task.is_completed}
                               onCheckedChange={(checked) =>
                                 handleToggleTask(task.id!, checked as boolean)
                               }
+                              className="mt-0.5"
                             />
-                            <span
-                              className={`text-sm flex-1 ${
-                                task.is_completed ? "line-through text-muted-foreground" : ""
-                              }`}
-                            >
-                              {task.title}
-                            </span>
+                            <div className="flex-1 min-w-0">
+                              <span
+                                className={`text-sm ${
+                                  task.is_completed ? "line-through text-muted-foreground" : ""
+                                }`}
+                              >
+                                {task.title}
+                              </span>
+                              {task.description && (
+                                <p className={`text-xs text-muted-foreground mt-0.5 line-clamp-2 ${
+                                  task.is_completed ? "line-through" : ""
+                                }`}>
+                                  {task.description}
+                                </p>
+                              )}
+                              {task.due_date && (
+                                <p className={`text-xs mt-0.5 ${
+                                  task.is_completed
+                                    ? "text-muted-foreground line-through"
+                                    : new Date(task.due_date) < new Date()
+                                      ? "text-destructive"
+                                      : "text-muted-foreground"
+                                }`}>
+                                  Due: {new Date(task.due_date).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="size-6 opacity-0 group-hover:opacity-100"
+                              className="size-6 opacity-0 group-hover:opacity-100 shrink-0"
                               onClick={() => handleDeleteTask(task.id!)}
                             >
                               <TrashIcon className="size-3" />
@@ -673,52 +694,83 @@ export default function LeadDetailPage() {
                         filteredContacts?.map((contact) => (
                           <div
                             key={contact.id}
-                            className="flex items-center justify-between py-2 group"
+                            className="py-3 group"
                           >
-                            <div className="flex items-center gap-2">
-                              <Avatar className="size-8">
-                                <AvatarFallback className="text-xs">
-                                  {contact.first_name?.[0]}
-                                  {contact.last_name?.[0]}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="text-sm font-medium">
-                                {contact.first_name} {contact.last_name}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              {contact.email && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-7"
-                                  onClick={() => {
-                                    setEmailContact(contact)
-                                    setEmailDialogOpen(true)
-                                  }}
-                                >
-                                  <MailIcon className="size-4" />
-                                </Button>
-                              )}
-                              {contact.phone && (
-                                <>
-                                  <Button variant="ghost" size="icon" className="size-7" asChild>
-                                    <a href={`sms:${contact.phone}`}>
-                                      <MessageSquareIcon className="size-4" />
-                                    </a>
-                                  </Button>
+                            {/* Header row: Avatar, Name/Title, Action buttons */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Avatar className="size-10">
+                                  <AvatarFallback className="text-sm">
+                                    {contact.first_name?.[0]}
+                                    {contact.last_name?.[0]}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="text-sm font-semibold">
+                                    {contact.first_name} {contact.last_name}
+                                  </p>
+                                  {contact.title && (
+                                    <p className="text-xs text-muted-foreground">{contact.title}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {contact.email && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
                                     className="size-7"
-                                    onClick={() => handleCallContact(contact)}
-                                    disabled={!ownedNumbers.length || deviceState !== "ready"}
+                                    onClick={() => {
+                                      setEmailContact(contact)
+                                      setEmailDialogOpen(true)
+                                    }}
                                   >
-                                    <PhoneIcon className="size-4" />
+                                    <MailIcon className="size-4" />
                                   </Button>
-                                </>
-                              )}
+                                )}
+                                {contact.phone && (
+                                  <>
+                                    <Button variant="ghost" size="icon" className="size-7" asChild>
+                                      <a href={`sms:${contact.phone}`}>
+                                        <MessageSquareIcon className="size-4" />
+                                      </a>
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-7"
+                                      onClick={() => handleCallContact(contact)}
+                                      disabled={!ownedNumbers.length || deviceState !== "ready"}
+                                    >
+                                      <PhoneIcon className="size-4" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
                             </div>
+
+                            {/* Details below: email, phone, notes */}
+                            {(contact.email || contact.phone || contact.notes) && (
+                              <div className="mt-2 ml-[52px] space-y-1">
+                                {contact.email && (
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <MailIcon className="size-3" />
+                                    <span>{contact.email}</span>
+                                  </div>
+                                )}
+                                {contact.phone && (
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <PhoneIcon className="size-3" />
+                                    <span>{contact.phone}</span>
+                                  </div>
+                                )}
+                                {contact.notes && (
+                                  <p className="text-xs text-muted-foreground line-clamp-2">
+                                    {contact.notes}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ))
                       )}

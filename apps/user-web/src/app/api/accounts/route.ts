@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     // Get all workspace accounts
     const { data: accounts, error } = await supabase
       .from('accounts')
-      .select('id, name, type, institution, balance, currency, last_four')
+      .select('id, name, type, institution, balance, currency, last_four, plaid_limit, plaid_available_balance, is_plaid_linked, is_active')
       .eq('workspace_id', workspaceId)
       .order('name', { ascending: true })
 

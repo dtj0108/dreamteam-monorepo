@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
 
+type SupabaseClient = Awaited<ReturnType<typeof createServerSupabaseClient>>
+
 interface ReportData {
   labels: string[]
   values: number[]
@@ -46,7 +48,7 @@ export async function GET(request: NextRequest) {
 }
 
 async function getDealsReport(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: string,
   metric: string,
   groupBy: string,
@@ -98,7 +100,7 @@ async function getDealsReport(
 }
 
 async function getLeadsReport(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: string,
   metric: string,
   groupBy: string,
@@ -142,7 +144,7 @@ async function getLeadsReport(
 }
 
 async function getActivitiesReport(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: string,
   metric: string,
   groupBy: string,

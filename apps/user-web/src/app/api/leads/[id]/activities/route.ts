@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, createServerSupabaseClient } from "@/lib/supabase-server"
 import { getSession } from "@/lib/session"
-import { triggerActivityLogged } from "@/lib/workflow-trigger-service"
+import { triggerActivityLogged, triggerLeadContacted } from "@/lib/workflow-trigger-service"
 
 // GET /api/leads/[id]/activities - List activities for a lead
 export async function GET(
@@ -142,6 +142,14 @@ export async function POST(
     }
 
     // Trigger activity_logged workflow (fire and forget)
+    const leadContext = {
+      id: lead.id,
+      name: lead.name,
+      status: lead.status,
+      notes: lead.notes,
+      user_id: lead.user_id,
+    }
+
     triggerActivityLogged(
       {
         id: activity.id,
@@ -151,17 +159,18 @@ export async function POST(
         is_completed: activity.is_completed,
         completed_at: activity.completed_at,
       },
-      {
-        id: lead.id,
-        name: lead.name,
-        status: lead.status,
-        notes: lead.notes,
-        user_id: lead.user_id,
-      },
+      leadContext,
       session.id
     ).catch((err) => {
       console.error("Error triggering activity_logged workflows:", err)
     })
+
+    // Trigger lead_contacted workflow for outreach activities (non-blocking)
+    if (type === "call" || type === "email" || type === "meeting") {
+      triggerLeadContacted(leadContext).catch((err) => {
+        console.error("Error triggering lead_contacted workflows:", err)
+      })
+    }
 
     return NextResponse.json({ activity })
   } catch (error) {

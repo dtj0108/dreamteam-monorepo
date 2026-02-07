@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 import { getSession } from "@/lib/session"
+import { getJoinedField } from "@/lib/supabase-utils"
 
 export async function GET(
   request: NextRequest,
@@ -64,7 +65,7 @@ export async function PATCH(
       .eq("id", id)
       .single()
 
-    if (!contact || (contact.lead as any)?.user_id !== session.id) {
+    if (!contact || getJoinedField<string>(contact.lead, 'user_id') !== session.id) {
       return NextResponse.json({ error: "Contact not found" }, { status: 404 })
     }
 
@@ -115,7 +116,7 @@ export async function DELETE(
       .eq("id", id)
       .single()
 
-    if (!contact || (contact.lead as any)?.user_id !== session.id) {
+    if (!contact || getJoinedField<string>(contact.lead, 'user_id') !== session.id) {
       return NextResponse.json({ error: "Contact not found" }, { status: 404 })
     }
 
