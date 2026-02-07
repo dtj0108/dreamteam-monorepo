@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@dreamteam/database/server'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
 import { getWorkspaceBilling, getWorkspaceInvoices, syncBillingFromStripeSubscription } from '@/lib/billing-queries'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 
 /**
  * GET /api/billing
@@ -37,7 +37,7 @@ export async function GET() {
     // Always sync subscription status from Stripe (for accuracy)
     try {
       if (billing?.stripe_agent_subscription_id) {
-        const subscription = await stripe.subscriptions.retrieve(billing.stripe_agent_subscription_id)
+        const subscription = await getStripe().subscriptions.retrieve(billing.stripe_agent_subscription_id)
         const targetPlan =
           subscription.metadata?.agent_tier ||
           subscription.metadata?.target_plan ||
@@ -67,7 +67,7 @@ export async function GET() {
       }
 
       if (billing?.stripe_subscription_id) {
-        const subscription = await stripe.subscriptions.retrieve(billing.stripe_subscription_id)
+        const subscription = await getStripe().subscriptions.retrieve(billing.stripe_subscription_id)
         const targetPlan =
           subscription.metadata?.plan ||
           subscription.metadata?.target_plan ||
