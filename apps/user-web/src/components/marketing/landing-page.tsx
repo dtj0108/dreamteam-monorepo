@@ -1,6 +1,7 @@
 "use client";
 
-import { type FC, type HTMLAttributes, type ReactNode, useState } from "react";
+import { type FC, type HTMLAttributes, type ReactNode, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
     CheckCircle,
     Stars01,
@@ -14,7 +15,6 @@ import {
     Database01,
     Tool01,
 } from "@untitledui/icons";
-import { Collection, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
@@ -23,6 +23,7 @@ import { DreamTeamLogo } from "@/components/foundations/logo/dreamteam-logo";
 import { Header } from "@/components/marketing/header-navigation/header";
 import { RatingBadge } from "@/components/foundations/rating-badge";
 import { GitHub, LinkedIn, X } from "@/components/foundations/social-icons";
+import { useUser } from "@/hooks/use-user";
 import { cx } from "@/lib/cx";
 
 import HeroSection25 from "@/components/shadcn-studio/blocks/hero-section-25/hero-section-25";
@@ -381,12 +382,12 @@ const agentHierarchies = [
 
 const AgentsSection = () => {
     return (
-        <section className="bg-gray-50 py-16 md:py-24">
+        <section className="bg-gradient-to-b from-white to-gray-50 py-16 md:py-24">
             <div className="mx-auto w-full max-w-container px-4 md:px-8">
                 <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col items-center text-center md:mb-16">
                     <span className="text-sm font-semibold uppercase tracking-wider text-blue-600">Agent Hierarchy</span>
                     <h2 className="mt-3 text-display-sm font-semibold text-gray-900 md:text-display-md">
-                        One unified intelligence
+                        Agents that do the work of entire teams — easy to train.
                     </h2>
                     <p className="mt-4 text-lg text-gray-600 md:mt-5 md:text-xl">
                         Specialist agents organized in hierarchies—finance, sales, operations, knowledge—working together as a single cohesive being.
@@ -488,7 +489,7 @@ const AgentsSection = () => {
 
 const SuperpowersSection = () => {
     return (
-        <section className="bg-white py-16 md:py-24">
+        <section className="bg-gradient-to-b from-gray-50 to-white py-16 md:py-24">
             <div className="mx-auto w-full max-w-container px-4 md:px-8">
                 <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col items-center text-center md:mb-16">
                     <span className="text-sm font-semibold uppercase tracking-wider text-blue-600">What Makes Us Different</span>
@@ -569,7 +570,7 @@ const SuperpowersSection = () => {
 
 const WhySection = () => {
     return (
-        <section className="bg-gray-50 py-16 md:py-24">
+        <section className="bg-gradient-to-b from-white to-gray-50 py-16 md:py-24">
             <div className="mx-auto w-full max-w-container px-4 md:px-8">
                 <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col items-center text-center md:mb-16">
                     <h2 className="text-display-sm font-semibold text-gray-900 md:text-display-md">
@@ -651,13 +652,13 @@ const WhySection = () => {
 
 const ProductsSection = () => {
     return (
-        <section className="bg-slate-100 pb-16 md:pb-0">
+        <section className="bg-gradient-to-b from-gray-50 to-gray-100 pb-16 md:pb-0">
             <div className="bg-white pt-16 pb-28 md:pt-24 md:pb-40">
                 <div className="mx-auto w-full max-w-container px-4 md:px-8">
                     <div className="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
                         <span className="text-sm font-semibold uppercase tracking-wider text-blue-600 md:text-md">The Platform</span>
 
-                        <h2 className="mt-3 text-display-sm font-semibold text-gray-900 md:text-display-md">Your people work here too.</h2>
+                        <h2 className="mt-3 text-display-sm font-semibold text-gray-900 md:text-display-md">Your people <em>can</em> work here too.</h2>
                         <p className="mt-4 text-lg text-gray-600 md:mt-5 md:text-xl">
                             Everything you need to run your business, unified with AI agents that share context.
                         </p>
@@ -849,7 +850,7 @@ const ProductsSection = () => {
 
 const MetricsSection = () => {
     return (
-        <section className="bg-gray-100 py-16 md:py-24">
+        <section className="bg-gradient-to-b from-gray-100 to-gray-50 py-16 md:py-24">
             <div className="mx-auto max-w-container px-4 md:px-8">
                 <div className="flex flex-col gap-12 md:gap-16">
                     <div className="flex w-full flex-col items-center self-center text-center md:max-w-3xl">
@@ -857,18 +858,18 @@ const MetricsSection = () => {
                             <span className="text-2xl">⚡</span>
                         </div>
                         <h2 className="text-display-sm font-semibold text-gray-900 md:text-display-md">
-                            Agents working around the clock
+                            Be the CEO of a workforce that never stops
                         </h2>
                         <p className="mt-4 text-lg text-gray-600 md:mt-5 md:text-xl">
-                            While you're reading this, thousands of agents are closing deals, categorizing transactions, and creating projects.
+                            Your team isn&apos;t just people anymore. It&apos;s people and agents — and you run both from one place.
                         </p>
                     </div>
                     <dl className="flex flex-col justify-between gap-10 md:flex-row md:gap-8">
                         {[
-                            { title: "38", subtitle: "Agents per workspace", description: "Deploy a full team of specialized AI agents." },
-                            { title: "100M+", subtitle: "Agent actions", description: "Tasks completed autonomously by our agents." },
-                            { title: "24/7", subtitle: "Autonomous operation", description: "Your agents never sleep, never take breaks." },
-                            { title: "99.99%", subtitle: "Uptime", description: "Enterprise-grade reliability you can count on." },
+                            { title: "38", subtitle: "Agents you can hire", description: "Build departments that run themselves." },
+                            { title: "∞", subtitle: "Hours in their workday", description: "Your agents don't clock out." },
+                            { title: "1", subtitle: "Dashboard to run it all", description: "People, agents, and results in one view." },
+                            { title: "0", subtitle: "Micromanagement required", description: "Train them once, they figure out the rest." },
                         ].map((item) => (
                             <div key={item.title} className="relative flex-1 overflow-hidden pt-4 md:mt-0 md:pt-0 md:pl-6">
                                 <div className="absolute top-0 left-0 h-full w-full border-t-2 border-blue-500 md:border-t-0 md:border-l-2" />
@@ -886,70 +887,10 @@ const MetricsSection = () => {
     );
 };
 
-const reviews = [
-    {
-        id: "review-01",
-        quote: "I deployed 7 agents on Monday. By Friday, they had processed 10,000 transactions, closed 4 deals, and created documentation I didn't even know I needed. I didn't lift a finger.",
-        author: { name: "Marcus Chen", role: "CEO, DevTools.io", avatar: "https://randomuser.me/api/portraits/men/32.jpg" },
-    },
-    {
-        id: "review-02",
-        quote: "The agents remembered that I hate manual categorization. Now they learn my preferences and just... do it. It's like having the perfect employee who never forgets.",
-        author: { name: "Sarah Martinez", role: "CFO, Brightside", avatar: "https://randomuser.me/api/portraits/women/44.jpg" },
-    },
-    {
-        id: "review-03",
-        quote: "We used to have 3 people doing what the agents do now. Not replacing them—reassigning them to actual strategic work. Everyone's happier.",
-        author: { name: "James Wilson", role: "COO, TechCorp", avatar: "https://randomuser.me/api/portraits/men/52.jpg" },
-    },
-];
-
-const TestimonialsSection = () => {
-    const [selectedReviewIndex, setSelectedReviewIndex] = useState(0);
-
-    return (
-        <Tabs
-            selectedKey={reviews[selectedReviewIndex].id}
-            onSelectionChange={(value) => setSelectedReviewIndex(reviews.findIndex((review) => review.id === value))}
-        >
-            <section className="bg-white py-16 md:py-24">
-                <div className="mx-auto max-w-container px-4 md:px-8">
-                    <div className="flex flex-col items-center gap-12 md:gap-16">
-                        {/* Navigation dots - must be rendered before TabPanels */}
-                        <TabList className="flex gap-2 order-2" items={reviews}>
-                            {(review) => (
-                                <Tab id={review.id} className="size-2.5 cursor-pointer rounded-full bg-gray-300 transition-colors data-[selected]:bg-blue-600" />
-                            )}
-                        </TabList>
-
-                        <Collection items={reviews}>
-                            {(review) => (
-                                <TabPanel id={review.id} className="flex flex-col gap-8 text-center order-1">
-                                    <blockquote className="mx-auto max-w-3xl text-xl font-medium text-balance text-gray-900 md:text-2xl lg:text-display-xs">
-                                        &ldquo;{review.quote}&rdquo;
-                                    </blockquote>
-                                    <figcaption className="flex justify-center">
-                                        <div className="flex flex-col items-center gap-3">
-                                            <Avatar src={review.author.avatar} alt={review.author.name} size="xl" />
-                                            <div className="flex flex-col gap-0.5">
-                                                <p className="text-md font-semibold text-gray-900">{review.author.name}</p>
-                                                <cite className="text-sm text-gray-500 not-italic">{review.author.role}</cite>
-                                            </div>
-                                        </div>
-                                    </figcaption>
-                                </TabPanel>
-                            )}
-                        </Collection>
-                    </div>
-                </div>
-            </section>
-        </Tabs>
-    );
-};
 
 const CTASection = () => {
     return (
-        <section className="bg-gradient-to-b from-gray-50 to-blue-50 py-16 md:py-24">
+        <section className="bg-gradient-to-b from-gray-50 via-blue-50/50 to-white py-16 md:py-24">
             <div className="mx-auto max-w-container px-4 md:px-8">
                 <div className="flex flex-col items-center gap-8 text-center">
                     <div className="flex items-center gap-2 rounded-full bg-blue-100 px-4 py-2 text-sm font-medium text-blue-700">
@@ -978,7 +919,7 @@ const CTASection = () => {
 
 const Footer = () => {
     return (
-        <footer className="bg-white border-t border-gray-200">
+        <footer className="bg-white border-t border-gray-100">
             <div className="py-12 md:py-16">
                 <div className="mx-auto max-w-container px-4 md:px-8">
                     <div className="flex flex-col gap-12 md:gap-16 xl:flex-row">
@@ -1035,6 +976,15 @@ const Footer = () => {
 };
 
 export function LandingPage() {
+    const router = useRouter();
+    const { user, loading } = useUser();
+
+    useEffect(() => {
+        if (!loading && user?.id) {
+            router.refresh();
+        }
+    }, [loading, router, user?.id]);
+
     return (
         <div className="bg-white dark:bg-background">
             <Header />
@@ -1045,7 +995,6 @@ export function LandingPage() {
             <ProductsSection />
             <AppIntegration />
             <MetricsSection />
-            <TestimonialsSection />
             <CTASection />
             <Footer />
         </div>

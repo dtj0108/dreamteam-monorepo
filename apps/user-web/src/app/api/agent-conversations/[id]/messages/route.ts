@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
 import { getSession } from "@dreamteam/auth/session"
+import { getWorkspaceBilling, hasActiveAgents } from '@/lib/billing-queries'
 
 // POST /api/agent-conversations/[id]/messages - Save messages to conversation
 export async function POST(
@@ -28,7 +29,7 @@ export async function POST(
     // Verify conversation ownership
     const { data: conversation, error: convError } = await supabase
       .from("agent_conversations")
-      .select("id, title")
+      .select("id, title, workspace_id")
       .eq("id", conversationId)
       .eq("user_id", session.id)
       .single()
@@ -38,6 +39,17 @@ export async function POST(
         { error: "Conversation not found" },
         { status: 404 }
       )
+    }
+
+    // Billing gate: require active agent subscription to save messages
+    if (conversation.workspace_id) {
+      const billing = await getWorkspaceBilling(conversation.workspace_id)
+      if (!hasActiveAgents(billing)) {
+        return NextResponse.json(
+          { error: 'Agent subscription required', code: 'no_agent_subscription' },
+          { status: 403 }
+        )
+      }
     }
 
     // Insert messages

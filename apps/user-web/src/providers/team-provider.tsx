@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { useUser } from "@/hooks/use-user"
+import { useWorkspace } from "@/providers/workspace-provider"
 import { useTeamChannels } from "@/hooks/use-team-channels"
 import { getSupabaseClient } from "@/lib/supabase"
 import type { Channel, DirectMessage } from "@/components/team"
@@ -61,8 +62,9 @@ export function useTeam() {
 
 export function TeamProvider({ children }: { children: ReactNode }) {
   const { user } = useUser()
+  const { currentWorkspace } = useWorkspace()
   const router = useRouter()
-  const workspaceId = user?.workspaceId || undefined
+  const workspaceId = currentWorkspace?.id || undefined
 
   // Initialize with cached data if available
   const cachedDMs = workspaceId ? dmsCache.get(workspaceId) : undefined
@@ -333,4 +335,3 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     </TeamContext.Provider>
   )
 }
-

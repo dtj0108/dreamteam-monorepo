@@ -44,7 +44,7 @@ const products = [
 const navItems = [
     { label: "Pricing", href: "/pricing" },
     { label: "About", href: "/about" },
-    { label: "Docs", href: "/docs" },
+    { label: "Contact", href: "/contact" },
 ];
 
 interface HeaderProps {

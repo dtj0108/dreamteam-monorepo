@@ -52,6 +52,7 @@ import { NavUser } from "@/components/nav-user"
 import { CompanySwitcher } from "@/components/company-switcher"
 import { ProductSwitcher, useCurrentProduct } from "@/components/product-switcher"
 import { GetStartedChecklist } from "@/components/onboarding/get-started-checklist"
+import { getLearnHomeHref } from "@/components/learn"
 import {
   Sidebar,
   SidebarContent,
@@ -368,6 +369,45 @@ const agentsNav = [
   },
 ]
 
+// Learn navigation
+const learnNav = [
+  {
+    title: "Overview",
+    url: "/learn",
+    icon: BookOpen,
+  },
+  {
+    title: "Finance Guides",
+    url: "/learn/getting-started",
+    icon: DollarSign,
+  },
+  {
+    title: "Sales Guides",
+    url: "/learn/sales",
+    icon: TrendingUp,
+  },
+  {
+    title: "Team Guides",
+    url: "/learn/team",
+    icon: MessageSquare,
+  },
+  {
+    title: "Projects Guides",
+    url: "/learn/projects",
+    icon: FolderKanban,
+  },
+  {
+    title: "Knowledge Guides",
+    url: "/learn/knowledge",
+    icon: FileText,
+  },
+  {
+    title: "Agents Guides",
+    url: "/learn/agents",
+    icon: Bot,
+  },
+]
+
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   user: {
     name: string
@@ -390,6 +430,7 @@ function isNavItemActive(url: string, pathname: string): boolean {
 export function AppSidebar({ user, ...props }: AppSidebarProps) {
   const currentProduct = useCurrentProduct()
   const pathname = usePathname()
+  const learnHref = getLearnHomeHref(currentProduct)
 
   // Get navigation items based on current product, with dynamic isActive
   const navItems = React.useMemo(() => {
@@ -433,18 +474,16 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
         {currentProduct === "finance" && <NavProjects />}
       </SidebarContent>
       <SidebarFooter>
-        {(currentProduct === "finance" || currentProduct === "projects") && (
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Learning Center">
-                <Link href={currentProduct === "projects" ? "/learn/projects" : "/learn"}>
-                  <BookOpen className="h-4 w-4" />
-                  <span>Learn</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        )}
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Learning Center">
+              <Link href={learnHref}>
+                <BookOpen className="h-4 w-4" />
+                <span>Learn</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <NavUser user={user} />
       </SidebarFooter>
       <SidebarRail />

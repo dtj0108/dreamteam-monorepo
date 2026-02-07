@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createAdminClient, toggleAgentEnabled, getWorkspaceDeployment } from "@dreamteam/database"
+import { createAdminClient, toggleAgentEnabled, getWorkspaceDeployment, cloneScheduleTemplatesForDeployment } from "@dreamteam/database"
 import { getSession } from "@dreamteam/auth/session"
-import { getNextRunTime } from "@/lib/cron-utils"
 import { getWorkspaceBilling, canAccessAgent, type AgentTierRequired } from "@/lib/billing-queries"
 
 // POST /api/agents/[id]/hire - Enable an agent in deployed team (or create legacy record)
@@ -76,7 +75,7 @@ export async function POST(
       }
 
       // Clone schedule templates for this workspace
-      await cloneScheduleTemplates(supabase, id, workspaceId, session.id)
+      await cloneScheduleTemplatesForDeployment(supabase, [id], workspaceId, session.id)
 
       return NextResponse.json({
         id: agent.id,
@@ -150,96 +149,11 @@ export async function POST(
     }
 
     // Clone schedule templates for this workspace
-    await cloneScheduleTemplates(supabase, id, workspaceId, session.id)
+    await cloneScheduleTemplatesForDeployment(supabase, [id], workspaceId, session.id)
 
     return NextResponse.json(localAgent, { status: 201 })
   } catch (error) {
     console.error("Error in POST /api/agents/[id]/hire:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
-  }
-}
-
-/**
- * Clone schedule templates for a workspace when an agent is hired.
- * Each workspace gets its own copy of the agent's schedules with proper next_run_at.
- */
-async function cloneScheduleTemplates(
-  supabase: ReturnType<typeof createAdminClient>,
-  agentId: string,
-  workspaceId: string,
-  userId: string
-) {
-  try {
-    // Fetch schedule templates for this agent
-    const { data: templates, error: fetchError } = await supabase
-      .from("agent_schedules")
-      .select("*")
-      .eq("agent_id", agentId)
-      .eq("is_template", true)
-
-    if (fetchError) {
-      console.error("Error fetching schedule templates:", fetchError)
-      return
-    }
-
-    if (!templates?.length) {
-      return // No templates to clone
-    }
-
-    // Check for existing workspace schedules to avoid duplicates
-    const { data: existingSchedules } = await supabase
-      .from("agent_schedules")
-      .select("name")
-      .eq("agent_id", agentId)
-      .eq("workspace_id", workspaceId)
-      .eq("is_template", false)
-
-    const existingNames = new Set(existingSchedules?.map((s: { name: string }) => s.name) || [])
-
-    // Clone templates that don't already exist for this workspace
-    const schedulesToCreate = templates
-      .filter((t: { name: string }) => !existingNames.has(t.name))
-      .map((template: {
-        agent_id: string
-        name: string
-        description: string | null
-        cron_expression: string
-        timezone: string | null
-        task_prompt: string
-        requires_approval: boolean
-        output_config: unknown
-      }) => ({
-        agent_id: template.agent_id,
-        workspace_id: workspaceId,
-        name: template.name,
-        description: template.description,
-        cron_expression: template.cron_expression,
-        timezone: template.timezone || "UTC",
-        task_prompt: template.task_prompt,
-        requires_approval: template.requires_approval,
-        output_config: template.output_config,
-        is_enabled: true,
-        is_template: false,
-        next_run_at: getNextRunTime(
-          template.cron_expression,
-          template.timezone || "UTC"
-        ).toISOString(),
-        created_by: userId,
-      }))
-
-    if (schedulesToCreate.length === 0) {
-      return // All templates already cloned
-    }
-
-    const { error: insertError } = await supabase
-      .from("agent_schedules")
-      .insert(schedulesToCreate)
-
-    if (insertError) {
-      console.error("Error cloning schedule templates:", insertError)
-    }
-  } catch (error) {
-    // Log but don't fail the hire operation if schedule cloning fails
-    console.error("Error in cloneScheduleTemplates:", error)
   }
 }

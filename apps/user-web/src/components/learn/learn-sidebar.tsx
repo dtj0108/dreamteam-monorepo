@@ -3,60 +3,18 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import {
-  BookOpen,
-  Wallet,
-  Receipt,
-  Target,
-  TrendingUp,
-  Flag,
-  Rocket,
-} from "lucide-react"
+import { BookOpen } from "lucide-react"
+import { learnSections } from "@/components/learn/learn-catalog"
 
-const articles = [
-  {
-    title: "Getting Started",
-    href: "/learn/getting-started",
-    icon: Rocket,
-    description: "First steps with dreamteam.ai",
-  },
-  {
-    title: "Managing Accounts",
-    href: "/learn/accounts",
-    icon: Wallet,
-    description: "Bank accounts and balances",
-  },
-  {
-    title: "Transactions",
-    href: "/learn/transactions",
-    icon: Receipt,
-    description: "Track income and expenses",
-  },
-  {
-    title: "Budgets",
-    href: "/learn/budgets",
-    icon: Target,
-    description: "Plan and control spending",
-  },
-  {
-    title: "Analytics & Reports",
-    href: "/learn/analytics",
-    icon: TrendingUp,
-    description: "Insights and reporting",
-  },
-  {
-    title: "Goals",
-    href: "/learn/goals",
-    icon: Flag,
-    description: "Revenue, profit, and exit planning",
-  },
-]
+function isTopicActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
 
 export function LearnSidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="w-64 shrink-0 border-r bg-muted/30 sticky top-0 h-screen overflow-y-auto">
+    <aside className="sticky top-0 h-screen w-72 shrink-0 overflow-y-auto border-r bg-muted/30">
       <div className="p-4 border-b">
         <Link href="/learn" className="flex items-center gap-2 font-semibold">
           <BookOpen className="h-5 w-5 text-sky-600" />
@@ -64,24 +22,42 @@ export function LearnSidebar() {
         </Link>
       </div>
       <nav className="p-4">
-        <ul className="space-y-1">
-          {articles.map((article) => {
-            const isActive = pathname === article.href
-            const Icon = article.icon
+        <ul className="space-y-4">
+          {learnSections.map((section) => {
+            const sectionActive = section.topics.some((topic) => isTopicActive(pathname, topic.href))
+
             return (
-              <li key={article.href}>
-                <Link
-                  href={article.href}
+              <li key={section.id} className="space-y-1">
+                <div
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-                    isActive
-                      ? "bg-sky-100 text-sky-700 font-medium"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    "px-2 pb-1 text-xs font-semibold uppercase tracking-wide",
+                    sectionActive ? "text-sky-700" : "text-muted-foreground"
                   )}
                 >
-                  <Icon className="h-4 w-4" />
-                  <span>{article.title}</span>
-                </Link>
+                  <span className="mr-1">{section.emoji}</span>
+                  {section.title}
+                </div>
+                <ul className="space-y-1">
+                  {section.topics.map((topic) => {
+                    const active = isTopicActive(pathname, topic.href)
+                    return (
+                      <li key={topic.href}>
+                        <Link
+                          href={topic.href}
+                          className={cn(
+                            "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                            active
+                              ? "bg-sky-100 font-medium text-sky-700"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          )}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />
+                          <span>{topic.title}</span>
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ul>
               </li>
             )
           })}
@@ -90,6 +66,3 @@ export function LearnSidebar() {
     </aside>
   )
 }
-
-export { articles }
-

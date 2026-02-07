@@ -134,7 +134,7 @@ const AgentFeatures = ({
             delay={0.3}
             transition={{ duration: 0.5 }}
           >
-            Deploy up to 38 Autonomous Agents<br /><em className='underline'>in Minutes</em>
+            You built this business to have freedom.<br /><em className='underline'>Now actually take it.</em>
           </MotionPreset>
           <MotionPreset
             component='p'

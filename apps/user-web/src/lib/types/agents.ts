@@ -66,6 +66,12 @@ export interface AgentDepartment {
  * Agent from admin's ai_agents table
  * This is the full agent definition created in the admin panel
  */
+export interface StylePresets {
+  verbosity: 'concise' | 'balanced' | 'detailed'
+  tone: 'casual' | 'balanced' | 'formal'
+  examples: 'few' | 'moderate' | 'many'
+}
+
 export interface AIAgent {
   id: string
   name: string
@@ -73,6 +79,7 @@ export interface AIAgent {
   description: string | null
   department_id: string | null
   avatar_url: string | null
+  tier_required?: 'startup' | 'teams' | 'enterprise'
   model: AgentModel
   system_prompt: string
   permission_mode: PermissionMode
@@ -91,6 +98,8 @@ export interface AIAgent {
   rules?: AgentRule[]
   // UX configuration
   suggested_prompts?: string[]
+  // Style presets for agent communication style
+  style_presets?: StylePresets
 }
 
 /**
@@ -201,6 +210,7 @@ export interface AgentSchedule {
   updated_at: string
   // Relations
   agent?: AIAgent
+  agent_in_plan?: boolean
 }
 
 export type ScheduleExecutionStatus =

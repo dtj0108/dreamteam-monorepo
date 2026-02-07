@@ -23,8 +23,10 @@ import {
 import { Popover, PopoverContent, PopoverAnchor } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 
+export type AppProductId = ProductId
+
 const products: {
-  id: ProductId
+  id: AppProductId
   name: string
   description: string
   emoji: string
@@ -81,12 +83,11 @@ const products: {
   },
 ]
 
-export function useCurrentProduct(): ProductId {
+export function useCurrentProduct(): AppProductId {
   const pathname = usePathname()
-
   if (pathname.startsWith("/sales")) return "sales"
   if (pathname.startsWith("/team")) return "team"
-  if (pathname.startsWith("/projects") || pathname.startsWith("/learn/projects")) return "projects"
+  if (pathname.startsWith("/projects")) return "projects"
   if (pathname.startsWith("/knowledge")) return "knowledge"
   if (pathname.startsWith("/agents")) return "agents"
   return "finance"
@@ -116,7 +117,9 @@ export function ProductSwitcher() {
   const allowedProducts = user?.allowedProducts || ["finance", "sales", "team", "projects", "knowledge", "agents"]
 
   // Filter products based on user's access
-  const accessibleProducts = products.filter(p => allowedProducts.includes(p.id))
+  const accessibleProducts = products.filter((product) =>
+    allowedProducts.includes(product.id as ProductId)
+  )
 
   // If current product is not accessible, show the first accessible one
   const activeProduct = accessibleProducts.find(p => p.id === currentProductId)
@@ -173,7 +176,7 @@ export function ProductSwitcher() {
             </DropdownMenuLabel>
             {products.map((product) => {
               const isActive = product.id === currentProductId
-              const hasAccess = allowedProducts.includes(product.id)
+              const hasAccess = allowedProducts.includes(product.id as ProductId)
 
               return (
                 <DropdownMenuItem
@@ -199,7 +202,7 @@ export function ProductSwitcher() {
             })}
             <DropdownMenuSeparator />
             <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              Switch with ⌘1-5
+              Switch with ⌘1-6
             </div>
           </DropdownMenuContent>
           </DropdownMenu>

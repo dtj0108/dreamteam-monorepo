@@ -530,26 +530,6 @@ export function PricingContent() {
                 </div>
             </section>
 
-            {/* Final CTA */}
-            <section className="bg-bg-secondary py-16 md:py-20">
-                <div className="mx-auto max-w-container px-4 text-center md:px-8">
-                    <h2 className="text-display-xs font-semibold text-text-primary md:text-display-sm">
-                        Start with your workspace, add agents when ready
-                    </h2>
-                    <p className="mt-3 text-md text-text-tertiary">
-                        Get your whole team on the same page.
-                    </p>
-                    <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                        <PricingCTA plan="annual" size="lg">
-                            Get Started
-                        </PricingCTA>
-                        <Button href="/contact" color="secondary" size="lg">
-                            Talk to Sales
-                        </Button>
-                    </div>
-                </div>
-            </section>
-
             {/* Footer */}
             <footer className="bg-gray-950">
                 <div className="py-12 md:py-16">

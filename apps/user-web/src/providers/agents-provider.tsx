@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, ReactNode } from "react"
-import { useUser } from "@/hooks/use-user"
+import { useWorkspace } from "@/providers/workspace-provider"
 import type {
   AIAgent,
   AgentWithHireStatus,
@@ -118,8 +118,8 @@ export function useAgents() {
 }
 
 export function AgentsProvider({ children }: { children: ReactNode }) {
-  const { user } = useUser()
-  const workspaceId = user?.workspaceId || undefined
+  const { currentWorkspace } = useWorkspace()
+  const workspaceId = currentWorkspace?.id || undefined
 
   // State
   const [agents, setAgents] = useState<AgentWithHireStatus[]>([])
@@ -737,8 +737,9 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
       setIsLoading(true)
       fetchAgents()
       fetchPendingApprovals()
+      fetchSchedules()
     }
-  }, [workspaceId, fetchAgents, fetchPendingApprovals])
+  }, [workspaceId, fetchAgents, fetchPendingApprovals, fetchSchedules])
 
   const value: AgentsContextType = {
     agents,

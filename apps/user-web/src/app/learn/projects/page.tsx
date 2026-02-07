@@ -166,13 +166,10 @@ export default function LearnProjectsPage() {
             <div>
               <h3 className="font-semibold mb-1">Need more help?</h3>
               <p className="text-sm text-muted-foreground">
-                Check out our video tutorials or contact support for personalized assistance.
+                Contact support for personalized assistance.
               </p>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline">Watch Videos</Button>
-              <Button variant="outline">Contact Support</Button>
-            </div>
+            <Button variant="outline">Contact Support</Button>
           </div>
         </CardContent>
       </Card>

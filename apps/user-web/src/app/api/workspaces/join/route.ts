@@ -103,6 +103,20 @@ export async function POST(request: Request) {
       .update({ accepted_at: new Date().toISOString() })
       .eq('id', invite.id)
 
+    // Set default workspace if missing
+    const { data: profileAfterJoin } = await supabase
+      .from('profiles')
+      .select('default_workspace_id')
+      .eq('id', user.id)
+      .single()
+
+    if (!profileAfterJoin?.default_workspace_id) {
+      await supabase
+        .from('profiles')
+        .update({ default_workspace_id: invite.workspace_id })
+        .eq('id', user.id)
+    }
+
     // Set as current workspace
     const cookieStore = await cookies()
     cookieStore.set('current_workspace_id', invite.workspace_id, {

@@ -15,6 +15,7 @@ import {
   CheckCircle,
   ShieldCheck,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react"
 import type { AgentSchedule } from "@/lib/types/agents"
 import { describeCron } from "@/lib/cron-utils"
@@ -144,6 +145,7 @@ function ScheduleRow({ schedule, isToggling, onToggle }: ScheduleRowProps) {
   const nextRun = schedule.next_run_at
     ? new Date(schedule.next_run_at).toLocaleString()
     : "Not scheduled"
+  const isLockedByPlan = schedule.agent_in_plan === false
 
   return (
     <Link
@@ -160,13 +162,19 @@ function ScheduleRow({ schedule, isToggling, onToggle }: ScheduleRowProps) {
                 Approval
               </Badge>
             )}
+            {schedule.agent_in_plan === false && (
+              <Badge variant="outline" className="gap-1 text-xs text-amber-700 border-amber-200 bg-amber-50/60">
+                <AlertTriangle className="size-3" />
+                Plan change
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span className="flex items-center gap-1">
               <Clock className="size-3" />
               {frequencyText}
             </span>
-            {schedule.is_enabled && (
+            {schedule.is_enabled && !isLockedByPlan && (
               <span className="flex items-center gap-1">
                 <CheckCircle className="size-3 text-green-500" />
                 Next: {nextRun}
@@ -179,7 +187,7 @@ function ScheduleRow({ schedule, isToggling, onToggle }: ScheduleRowProps) {
           <Switch
             checked={schedule.is_enabled}
             onCheckedChange={checked => onToggle(schedule.id, checked)}
-            disabled={isToggling}
+            disabled={isToggling || isLockedByPlan}
           />
         </div>
 

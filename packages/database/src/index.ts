@@ -22,6 +22,9 @@ export {
 } from './auto-deploy'
 
 // Schedule templates
-export { cloneScheduleTemplatesForDeployment } from './schedule-templates'
+export { cloneScheduleTemplatesForDeployment, getNextCronRunTime } from './schedule-templates'
 export { ensureAgentResourcesForDeployment } from './agent-resources'
 export { provisionDeploymentResources } from './deployment-resources'
+
+// Pending tier CAS
+export { applyPendingTierChange, type ApplyPendingTierResult } from './apply-pending-tier'

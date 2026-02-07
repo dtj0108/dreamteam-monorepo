@@ -208,6 +208,16 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
         setSelectedTier(null)
         return
       }
+
+      if (result.downgradeScheduled) {
+        setConfirmDialogOpen(false)
+        const dateLabel = result.effectiveAt
+          ? new Date(result.effectiveAt).toLocaleDateString()
+          : "the end of your billing period"
+        toast.success(`Downgrade scheduled for ${dateLabel}`)
+        setSelectedTier(null)
+        return
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to process purchase")
     }
@@ -366,6 +376,24 @@ export function BillingTab({ workspaceId, isOwner, teamMemberCount = 0 }: Billin
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {billing?.agent_tier_pending && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-sm text-amber-900">
+              <div className="font-medium">Plan change scheduled</div>
+              <div className="text-xs text-amber-800">
+                {billing.agent_tier_pending_effective_at
+                  ? `Your plan will switch to ${getAgentTierInfo(
+                      billing.agent_tier_pending as 'startup' | 'teams' | 'enterprise',
+                      agentTiers
+                    ).name} on ${new Date(
+                      billing.agent_tier_pending_effective_at
+                    ).toLocaleDateString()}.`
+                  : `Your plan will switch to ${getAgentTierInfo(
+                      billing.agent_tier_pending as 'startup' | 'teams' | 'enterprise',
+                      agentTiers
+                    ).name} once payment is active.`}
+              </div>
+            </div>
+          )}
           {hasAgents ? (
             // Show current agent tier with upgrade options
             <>

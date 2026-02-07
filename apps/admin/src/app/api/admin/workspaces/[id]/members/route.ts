@@ -38,7 +38,10 @@ export async function GET(
         id,
         email,
         name,
-        avatar_url
+        avatar_url,
+        is_agent,
+        linked_agent_id,
+        agent_slug
       )
     `)
     .eq('workspace_id', id)

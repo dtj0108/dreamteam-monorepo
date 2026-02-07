@@ -3,7 +3,10 @@
  * Used when a user subscribes to a plan to automatically deploy the plan's team
  */
 import { createAdminClient } from './server'
-import { provisionDeploymentResources } from './deployment-resources'
+import {
+  provisionDeploymentResources,
+  type ProvisionDeploymentSummary,
+} from './deployment-resources'
 
 // ============================================
 // TYPES (minimal subset needed for deployment)
@@ -97,6 +100,17 @@ function logSupabaseError(context: string, error?: SupabaseError | null) {
     hint: error.hint,
     code: error.code,
   })
+}
+
+function buildProvisioningIncompleteError(summary: ProvisionDeploymentSummary): string {
+  return `provisioning_incomplete:${JSON.stringify({
+    issues: summary.issues,
+    expectedAgents: summary.expectedAgents,
+    profiles: summary.profiles,
+    channels: summary.channels,
+    schedules: summary.schedules,
+    templates: summary.templates,
+  })}`
 }
 
 // ============================================
@@ -347,7 +361,7 @@ async function insertDeploymentWithRetry(
     customizations: Customizations
     active_config: DeployedTeamConfig
     deployed_by: string | null
-    status: 'active'
+    status: 'active' | 'paused' | 'failed'
     previous_deployment_id: string | null
   },
   maxRetries = 1
@@ -442,6 +456,8 @@ export interface AutoDeployResult {
   teamId?: string
   deploymentId?: string
   error?: string
+  errorCode?: 'provisioning_incomplete'
+  provisioning?: ProvisionDeploymentSummary
 }
 
 /**
@@ -506,11 +522,21 @@ export async function autoDeployTeamForPlan(
       console.log(`[auto-deploy] Workspace ${workspaceId} already has team ${teamId} deployed`)
       const existingConfig = existingDeployment.active_config as DeployedTeamConfig | null
       const configToUse = existingConfig || await buildConfigSnapshot(teamId)
-      await provisionDeploymentResources(supabase, workspaceId, configToUse, {
+      const provisioning = await provisionDeploymentResources(supabase, workspaceId, configToUse, {
         channelCreatorId: ownerId || createdByUserId || null,
         createdByUserId: createdByUserId || ownerId,
         retryOnce: true,
       })
+      if (!provisioning.isComplete) {
+        return {
+          deployed: false,
+          teamId,
+          deploymentId: existingDeployment.id,
+          errorCode: 'provisioning_incomplete',
+          error: buildProvisioningIncompleteError(provisioning),
+          provisioning,
+        }
+      }
       return { deployed: true, teamId, deploymentId: existingDeployment.id }
     }
 
@@ -532,39 +558,8 @@ export async function autoDeployTeamForPlan(
       teamMind: baseConfig.team_mind.length,
     })
 
-    // 5. Mark existing deployment as replaced (if any)
-    if (existingDeployment) {
-      await supabase
-        .from('workspace_deployed_teams')
-        .update({ status: 'replaced' })
-        .eq('id', existingDeployment.id)
-
-      // 5b. Clean up scheduled tasks from the old deployment's agents
-      const { data: oldDeployedAgents } = await supabase
-        .from('workspace_deployed_agents')
-        .select('agent_id')
-        .eq('deployment_id', existingDeployment.id)
-
-      if (oldDeployedAgents && oldDeployedAgents.length > 0) {
-        const oldAgentIds = oldDeployedAgents.map((a: { agent_id: string }) => a.agent_id)
-
-        // Delete schedules for these old agents (non-template schedules only)
-        const { error: deleteError } = await supabase
-          .from('agent_schedules')
-          .delete()
-          .eq('workspace_id', workspaceId)
-          .eq('is_template', false)
-          .in('agent_id', oldAgentIds)
-
-        if (deleteError) {
-          console.error(`[auto-deploy] Failed to clean up old schedules:`, deleteError)
-        } else {
-          console.log(`[auto-deploy] Cleaned up schedules for ${oldAgentIds.length} old agents in workspace ${workspaceId}`)
-        }
-      }
-    }
-
-    // 6. Create new deployment with empty customizations
+    // 5. Create new deployment in a staged state.
+    // We only activate and disable old schedules after provisioning is complete.
     const emptyCustomizations: Customizations = {
       disabled_agents: [],
       disabled_delegations: [],
@@ -591,7 +586,7 @@ export async function autoDeployTeamForPlan(
         customizations: emptyCustomizations,
         active_config: baseConfig, // Same as base_config since no customizations
         deployed_by: resolvedCreatedByUserId || null,
-        status: 'active',
+        status: 'paused',
         previous_deployment_id: existingDeployment?.id || null,
       },
       1
@@ -602,11 +597,83 @@ export async function autoDeployTeamForPlan(
       return { deployed: false, error: insertError.message }
     }
 
-    await provisionDeploymentResources(supabase, workspaceId, baseConfig, {
+    const provisioning = await provisionDeploymentResources(supabase, workspaceId, baseConfig, {
       channelCreatorId: ownerId || resolvedCreatedByUserId || null,
       createdByUserId: resolvedCreatedByUserId,
       retryOnce: true,
     })
+
+    if (!provisioning.isComplete) {
+      // Keep staged deployment non-active so we don't expose a partial deployment.
+      await supabase
+        .from('workspace_deployed_teams')
+        .update({ status: 'failed' })
+        .eq('id', deployment.id)
+
+      return {
+        deployed: false,
+        teamId,
+        deploymentId: deployment.id,
+        errorCode: 'provisioning_incomplete',
+        error: buildProvisioningIncompleteError(provisioning),
+        provisioning,
+      }
+    }
+
+    // Provisioning is complete. If replacing an existing deployment, cut over now.
+    if (existingDeployment) {
+      const { error: replaceError } = await supabase
+        .from('workspace_deployed_teams')
+        .update({ status: 'replaced' })
+        .eq('id', existingDeployment.id)
+
+      if (replaceError) {
+        logSupabaseError('Existing deployment replace', replaceError as SupabaseError)
+        return { deployed: false, error: replaceError.message || 'Failed to replace existing deployment' }
+      }
+
+      // Disable schedules for old deployment agents after successful provisioning.
+      const { data: oldDeployedAgents } = await supabase
+        .from('workspace_deployed_agents')
+        .select('agent_id')
+        .eq('deployment_id', existingDeployment.id)
+
+      if (oldDeployedAgents && oldDeployedAgents.length > 0) {
+        const oldAgentIds = oldDeployedAgents.map((a: { agent_id: string }) => a.agent_id)
+        const { error: disableError } = await supabase
+          .from('agent_schedules')
+          .update({
+            is_enabled: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('workspace_id', workspaceId)
+          .eq('is_template', false)
+          .in('agent_id', oldAgentIds)
+          .eq('is_enabled', true)
+
+        if (disableError) {
+          console.error(`[auto-deploy] Failed to disable old schedules:`, disableError)
+        } else {
+          console.log(`[auto-deploy] Disabled schedules for ${oldAgentIds.length} old agents in workspace ${workspaceId}`)
+        }
+      }
+    }
+
+    const { error: activateError } = await supabase
+      .from('workspace_deployed_teams')
+      .update({ status: 'active' })
+      .eq('id', deployment.id)
+
+    if (activateError) {
+      logSupabaseError('Deployment activation', activateError as SupabaseError)
+      if (existingDeployment) {
+        await supabase
+          .from('workspace_deployed_teams')
+          .update({ status: 'active' })
+          .eq('id', existingDeployment.id)
+      }
+      return { deployed: false, error: activateError.message || 'Failed to activate deployment' }
+    }
 
     console.log(`[auto-deploy] Successfully deployed team ${teamId} to workspace ${workspaceId}`)
     return { deployed: true, teamId, deploymentId: deployment.id }
@@ -729,11 +796,18 @@ export async function toggleAgentEnabled(
 
       const resolvedCreatedBy = modifiedByUserId || ownerId
 
-      await provisionDeploymentResources(supabase, workspaceId, activeConfig, {
+      const provisioning = await provisionDeploymentResources(supabase, workspaceId, activeConfig, {
         channelCreatorId: resolvedCreatedBy || null,
         createdByUserId: resolvedCreatedBy || undefined,
         retryOnce: true,
       })
+
+      if (!provisioning.isComplete) {
+        return {
+          success: false,
+          error: buildProvisioningIncompleteError(provisioning),
+        }
+      }
     }
 
     return { success: true }

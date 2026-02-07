@@ -1,7 +1,8 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react"
 import { useRouter } from "next/navigation"
+import { useUser } from "@/hooks/use-user"
 
 export type WorkspaceRole = "owner" | "admin" | "member"
 
@@ -45,6 +46,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const { user, loading: userLoading, refreshUser } = useUser()
+  const previousUserIdRef = useRef<string | null>(null)
 
   const fetchWorkspaces = useCallback(async () => {
     try {
@@ -64,18 +67,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setWorkspaces(data.workspaces || [])
 
       // Set current workspace from cookie or default
+      let selectedWorkspace: Workspace | null = null
+
       if (data.currentWorkspaceId && data.workspaces?.length > 0) {
         const current = data.workspaces.find(
           (w: Workspace) => w.id === data.currentWorkspaceId
         )
         if (current) {
-          setCurrentWorkspace(current)
+          selectedWorkspace = current
         } else if (data.workspaces.length > 0) {
           // Fallback to first workspace if cookie workspace not found
-          setCurrentWorkspace(data.workspaces[0])
+          selectedWorkspace = data.workspaces[0]
         }
       } else if (data.workspaces?.length > 0) {
-        setCurrentWorkspace(data.workspaces[0])
+        selectedWorkspace = data.workspaces[0]
+      }
+
+      setCurrentWorkspace(selectedWorkspace)
+
+      // Sync user context only when workspace selection differs.
+      if ((selectedWorkspace?.id ?? null) !== (user?.workspaceId ?? null)) {
+        await refreshUser()
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch workspaces")
@@ -84,11 +96,31 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [refreshUser, user?.workspaceId])
 
   useEffect(() => {
-    fetchWorkspaces()
-  }, [fetchWorkspaces])
+    if (userLoading) {
+      return
+    }
+
+    const currentUserId = user?.id ?? null
+    const previousUserId = previousUserIdRef.current
+    previousUserIdRef.current = currentUserId
+
+    if (!currentUserId) {
+      setWorkspaces([])
+      setCurrentWorkspace(null)
+      setError(null)
+      setIsLoading(false)
+      return
+    }
+
+    // Initial auth hydration and account-switch scenarios.
+    if (previousUserId !== currentUserId) {
+      setIsLoading(true)
+      void fetchWorkspaces()
+    }
+  }, [fetchWorkspaces, user?.id, userLoading])
 
   const switchWorkspace = useCallback(async (workspaceId: string) => {
     const workspace = workspaces.find((w) => w.id === workspaceId)
@@ -112,6 +144,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
 
       setCurrentWorkspace(workspace)
+      await refreshUser()
       setIsLoading(false)
 
       // Navigate to home on workspace switch
@@ -121,7 +154,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
       throw err
     }
-  }, [workspaces, router])
+  }, [refreshUser, router, workspaces])
 
   const refreshWorkspaces = useCallback(async () => {
     setIsLoading(true)

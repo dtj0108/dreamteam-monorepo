@@ -59,10 +59,6 @@ export async function GET(request: NextRequest) {
       hiredAgentIds = (hiredAgents || []).map((a: { ai_agent_id: string }) => a.ai_agent_id)
     }
 
-    if (hiredAgentIds.length === 0) {
-      return NextResponse.json({ schedules: [], total: 0 })
-    }
-
     // Get filter params
     const search = searchParams.get("search")
     const status = searchParams.get("status")
@@ -75,9 +71,9 @@ export async function GET(request: NextRequest) {
       .from("agent_schedules")
       .select(`
         *,
-        agent:ai_agents(id, name, avatar_url)
+        agent:ai_agents(id, name, avatar_url, tier_required)
       `, { count: "exact" })
-      .in("agent_id", hiredAgentIds)
+      .eq("workspace_id", workspaceId)
 
     // Apply filters
     if (search) {
@@ -112,7 +108,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ schedules: schedules || [], total: count || 0 })
+    if (schedules?.some((schedule: { workspace_id: string }) => schedule.workspace_id !== workspaceId)) {
+      console.warn("[Schedules] Cross-workspace schedule detected", {
+        workspaceId,
+        scheduleIds: schedules.filter((s: { workspace_id: string; id: string }) => s.workspace_id !== workspaceId).map((s: { id: string }) => s.id),
+      })
+    }
+
+    const hydratedSchedules = (schedules || []).map((schedule: { agent_id: string; [key: string]: unknown }) => ({
+      ...schedule,
+      agent_in_plan: hiredAgentIds.includes(schedule.agent_id),
+    }))
+
+    return NextResponse.json({ schedules: hydratedSchedules, total: count || 0 })
   } catch (error) {
     console.error("Error in GET /api/agents/schedules:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

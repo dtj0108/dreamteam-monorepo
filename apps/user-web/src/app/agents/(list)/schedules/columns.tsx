@@ -18,6 +18,7 @@ function ToggleCell({
   onToggle: (id: string, enabled: boolean) => void
 }) {
   const [checked, setChecked] = useState<boolean>(schedule.is_enabled)
+  const isLockedByPlan = schedule.agent_in_plan === false
 
   return (
     <div
@@ -30,6 +31,7 @@ function ToggleCell({
       <Switch
         id={`switch-action-${schedule.id}`}
         checked={checked}
+        disabled={isLockedByPlan}
         onCheckedChange={(value) => {
           setChecked(value)
           onToggle(schedule.id, value)
@@ -124,6 +126,12 @@ export function getScheduleColumns(
             <Badge variant="secondary" className="gap-1">
               <Pause className="size-3" />
               Paused
+            </Badge>
+          )}
+          {row.original.agent_in_plan === false && (
+            <Badge variant="outline" className="gap-1 text-xs text-amber-700 border-amber-200 bg-amber-50/60">
+              <AlertTriangle className="size-3" />
+              Plan change
             </Badge>
           )}
           {row.original.requires_approval && (

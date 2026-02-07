@@ -36,8 +36,45 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: dbError.message }, { status: 500 })
   }
 
+  const workspaceIds = (workspaces || []).map((workspace: { id: string }) => workspace.id)
+  const agentCountByWorkspace = new Map<string, number>()
+
+  if (workspaceIds.length > 0) {
+    const { data: agentProfiles, error: agentProfilesError } = await supabase
+      .from('profiles')
+      .select('agent_workspace_id')
+      .eq('is_agent', true)
+      .in('agent_workspace_id', workspaceIds)
+
+    if (agentProfilesError) {
+      console.error('Agent profile count query error:', agentProfilesError)
+    } else {
+      for (const profile of agentProfiles || []) {
+        const workspaceId = profile.agent_workspace_id as string | null
+        if (!workspaceId) continue
+        const current = agentCountByWorkspace.get(workspaceId) || 0
+        agentCountByWorkspace.set(workspaceId, current + 1)
+      }
+    }
+  }
+
+  const enrichedWorkspaces = (workspaces || []).map((workspace: {
+    id: string
+    workspace_members?: { count: number }[]
+  }) => {
+    const totalMembershipCount = workspace.workspace_members?.[0]?.count || 0
+    const agentCount = agentCountByWorkspace.get(workspace.id) || 0
+    const memberCount = Math.max(totalMembershipCount - agentCount, 0)
+
+    return {
+      ...workspace,
+      member_count: memberCount,
+      agent_count: agentCount,
+    }
+  })
+
   return NextResponse.json({
-    workspaces,
+    workspaces: enrichedWorkspaces,
     pagination: { page, limit, total: count },
   })
 }

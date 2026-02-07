@@ -169,6 +169,7 @@ export default function ScheduleDetailPage() {
   // Manual run state
   const [isRunning, setIsRunning] = useState(false)
   const [runResult, setRunResult] = useState<{ success: boolean; message: string } | null>(null)
+  const isLockedByPlan = schedule?.agent_in_plan === false
 
   // Fetch the schedule
   const fetchSchedule = useCallback(async () => {
@@ -325,7 +326,7 @@ export default function ScheduleDetailPage() {
               variant="outline"
               size="sm"
               onClick={handleRunNow}
-              disabled={isRunning}
+              disabled={isRunning || isLockedByPlan}
               className="gap-2"
             >
               <Play className={`size-4 ${isRunning ? "animate-pulse" : ""}`} />
@@ -345,6 +346,7 @@ export default function ScheduleDetailPage() {
             <Switch
               checked={schedule.is_enabled}
               onCheckedChange={handleToggle}
+              disabled={isLockedByPlan}
             />
           </div>
           <DropdownMenu>
@@ -378,7 +380,7 @@ export default function ScheduleDetailPage() {
           <ScrollArea className="flex-1">
             <div className="p-6 space-y-6">
               {/* Status badges */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {schedule.is_enabled ? (
                   <Badge variant="default" className="gap-1">
                     <span className="size-1.5 rounded-full bg-current animate-pulse" />
@@ -388,6 +390,12 @@ export default function ScheduleDetailPage() {
                   <Badge variant="secondary" className="gap-1">
                     <Pause className="size-3" />
                     Paused
+                  </Badge>
+                )}
+                {schedule.agent_in_plan === false && (
+                  <Badge variant="outline" className="gap-1 text-xs text-amber-700 border-amber-200 bg-amber-50/60">
+                    <AlertTriangle className="size-3" />
+                    Disabled by plan change
                   </Badge>
                 )}
                 {schedule.requires_approval && (

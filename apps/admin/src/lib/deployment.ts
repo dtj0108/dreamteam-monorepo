@@ -973,11 +973,26 @@ export async function deployTeamWithAgentResources(
 
       const channelCreatorId = channelCreatorByWorkspaceId?.get(workspaceId) || null
       const extraMembers = extraChannelMembersByWorkspaceId?.get(workspaceId) || []
-      await provisionDeploymentResources(supabase, workspaceId, deployment.active_config, {
+      const summary = await provisionDeploymentResources(supabase, workspaceId, deployment.active_config, {
         channelCreatorId,
         createdByUserId: channelCreatorId || deployedByUserId,
         retryOnce: true,
       })
+
+      if (!summary.isComplete) {
+        failed.push({
+          workspaceId,
+          error: `provisioning_incomplete:${JSON.stringify({
+            issues: summary.issues,
+            expectedAgents: summary.expectedAgents,
+            profiles: summary.profiles,
+            channels: summary.channels,
+            schedules: summary.schedules,
+            templates: summary.templates,
+          })}`,
+        })
+        continue
+      }
 
       if (extraMembers.length > 0) {
         const { data: agentChannels } = await supabase

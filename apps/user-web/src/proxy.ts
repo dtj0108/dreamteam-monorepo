@@ -32,9 +32,11 @@ const publicRoutes = [
   '/api/support',           // Support form (handles own auth, returns JSON 401)
   '/pricing',
   '/about',
+  '/contact',
   '/products',
   '/demo',
   '/learn',
+  '/api/contact',
 ]
 
 // Routes that require 2FA to be complete (after login)

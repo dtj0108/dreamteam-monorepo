@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { Loader2 } from "lucide-react"
 import { useUser } from "@/hooks/use-user"
+import { getLearnHomeHref } from "@/components/learn"
 import { GreetingHeader } from "./greeting-header"
 import { FeatureCard } from "./feature-card"
 import {
@@ -71,6 +72,7 @@ const features = [
 export function HomeHub() {
   const { user } = useUser()
   const router = useRouter()
+  const learnHref = getLearnHomeHref("finance")
   const [loggingOut, setLoggingOut] = useState(false)
 
   const initials = user?.name
@@ -178,6 +180,12 @@ export function HomeHub() {
 
           {/* Quick Links */}
           <div className="flex flex-wrap gap-3 justify-center pt-2">
+            <Link
+              href={learnHref}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted hover:bg-muted/80 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              📘 Learn
+            </Link>
             <Link
               href="/support"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted hover:bg-muted/80 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
