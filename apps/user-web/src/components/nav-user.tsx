@@ -8,6 +8,7 @@ import {
   Loader2,
   Settings,
   MessageCircleQuestion,
+  BookOpen,
 } from "lucide-react"
 
 import {
@@ -28,6 +29,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useCurrentProduct } from "@/components/product-switcher"
+import { getLearnHomeHref } from "@/components/learn"
 
 export function NavUser({
   user,
@@ -41,6 +44,8 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const router = useRouter()
+  const currentProduct = useCurrentProduct()
+  const learnHref = getLearnHomeHref(currentProduct)
   const [loggingOut, setLoggingOut] = useState(false)
 
   const initials = user.name
@@ -93,6 +98,10 @@ export function NavUser({
             align="end"
             sideOffset={4}
           >
+            <DropdownMenuItem onClick={() => router.push(learnHref)}>
+              <BookOpen className="mr-2 h-4 w-4" />
+              Learn
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => router.push("/account")}>
               <Settings className="mr-2 h-4 w-4" />
               Settings

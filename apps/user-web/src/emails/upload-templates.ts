@@ -9,71 +9,118 @@
 
 import { render } from '@react-email/render';
 import { AgentsIntroEmail } from './agents-intro';
+import { MarketingOutreachEmail } from './marketing-outreach';
+import { LandingPageEmail } from './landing-page-email';
 
-const TEMPLATE_ID = 'f2e13e9a-a4fa-4bf8-a9bb-dcc3a1d71403'; // Existing template ID
+const RESEND_API = 'https://api.resend.com';
+const RATE_LIMIT_DELAY = 1500; // ms between API calls to avoid 429s
+
+const AGENTS_INTRO_TEMPLATE_ID = 'f2e13e9a-a4fa-4bf8-a9bb-dcc3a1d71403';
+
+function getHeaders() {
+  return {
+    Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+async function updateTemplate(id: string, name: string, subject: string, html: string) {
+  const response = await fetch(`${RESEND_API}/templates/${id}`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+    body: JSON.stringify({ name, subject, html }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Failed to update template "${name}": ${JSON.stringify(error)}`);
+  }
+
+  console.log(`   Updated: ${name} (${id})`);
+
+  // Rate limit pause before publish
+  await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY));
+
+  // Publish so changes take effect
+  const publishResponse = await fetch(`${RESEND_API}/templates/${id}/publish`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+  });
+
+  if (publishResponse.ok) {
+    console.log(`   Published: ${name}`);
+  } else {
+    console.log(`   ⚠️  Updated but not published — publish manually in Resend dashboard.`);
+  }
+}
+
+async function createTemplate(name: string, subject: string, html: string): Promise<string> {
+  const response = await fetch(`${RESEND_API}/templates`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ name, subject, html }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Failed to create template "${name}": ${JSON.stringify(error)}`);
+  }
+
+  const { id } = (await response.json()) as { id: string };
+  console.log(`   Created: ${name} (${id})`);
+  return id;
+}
 
 async function uploadTemplates() {
-  console.log('📧 Updating email template in Resend...\n');
+  if (!process.env.RESEND_API_KEY) {
+    console.error('❌ RESEND_API_KEY environment variable is not set');
+    process.exit(1);
+  }
 
-  // Render the React component to HTML
-  const html = await render(AgentsIntroEmail());
+  console.log('📧 Uploading email templates to Resend...\n');
 
   try {
-    // Update the existing template via Resend API
-    const response = await fetch(`https://api.resend.com/templates/${TEMPLATE_ID}`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: 'agents-intro',
-        subject: 'Meet your new AI team members',
-        html: html,
-      }),
-    });
+    // 1. Agents Intro — update existing template
+    console.log('1/3 agents-intro');
+    const agentsIntroHtml = await render(AgentsIntroEmail());
+    await updateTemplate(
+      AGENTS_INTRO_TEMPLATE_ID,
+      'agents-intro',
+      'Meet your new AI team members',
+      agentsIntroHtml,
+    );
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Failed to update template: ${JSON.stringify(error)}`);
-    }
+    // Rate limit pause between templates
+    await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY));
 
-    const template = await response.json();
-    console.log('✅ Template updated successfully!');
-    console.log(`   ID: ${TEMPLATE_ID}`);
-    console.log(`   Name: agents-intro`);
+    // 2. Marketing Outreach — create new (or update if ID is set)
+    console.log('\n2/3 marketing-outreach');
+    const marketingHtml = await render(MarketingOutreachEmail({}));
+    const marketingId = await createTemplate(
+      'marketing-outreach',
+      'AI agents that actually work',
+      marketingHtml,
+    );
 
-    // Publish the template so changes take effect
-    console.log('\n📤 Publishing template...');
+    // Rate limit pause between templates
+    await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY));
 
-    const publishResponse = await fetch(`https://api.resend.com/templates/${TEMPLATE_ID}/publish`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-      },
-    });
+    // 3. Landing Page Email — create new
+    console.log('\n3/3 landing-page-email');
+    const landingPageHtml = await render(LandingPageEmail({}));
+    const landingPageId = await createTemplate(
+      'landing-page-email',
+      'What happened while you slept',
+      landingPageHtml,
+    );
 
-    if (publishResponse.ok) {
-      console.log('✅ Template published and ready to use!');
-    } else {
-      console.log('⚠️  Template updated but not published. Publish manually in Resend dashboard.');
-    }
-
-    console.log('\n📝 To send with inline image:\n');
-    console.log(`   await resend.emails.send({`);
-    console.log(`     from: 'DreamTeam <hello@dreamteam.com>',`);
-    console.log(`     to: 'user@example.com',`);
-    console.log(`     template_id: '${TEMPLATE_ID}',`);
-    console.log(`     template_data: { name: 'Drew', workspaceName: 'Acme Corp' },`);
-    console.log(`     attachments: [{`);
-    console.log(`       content: aiSphereBase64,`);
-    console.log(`       filename: 'ai-sphere.png',`);
-    console.log(`       contentId: 'ai-sphere-image',`);
-    console.log(`     }],`);
-    console.log(`   });`);
-
+    console.log('\n✅ All templates uploaded!');
+    console.log(`\n📝 Marketing outreach template ID: ${marketingId}`);
+    console.log('   Save this ID if you want to update it in the future.');
+    console.log(`\n📝 Landing page email template ID: ${landingPageId}`);
+    console.log('   Save this ID if you want to update it in the future.');
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('\n❌ Error:', error);
     process.exit(1);
   }
 }

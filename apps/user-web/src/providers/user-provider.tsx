@@ -25,7 +25,7 @@ interface UserContextType {
   user: User | null
   loading: boolean
   error: string | null
-  refreshUser: () => void
+  refreshUser: () => Promise<void>
 }
 
 const UserContext = createContext<UserContextType | null>(null)
@@ -45,6 +45,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const fetchUser = useCallback(async () => {
     try {
+      setError(null)
       const response = await fetch("/api/auth/me")
 
       if (!response.ok) {
@@ -66,12 +67,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    fetchUser()
+    void fetchUser()
   }, [fetchUser])
 
-  const refreshUser = useCallback(() => {
+  const refreshUser = useCallback(async () => {
     setLoading(true)
-    fetchUser()
+    await fetchUser()
   }, [fetchUser])
 
   return (

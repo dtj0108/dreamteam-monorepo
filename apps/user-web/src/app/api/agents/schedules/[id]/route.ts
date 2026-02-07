@@ -4,6 +4,7 @@ import { getSession } from "@dreamteam/auth/session"
 import { getNextRunTime, isValidCron } from "@/lib/cron-utils"
 import { mapToolNamesToCategories } from "@/lib/agent-tool-mapping"
 import { resolveWorkspaceAgent } from "@/lib/workspace-agent"
+import { getWorkspaceDeployment, type DeployedTeamConfig } from "@dreamteam/database"
 
 // GET /api/agents/schedules/[id] - Get a single schedule with agent details
 export async function GET(
@@ -24,7 +25,7 @@ export async function GET(
       .from("agent_schedules")
       .select(`
         *,
-        agent:ai_agents(id, name, avatar_url, description, model)
+        agent:ai_agents(id, name, avatar_url, description, model, tier_required)
       `)
       .eq("id", id)
       .single()
@@ -55,7 +56,29 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({ schedule })
+    const deployment = await getWorkspaceDeployment(workspaceId)
+    let hiredAgentIds: string[] = []
+    if (deployment) {
+      const activeConfig = deployment.active_config as DeployedTeamConfig
+      hiredAgentIds = (activeConfig?.agents || [])
+        .filter((a) => a.is_enabled)
+        .map((a) => a.id)
+    } else {
+      const { data: hiredAgents } = await supabase
+        .from("agents")
+        .select("ai_agent_id")
+        .eq("workspace_id", workspaceId)
+        .eq("is_active", true)
+        .not("ai_agent_id", "is", null)
+      hiredAgentIds = (hiredAgents || []).map((a: { ai_agent_id: string }) => a.ai_agent_id)
+    }
+
+    const scheduleWithPlan = {
+      ...schedule,
+      agent_in_plan: hiredAgentIds.includes(schedule.agent_id),
+    }
+
+    return NextResponse.json({ schedule: scheduleWithPlan })
   } catch (error) {
     console.error("Error in GET /api/agents/schedules/[id]:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -384,6 +407,21 @@ export async function PATCH(
         { error: "Not authorized to update this schedule" },
         { status: 403 }
       )
+    }
+
+    if (is_enabled) {
+      const resolvedAgent = await resolveWorkspaceAgent({
+        workspaceId,
+        aiAgentId: schedule.agent_id,
+        supabase,
+      })
+
+      if (!resolvedAgent.isEnabled) {
+        return NextResponse.json(
+          { error: "Agent not available in current plan" },
+          { status: 400 }
+        )
+      }
     }
 
     // Update the schedule

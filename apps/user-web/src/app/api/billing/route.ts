@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@dreamteam/database/server'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
-import { getWorkspaceBilling, getWorkspaceInvoices } from '@/lib/billing-queries'
+import { getWorkspaceBilling, getWorkspaceInvoices, syncBillingFromStripeSubscription } from '@/lib/billing-queries'
+import { stripe } from '@/lib/stripe'
 
 /**
  * GET /api/billing
@@ -31,7 +32,74 @@ export async function GET() {
     }
 
     // Get billing data
-    const billing = await getWorkspaceBilling(workspaceId)
+    let billing = await getWorkspaceBilling(workspaceId)
+
+    // Always sync subscription status from Stripe (for accuracy)
+    try {
+      if (billing?.stripe_agent_subscription_id) {
+        const subscription = await stripe.subscriptions.retrieve(billing.stripe_agent_subscription_id)
+        const targetPlan =
+          subscription.metadata?.agent_tier ||
+          subscription.metadata?.target_plan ||
+          null
+
+        let resolvedTier = targetPlan
+        if (!resolvedTier) {
+          const priceId = subscription.items?.data?.[0]?.price?.id
+          if (priceId) {
+            const { data: plan } = await supabase
+              .from('plans')
+              .select('slug')
+              .eq('plan_type', 'agent_tier')
+              .eq('stripe_price_id', priceId)
+              .single()
+            resolvedTier = plan?.slug || null
+          }
+        }
+
+        await syncBillingFromStripeSubscription(
+          workspaceId,
+          subscription,
+          'agent_tier',
+          resolvedTier || undefined
+        )
+        billing = await getWorkspaceBilling(workspaceId)
+      }
+
+      if (billing?.stripe_subscription_id) {
+        const subscription = await stripe.subscriptions.retrieve(billing.stripe_subscription_id)
+        const targetPlan =
+          subscription.metadata?.plan ||
+          subscription.metadata?.target_plan ||
+          null
+
+        let resolvedPlan = targetPlan
+        if (!resolvedPlan) {
+          const priceId = subscription.items?.data?.[0]?.price?.id
+          if (priceId) {
+            const { data: plan } = await supabase
+              .from('plans')
+              .select('slug')
+              .eq('plan_type', 'workspace_plan')
+              .eq('stripe_price_id', priceId)
+              .single()
+            resolvedPlan = plan?.slug || null
+          }
+        }
+
+        await syncBillingFromStripeSubscription(
+          workspaceId,
+          subscription,
+          'workspace_plan',
+          resolvedPlan || undefined
+        )
+        billing = await getWorkspaceBilling(workspaceId)
+      }
+    } catch (stripeError) {
+      console.error('Billing sync from Stripe failed:', stripeError)
+      // continue with existing billing data
+    }
+
     const invoices = await getWorkspaceInvoices(workspaceId)
 
     // Check if current user is workspace owner

@@ -14,6 +14,7 @@ import {
   GripVertical,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { AgentToolBadges } from "@/components/agents/agent-tool-badges"
 import type { AgentWithHireStatus } from "@/lib/types/agents"
 
 // Custom animation config for smooth card transitions
@@ -120,6 +121,13 @@ export function SortableAgentCard({
           <span>{stats.scheduled} scheduled</span>
         </div>
       </div>
+
+      {/* Tool badges */}
+      {agent.tools && agent.tools.length > 0 && (
+        <div className="px-4 pb-2">
+          <AgentToolBadges tools={agent.tools} maxVisible={3} />
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className="p-4 pt-0 flex gap-2">

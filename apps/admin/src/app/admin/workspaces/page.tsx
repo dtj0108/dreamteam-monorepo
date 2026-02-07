@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { formatDistanceToNow } from 'date-fns'
-import { MoreHorizontal, Search, Trash2, Users, Ban, CheckCircle, ExternalLink } from 'lucide-react'
+import { MoreHorizontal, Search, Trash2, Users, Bot, Ban, CheckCircle, ExternalLink } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
@@ -43,6 +43,8 @@ interface Workspace {
     name: string | null
   } | null
   workspace_members: { count: number }[]
+  member_count?: number
+  agent_count?: number
 }
 
 export default function WorkspacesPage() {
@@ -104,7 +106,11 @@ export default function WorkspacesPage() {
   }
 
   function getMemberCount(workspace: Workspace): number {
-    return workspace.workspace_members?.[0]?.count || 0
+    return (workspace.member_count ?? workspace.workspace_members?.[0]?.count) || 0
+  }
+
+  function getAgentCount(workspace: Workspace): number {
+    return workspace.agent_count ?? 0
   }
 
   return (
@@ -131,7 +137,7 @@ export default function WorkspacesPage() {
             <TableRow>
               <TableHead>Workspace</TableHead>
               <TableHead>Owner</TableHead>
-              <TableHead>Members</TableHead>
+              <TableHead>People / Agents</TableHead>
               <TableHead>Created</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
@@ -147,7 +153,7 @@ export default function WorkspacesPage() {
                     </div>
                   </TableCell>
                   <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-8 w-8" /></TableCell>
                 </TableRow>
@@ -186,10 +192,16 @@ export default function WorkspacesPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className="gap-1">
-                      <Users className="h-3 w-3" />
-                      {getMemberCount(workspace)}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="gap-1">
+                        <Users className="h-3 w-3" />
+                        {getMemberCount(workspace)}
+                      </Badge>
+                      <Badge variant="outline" className="gap-1">
+                        <Bot className="h-3 w-3" />
+                        {getAgentCount(workspace)}
+                      </Badge>
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {formatDistanceToNow(new Date(workspace.created_at), {

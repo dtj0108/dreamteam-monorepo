@@ -92,6 +92,36 @@ export async function GET() {
       }
     }
 
+    // Final fallback: if no cookie/default, use first membership
+    if (!currentWorkspaceId) {
+      const { data: firstMembership } = await adminSupabase
+        .from('workspace_members')
+        .select('workspace_id, role, allowed_products')
+        .eq('profile_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single()
+
+      if (firstMembership?.workspace_id) {
+        currentWorkspaceId = firstMembership.workspace_id
+        workspaceRole = firstMembership.role || 'member'
+        if (workspaceRole === 'owner') {
+          allowedProducts = ['finance', 'sales', 'team', 'projects', 'knowledge', 'agents']
+        } else {
+          allowedProducts = firstMembership.allowed_products || ['finance', 'sales', 'team', 'projects', 'knowledge', 'agents']
+        }
+
+        const cookieStore = await cookies()
+        cookieStore.set('current_workspace_id', firstMembership.workspace_id, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 60 * 60 * 24 * 365,
+        })
+      }
+    }
+
     // Get workspace name if we have a valid workspace
     if (currentWorkspaceId) {
       const { data: workspace } = await adminSupabase

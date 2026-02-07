@@ -60,7 +60,7 @@ const Features = () => {
             delay={0.3}
             transition={{ duration: 0.5 }}
           >
-            This is the AI you've been waiting for
+            Your Agents Work Nights, Weekends, and Holidays. No Overtime Pay.
           </MotionPreset>
           <MotionPreset
             component='p'

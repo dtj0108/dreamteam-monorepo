@@ -3,5 +3,6 @@ export { ArticleSection } from "./article-section"
 export { Callout } from "./callout"
 export { StepList } from "./step-list"
 export { RelatedArticles } from "./related-articles"
-export { LearnSidebar, articles } from "./learn-sidebar"
-
+export { LearnSidebar } from "./learn-sidebar"
+export { learnSections, getLearnHomeHref, getLearnProductFromPath } from "./learn-catalog"
+export type { LearnHomeTarget, LearnProductId, LearnProductSection, LearnTopic } from "./learn-catalog"

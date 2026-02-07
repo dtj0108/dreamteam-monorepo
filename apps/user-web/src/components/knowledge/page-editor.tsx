@@ -1,11 +1,57 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Component, useCallback, useEffect, useRef, useState } from "react"
+import type { ErrorInfo, ReactNode } from "react"
 import { useCreateBlockNote } from "@blocknote/react"
 import { BlockNoteView } from "@blocknote/mantine"
 import "@blocknote/mantine/style.css"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+
+// Error boundary to catch BlockNote/ProseMirror render crashes (e.g. table RangeError)
+interface EditorErrorBoundaryProps {
+  children: ReactNode
+  onReset: () => void
+}
+
+interface EditorErrorBoundaryState {
+  hasError: boolean
+}
+
+class EditorErrorBoundary extends Component<EditorErrorBoundaryProps, EditorErrorBoundaryState> {
+  constructor(props: EditorErrorBoundaryProps) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError(): EditorErrorBoundaryState {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[PageEditor] Editor crashed:", error, info.componentStack)
+  }
+
+  reset = () => {
+    this.setState({ hasError: false })
+    this.props.onReset()
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+          <p className="text-muted-foreground">Something went wrong with the editor.</p>
+          <Button variant="outline" onClick={this.reset}>
+            Reload editor
+          </Button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 interface PageEditorProps {
   pageId: string
@@ -25,6 +71,7 @@ export function PageEditor({
   onContentChange,
 }: PageEditorProps) {
   const [title, setTitle] = useState(initialTitle)
+  const [editorKey, setEditorKey] = useState(0)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Create BlockNote editor
@@ -71,9 +118,17 @@ export function PageEditor({
   useEffect(() => {
     setTitle(initialTitle)
     if (editor && Array.isArray(initialContent) && initialContent.length > 0) {
-      editor.replaceBlocks(editor.document, initialContent as Parameters<typeof editor.replaceBlocks>[1])
+      try {
+        editor.replaceBlocks(editor.document, initialContent as Parameters<typeof editor.replaceBlocks>[1])
+      } catch (err) {
+        console.error("[PageEditor] Failed to replace blocks, content may be corrupted:", err)
+      }
     }
   }, [pageId])
+
+  const handleEditorReset = useCallback(() => {
+    setEditorKey((k) => k + 1)
+  }, [])
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
@@ -96,11 +151,13 @@ export function PageEditor({
 
         {/* Block Editor */}
         <div className="prose prose-sm max-w-none dark:prose-invert">
-          <BlockNoteView
-            editor={editor}
-            onChange={handleContentChange}
-            theme="light"
-          />
+          <EditorErrorBoundary key={editorKey} onReset={handleEditorReset}>
+            <BlockNoteView
+              editor={editor}
+              onChange={handleContentChange}
+              theme="light"
+            />
+          </EditorErrorBoundary>
         </div>
       </div>
     </div>

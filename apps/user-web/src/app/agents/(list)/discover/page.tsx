@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAgents } from "@/providers/agents-provider"
 import { useBillingContextOptional } from "@/providers/billing-provider"
@@ -16,15 +16,39 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Search, Bot, MessageSquare, CheckCircle2, Calendar, ArrowRight, Check } from "lucide-react"
+import { Search, Bot, MessageSquare, CheckCircle2, Calendar, ArrowRight, Check, Wrench } from "lucide-react"
+import { AgentToolBadges } from "@/components/agents/agent-tool-badges"
 import type { AgentWithHireStatus } from "@/lib/types/agents"
 import type { AgentTier } from "@/types/billing"
 import { cn } from "@/lib/utils"
 
-// Agent tier data for tier cards
-const agentTiers = [
+// API response types for agent tier plans
+interface PlanDisplayConfig {
+  tagline?: string;
+  agent_count?: number;
+}
+
+interface AgentTierPlan {
+  slug: string;
+  name: string;
+  price_monthly: number | null;
+  display_config: PlanDisplayConfig;
+}
+
+// Agent tier type
+type AgentTierData = {
+  id: "startup" | "teams" | "enterprise";
+  name: string;
+  price: number;
+  priceDisplay: string;
+  agentCount: number;
+  tagline: string;
+}
+
+// Default agent tier data (fallback if API fails)
+const defaultAgentTiers: AgentTierData[] = [
   {
-    id: "startup" as const,
+    id: "startup",
     name: "Lean Startup",
     price: 3000,
     priceDisplay: "$3K",
@@ -32,7 +56,7 @@ const agentTiers = [
     tagline: "You + a few killers in one room",
   },
   {
-    id: "teams" as const,
+    id: "teams",
     name: "Department Teams",
     price: 5000,
     priceDisplay: "$5K",
@@ -40,7 +64,7 @@ const agentTiers = [
     tagline: "Now you've got specialists",
   },
   {
-    id: "enterprise" as const,
+    id: "enterprise",
     name: "Enterprise Dream Team",
     price: 10000,
     priceDisplay: "$10K",
@@ -62,7 +86,7 @@ function TierCard({
   onUpgrade,
   isLoading,
 }: {
-  tier: typeof agentTiers[number]
+  tier: AgentTierData
   currentTier: AgentTier
   onUpgrade: (tierId: "startup" | "teams" | "enterprise") => void
   isLoading: boolean
@@ -164,6 +188,13 @@ function AgentCard({
         </p>
       </div>
 
+      {/* Tool badges */}
+      {agent.tools && agent.tools.length > 0 && (
+        <div className="px-4 pb-2">
+          <AgentToolBadges tools={agent.tools} maxVisible={3} />
+        </div>
+      )}
+
       {/* Stats or description */}
       <div className="px-4 pb-3 space-y-1.5 text-sm text-muted-foreground flex-1">
         {agent.isHired && stats ? (
@@ -261,8 +292,47 @@ export default function AgentsDiscoverPage() {
   const [isHiring, setIsHiring] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState(false)
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
-  const [selectedTier, setSelectedTier] = useState<typeof agentTiers[number] | null>(null)
+  const [selectedTier, setSelectedTier] = useState<AgentTierData | null>(null)
   const [confirmChecked, setConfirmChecked] = useState(false)
+  const [agentTiers, setAgentTiers] = useState<AgentTierData[]>(defaultAgentTiers)
+  const [tiersLoading, setTiersLoading] = useState(true)
+
+  // Fetch agent tier prices from API
+  useEffect(() => {
+    async function fetchTiers() {
+      try {
+        const res = await fetch('/api/plans?type=agent_tier')
+        if (res.ok) {
+          const data = await res.json()
+          const plans: AgentTierPlan[] = data.plans || []
+
+          if (plans.length > 0) {
+            const transformed: AgentTierData[] = plans.map(plan => {
+              // Find the default tier to use as fallback for missing values
+              const defaultTier = defaultAgentTiers.find(t => t.id === plan.slug)
+              return {
+                id: plan.slug as "startup" | "teams" | "enterprise",
+                name: plan.name,
+                price: plan.price_monthly ? plan.price_monthly / 100 : 0,
+                priceDisplay: plan.price_monthly
+                  ? `$${Math.round(plan.price_monthly / 100 / 1000)}K`
+                  : "$0",
+                agentCount: plan.display_config?.agent_count || defaultTier?.agentCount || 1,
+                tagline: plan.display_config?.tagline || defaultTier?.tagline || "",
+              }
+            })
+            setAgentTiers(transformed)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch agent tiers:', error)
+        // Keep default values on error
+      } finally {
+        setTiersLoading(false)
+      }
+    }
+    fetchTiers()
+  }, [])
 
   const currentTier: AgentTier = billing?.agent_tier || "none"
   const hiredCount = myAgents.length
@@ -298,14 +368,15 @@ export default function AgentsDiscoverPage() {
     }
   }
 
-  // Filter agents based on search
+  // Filter agents based on search (name, description, and tool names)
   const filteredAgents = useMemo(() => {
     if (!searchQuery) return agents
     const query = searchQuery.toLowerCase()
     return agents.filter(
       (agent) =>
         agent.name.toLowerCase().includes(query) ||
-        agent.description?.toLowerCase().includes(query)
+        agent.description?.toLowerCase().includes(query) ||
+        agent.tools?.some(t => t.name.toLowerCase().includes(query))
     )
   }, [agents, searchQuery])
 
@@ -371,11 +442,20 @@ export default function AgentsDiscoverPage() {
               </>
             )}
           </div>
+          {billing?.agent_tier_pending && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-900">
+              {billing.agent_tier_pending_effective_at
+                ? `Plan change scheduled: ${getTierName(billing.agent_tier_pending)} on ${new Date(
+                    billing.agent_tier_pending_effective_at
+                  ).toLocaleDateString()}.`
+                : `Plan change scheduled: ${getTierName(billing.agent_tier_pending)} once payment is active.`}
+            </div>
+          )}
         </div>
 
         {/* Tier Cards */}
         <div className="mb-8">
-          {billingLoading ? (
+          {billingLoading || tiersLoading ? (
             <div className="grid gap-4 md:grid-cols-3">
               <TierCardSkeleton />
               <TierCardSkeleton />
@@ -456,9 +536,25 @@ export default function AgentsDiscoverPage() {
           <div className="py-4">
             <div className="rounded-lg bg-muted p-4 text-sm">
               <p className="font-medium mb-2">This agent can help with:</p>
-              <p className="text-muted-foreground">
-                {selectedAgentForHire?.system_prompt?.slice(0, 200)}...
-              </p>
+              {selectedAgentForHire?.tools && selectedAgentForHire.tools.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedAgentForHire.tools.filter(t => t.is_enabled).map(tool => (
+                    <div key={tool.id} className="flex items-start gap-2">
+                      <Wrench className="size-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <span className="font-medium">{tool.name}</span>
+                        {tool.description && (
+                          <span className="text-muted-foreground"> - {tool.description}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">
+                  {selectedAgentForHire?.system_prompt?.slice(0, 200)}...
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>

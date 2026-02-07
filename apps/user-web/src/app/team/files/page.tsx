@@ -1,11 +1,10 @@
 "use client"
 
-import { useUser } from "@/hooks/use-user"
+import { useTeam } from "@/providers/team-provider"
 import { FileBrowser } from "@/components/team/files"
 
 export default function FilesPage() {
-  const { user } = useUser()
-  const workspaceId = user?.workspaceId
+  const { workspaceId, userId } = useTeam()
 
   if (!workspaceId) {
     return (
@@ -25,7 +24,7 @@ export default function FilesPage() {
       {/* File browser */}
       <FileBrowser
         workspaceId={workspaceId}
-        currentUserId={user?.id}
+        currentUserId={userId}
         isAdmin={false} // TODO: Check actual admin status
       />
     </div>

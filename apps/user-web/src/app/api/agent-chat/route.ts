@@ -3,6 +3,7 @@ import { anthropic } from "@ai-sdk/anthropic"
 import { createAdminClient } from "@dreamteam/database/server"
 import { getSession } from "@dreamteam/auth/session"
 import { buildAgentTools } from "@/lib/agent"
+import { getWorkspaceBilling, hasActiveAgents } from '@/lib/billing-queries'
 
 // Allow streaming responses up to 60 seconds for tool execution
 export const maxDuration = 60
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
     const { message, agentId, workspaceId, conversationId } = body
 
     if (!message || typeof message !== "string") {
-      return new Response(JSON.stringify({ error: "Invalid request: message is required" }), { 
+      return new Response(JSON.stringify({ error: "Invalid request: message is required" }), {
         status: 400,
         headers: { "Content-Type": "application/json" }
       })
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
 
     if (agentId) {
       console.log("[Agent Chat] Loading agent:", agentId)
-      
+
       const { data: agent, error } = await supabase
         .from("agents")
         .select("*, workspace_id")
@@ -92,6 +93,24 @@ ${skillsContent}`
       } else {
         console.log("[Agent Chat] Agent not found or inactive:", agentId)
       }
+    }
+
+    // Billing gate: require active agent subscription
+    // Runs after agent loading so we can resolve workspaceId from the agent's workspace_id
+    const resolvedWorkspaceId = workspaceId || agentWorkspaceId
+    if (!resolvedWorkspaceId) {
+      return new Response(
+        JSON.stringify({ error: 'workspaceId is required', code: 'missing_workspace' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const billing = await getWorkspaceBilling(resolvedWorkspaceId)
+    if (!hasActiveAgents(billing)) {
+      return new Response(
+        JSON.stringify({ error: 'Agent subscription required', code: 'no_agent_subscription' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
     // Create tool context with user info

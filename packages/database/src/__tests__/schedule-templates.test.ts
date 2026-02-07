@@ -13,8 +13,15 @@ function buildSupabaseMock(options: {
     output_config: unknown
   }>
   existingSchedules: Array<{ agent_id: string; name: string }>
+  insertResponses?: Array<{ error: { code?: string; message?: string } | null }>
 }) {
-  const insert = vi.fn().mockResolvedValue({ error: null })
+  const insert = vi.fn().mockImplementation(async () => {
+    if (options.insertResponses && options.insertResponses.length > 0) {
+      return options.insertResponses.shift()
+    }
+    return { error: null }
+  })
+
   const supabase = {
     from: vi.fn().mockImplementation((table: string) => {
       if (table !== 'agent_schedules') {
@@ -32,7 +39,9 @@ function buildSupabaseMock(options: {
           if (columns === 'agent_id, name') {
             return {
               eq: vi.fn().mockReturnValue({
-                eq: vi.fn().mockResolvedValue({ data: options.existingSchedules, error: null }),
+                eq: vi.fn().mockReturnValue({
+                  in: vi.fn().mockResolvedValue({ data: options.existingSchedules, error: null }),
+                }),
               }),
             }
           }
@@ -135,5 +144,85 @@ describe('cloneScheduleTemplatesForDeployment', () => {
     )
 
     expect(insert).not.toHaveBeenCalled()
+  })
+
+  it('deduplicates templates by (agent_id, name) before inserting', async () => {
+    const { supabase, insert } = buildSupabaseMock({
+      templates: [
+        {
+          agent_id: 'agent-1',
+          name: 'Daily Summary',
+          description: null,
+          cron_expression: '0 9 * * *',
+          timezone: null,
+          task_prompt: 'First',
+          requires_approval: false,
+          output_config: {},
+        },
+        {
+          agent_id: 'agent-1',
+          name: 'Daily Summary',
+          description: null,
+          cron_expression: '0 10 * * *',
+          timezone: null,
+          task_prompt: 'Duplicate',
+          requires_approval: false,
+          output_config: {},
+        },
+      ],
+      existingSchedules: [],
+    })
+
+    await cloneScheduleTemplatesForDeployment(
+      supabase as unknown as any,
+      ['agent-1'],
+      'workspace-1',
+      'owner-1'
+    )
+
+    expect(insert).toHaveBeenCalledTimes(1)
+    expect(insert.mock.calls[0][0]).toHaveLength(1)
+  })
+
+  it('falls back to row inserts when batch insert hits duplicate key errors', async () => {
+    const { supabase, insert } = buildSupabaseMock({
+      templates: [
+        {
+          agent_id: 'agent-1',
+          name: 'Daily Summary',
+          description: null,
+          cron_expression: '0 9 * * *',
+          timezone: null,
+          task_prompt: 'One',
+          requires_approval: false,
+          output_config: {},
+        },
+        {
+          agent_id: 'agent-2',
+          name: 'Daily Summary',
+          description: null,
+          cron_expression: '0 9 * * *',
+          timezone: null,
+          task_prompt: 'Two',
+          requires_approval: false,
+          output_config: {},
+        },
+      ],
+      existingSchedules: [],
+      insertResponses: [
+        { error: { code: '23505', message: 'duplicate key' } }, // batch
+        { error: null }, // row 1
+        { error: { code: '23505', message: 'duplicate key' } }, // row 2 ignored
+      ],
+    })
+
+    await cloneScheduleTemplatesForDeployment(
+      supabase as unknown as any,
+      ['agent-1', 'agent-2'],
+      'workspace-1',
+      'owner-1'
+    )
+
+    expect(insert).toHaveBeenCalledTimes(3)
   })
 })

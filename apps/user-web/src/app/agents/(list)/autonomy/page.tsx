@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { useUser } from "@/hooks/use-user"
+import { useWorkspace } from "@/providers/workspace-provider"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -24,8 +24,8 @@ import {
 const MAX_CUSTOM_CHARS = 500
 
 export default function AutonomyPage() {
-  const { user } = useUser()
-  const workspaceId = user?.workspaceId
+  const { currentWorkspace } = useWorkspace()
+  const workspaceId = currentWorkspace?.id
 
   const [context, setContext] = useState<BusinessContext>({ guided: {}, customContext: "" })
   const [loading, setLoading] = useState(true)

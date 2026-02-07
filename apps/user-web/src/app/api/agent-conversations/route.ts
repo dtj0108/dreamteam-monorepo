@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
 import { getSession } from "@dreamteam/auth/session"
+import { getWorkspaceBilling, hasActiveAgents } from '@/lib/billing-queries'
 
 // GET /api/agent-conversations - List conversations for an agent
 export async function GET(request: NextRequest) {
@@ -91,6 +92,15 @@ export async function POST(request: NextRequest) {
     if (memberError || !membership) {
       return NextResponse.json(
         { error: "Not a member of this workspace" },
+        { status: 403 }
+      )
+    }
+
+    // Billing gate: require active agent subscription to create conversations
+    const billing = await getWorkspaceBilling(workspaceId)
+    if (!hasActiveAgents(billing)) {
+      return NextResponse.json(
+        { error: 'Agent subscription required', code: 'no_agent_subscription' },
         { status: 403 }
       )
     }

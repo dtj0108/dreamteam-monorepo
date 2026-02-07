@@ -10,13 +10,263 @@ vi.mock('../server', () => ({
   createAdminClient: vi.fn(),
 }))
 
+// Mock deployment provisioning to control completion/failure outcomes
+vi.mock('../deployment-resources', () => ({
+  provisionDeploymentResources: vi.fn(),
+}))
+
 import { createAdminClient } from '../server'
+import { provisionDeploymentResources } from '../deployment-resources'
 
 const mockSupabase = createAdminClient as unknown as ReturnType<typeof vi.fn>
+const mockProvisionDeploymentResources = provisionDeploymentResources as unknown as ReturnType<typeof vi.fn>
+
+function completeProvisioningSummary() {
+  return {
+    expectedAgents: 1,
+    profiles: 1,
+    channels: 1,
+    schedules: 1,
+    templates: 1,
+    isComplete: true,
+    issues: [],
+  }
+}
+
+function incompleteProvisioningSummary() {
+  return {
+    expectedAgents: 1,
+    profiles: 1,
+    channels: 1,
+    schedules: 0,
+    templates: 1,
+    isComplete: false,
+    issues: ['no_schedules'],
+  }
+}
+
+function createSupabaseForNewDeployment() {
+  const teamsSingleResponses = [
+    { data: { current_version: 2 }, error: null }, // team version lookup
+    { // buildConfigSnapshot team lookup
+      data: { id: 'team-1', name: 'Starter Team', slug: 'starter', head_agent_id: null },
+      error: null,
+    },
+  ]
+
+  const teamsSingle = vi.fn().mockImplementation(async () => {
+    const next = teamsSingleResponses.shift()
+    return next || { data: null, error: new Error('Unexpected teams single call') }
+  })
+
+  const from = vi.fn().mockImplementation((table: string) => {
+    switch (table) {
+      case 'plans':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({ data: { id: 'plan-1', team_id: 'team-1' }, error: null }),
+              }),
+            }),
+          }),
+        }
+
+      case 'workspace_deployed_teams':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({ data: null, error: null }),
+              }),
+            }),
+          }),
+          insert: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: { id: 'deployment-new' }, error: null }),
+            }),
+          }),
+          update: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ error: null }),
+          }),
+        }
+
+      case 'workspaces':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: { owner_id: 'owner-1' }, error: null }),
+            }),
+          }),
+        }
+
+      case 'teams':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              single: teamsSingle,
+            }),
+          }),
+        }
+
+      case 'team_agents':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              order: vi.fn().mockResolvedValue({ data: [], error: null }),
+            }),
+          }),
+        }
+
+      case 'team_delegations':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ data: [], error: null }),
+          }),
+        }
+
+      case 'team_mind':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ data: [], error: null }),
+          }),
+        }
+
+      default:
+        throw new Error(`Unexpected table in test mock: ${table}`)
+    }
+  })
+
+  return { from }
+}
+
+function createSupabaseForReplacementDeployment() {
+  const teamsSingleResponses = [
+    { data: { current_version: 3 }, error: null }, // team version lookup for replacement team
+    {
+      data: { id: 'team-2', name: 'Growth Team', slug: 'growth', head_agent_id: null },
+      error: null,
+    }, // buildConfigSnapshot team lookup
+  ]
+
+  const teamsSingle = vi.fn().mockImplementation(async () => {
+    const next = teamsSingleResponses.shift()
+    return next || { data: null, error: new Error('Unexpected teams single call') }
+  })
+
+  const deploymentUpdates: Array<{ id: string; status: string }> = []
+
+  const from = vi.fn().mockImplementation((table: string) => {
+    switch (table) {
+      case 'plans':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({ data: { id: 'plan-2', team_id: 'team-2' }, error: null }),
+              }),
+            }),
+          }),
+        }
+
+      case 'workspace_deployed_teams':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: { id: 'existing-deployment', source_team_id: 'team-1', active_config: null },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+          insert: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: { id: 'deployment-new' }, error: null }),
+            }),
+          }),
+          update: vi.fn().mockImplementation((payload: { status: string }) => ({
+            eq: vi.fn().mockImplementation(async (_column: string, id: string) => {
+              deploymentUpdates.push({ id, status: payload.status })
+              return { error: null }
+            }),
+          })),
+        }
+
+      case 'workspaces':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: { owner_id: 'owner-1' }, error: null }),
+            }),
+          }),
+        }
+
+      case 'teams':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              single: teamsSingle,
+            }),
+          }),
+        }
+
+      case 'team_agents':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              order: vi.fn().mockResolvedValue({ data: [], error: null }),
+            }),
+          }),
+        }
+
+      case 'team_delegations':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ data: [], error: null }),
+          }),
+        }
+
+      case 'team_mind':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ data: [], error: null }),
+          }),
+        }
+
+      case 'workspace_deployed_agents':
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ data: [{ agent_id: 'old-agent-1' }], error: null }),
+          }),
+        }
+
+      case 'agent_schedules':
+        return {
+          update: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                in: vi.fn().mockReturnValue({
+                  eq: vi.fn().mockResolvedValue({ error: null }),
+                }),
+              }),
+            }),
+          }),
+        }
+
+      default:
+        throw new Error(`Unexpected table in replacement test mock: ${table}`)
+    }
+  })
+
+  return { from, deploymentUpdates }
+}
 
 describe('Auto-Deploy Functions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockProvisionDeploymentResources.mockResolvedValue(completeProvisioningSummary())
   })
 
   describe('autoDeployTeamForPlan', () => {
@@ -51,13 +301,23 @@ describe('Auto-Deploy Functions', () => {
     })
 
     it('should skip deployment if same team already deployed', async () => {
+      const activeConfig = {
+        team: { id: 'team-1', name: 'Starter Team', slug: 'starter', head_agent_id: null },
+        agents: [],
+        delegations: [],
+        team_mind: [],
+      }
       const mockChain = {
         from: vi.fn().mockReturnThis(),
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         single: vi.fn()
           .mockResolvedValueOnce({ data: { id: 'plan-1', team_id: 'team-1' }, error: null }) // plan lookup
-          .mockResolvedValueOnce({ data: { id: 'existing-deployment', source_team_id: 'team-1' }, error: null }), // existing deployment
+          .mockResolvedValueOnce({
+            data: { id: 'existing-deployment', source_team_id: 'team-1', active_config: activeConfig },
+            error: null,
+          }) // existing deployment
+          .mockResolvedValueOnce({ data: { owner_id: 'owner-1' }, error: null }), // workspace lookup
       }
       mockSupabase.mockReturnValue(mockChain)
 
@@ -66,6 +326,71 @@ describe('Auto-Deploy Functions', () => {
       expect(result.deployed).toBe(true)
       expect(result.teamId).toBe('team-1')
       expect(result.deploymentId).toBe('existing-deployment')
+    })
+
+    it('should return provisioning_incomplete when same-team deployment has zero schedules', async () => {
+      mockProvisionDeploymentResources.mockResolvedValueOnce(incompleteProvisioningSummary())
+
+      const activeConfig = {
+        team: { id: 'team-1', name: 'Starter Team', slug: 'starter', head_agent_id: null },
+        agents: [],
+        delegations: [],
+        team_mind: [],
+      }
+      const mockChain = {
+        from: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn()
+          .mockResolvedValueOnce({ data: { id: 'plan-1', team_id: 'team-1' }, error: null }) // plan lookup
+          .mockResolvedValueOnce({
+            data: { id: 'existing-deployment', source_team_id: 'team-1', active_config: activeConfig },
+            error: null,
+          }) // existing deployment
+          .mockResolvedValueOnce({ data: { owner_id: 'owner-1' }, error: null }), // workspace lookup
+      }
+      mockSupabase.mockReturnValue(mockChain)
+
+      const result = await autoDeployTeamForPlan('workspace-1', 'starter')
+
+      expect(result.deployed).toBe(false)
+      expect(result.errorCode).toBe('provisioning_incomplete')
+      expect(result.error).toContain('provisioning_incomplete:')
+      expect(result.provisioning?.issues).toEqual(['no_schedules'])
+      expect(result.deploymentId).toBe('existing-deployment')
+    })
+
+    it('should return provisioning_incomplete when new deployment has zero schedules', async () => {
+      mockProvisionDeploymentResources.mockResolvedValueOnce(incompleteProvisioningSummary())
+      mockSupabase.mockReturnValue(createSupabaseForNewDeployment())
+
+      const result = await autoDeployTeamForPlan('workspace-1', 'starter')
+
+      expect(result.deployed).toBe(false)
+      expect(result.errorCode).toBe('provisioning_incomplete')
+      expect(result.error).toContain('provisioning_incomplete:')
+      expect(result.provisioning?.issues).toEqual(['no_schedules'])
+      expect(result.deploymentId).toBe('deployment-new')
+    })
+
+    it('should not replace existing deployment when replacement provisioning is incomplete', async () => {
+      mockProvisionDeploymentResources.mockResolvedValueOnce(incompleteProvisioningSummary())
+
+      const replacementMock = createSupabaseForReplacementDeployment()
+      mockSupabase.mockReturnValue(replacementMock)
+
+      const result = await autoDeployTeamForPlan('workspace-1', 'teams')
+
+      expect(result.deployed).toBe(false)
+      expect(result.errorCode).toBe('provisioning_incomplete')
+      expect(replacementMock.deploymentUpdates).toContainEqual({
+        id: 'deployment-new',
+        status: 'failed',
+      })
+      expect(replacementMock.deploymentUpdates).not.toContainEqual({
+        id: 'existing-deployment',
+        status: 'replaced',
+      })
     })
   })
 

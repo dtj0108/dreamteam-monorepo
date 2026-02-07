@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from "react"
 import Link from "next/link"
-import { useUser } from "@/hooks/use-user"
+import { useWorkspace } from "@/providers/workspace-provider"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ConfigSidebar, type ConfigSection } from "@/components/agents/config-sidebar"
@@ -35,8 +35,8 @@ interface Agent {
 
 export default function AgentConfigurePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: agentId } = use(params)
-  const { user } = useUser()
-  const workspaceId = user?.workspaceId
+  const { currentWorkspace } = useWorkspace()
+  const workspaceId = currentWorkspace?.id
 
   const [agent, setAgent] = useState<Agent | null>(null)
   const [loading, setLoading] = useState(true)

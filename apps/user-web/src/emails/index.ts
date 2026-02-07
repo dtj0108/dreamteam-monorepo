@@ -18,6 +18,11 @@ export { AgentsIntroEmail } from './agents-intro';
 export { SupportRequestEmail } from './support-request';
 export { SupportConfirmationEmail } from './support-confirmation';
 export { EarlyAccessEmail } from './early-access';
+export { ContactInquiryEmail } from './contact-inquiry';
+export { ContactConfirmationEmail } from './contact-confirmation';
+export { MarketingOutreachEmail } from './marketing-outreach';
+export { LandingPageEmail } from './landing-page-email';
+export { AutonomousActionsEmail } from './autonomous-actions';
 
 // Sender configuration
 // Use RESEND_FROM_EMAIL if set (should be verified domain like hello@dreamteam.ai)
@@ -58,6 +63,63 @@ export async function sendEarlyAccessEmail(to: string) {
     to,
     subject: "You're on the early access list!",
     react: EarlyAccessEmail({ email: to }),
+  });
+}
+
+/**
+ * Send the marketing outreach email
+ */
+export async function sendMarketingOutreachEmail(
+  to: string | string[],
+  options?: { recipientName?: string; companyName?: string }
+) {
+  const { MarketingOutreachEmail } = await import('./marketing-outreach');
+
+  return sendEmail({
+    to,
+    subject: 'AI agents that actually work',
+    react: MarketingOutreachEmail({
+      recipientName: options?.recipientName,
+      companyName: options?.companyName,
+    }),
+  });
+}
+
+/**
+ * Send the landing page email
+ */
+export async function sendLandingPageEmail(
+  to: string | string[],
+  options?: { recipientName?: string; companyName?: string }
+) {
+  const { LandingPageEmail } = await import('./landing-page-email');
+
+  return sendEmail({
+    to,
+    subject: 'What happened while you slept',
+    react: LandingPageEmail({
+      recipientName: options?.recipientName,
+      companyName: options?.companyName,
+    }),
+  });
+}
+
+/**
+ * Send the autonomous actions email
+ */
+export async function sendAutonomousActionsEmail(
+  to: string | string[],
+  options?: { recipientName?: string; companyName?: string }
+) {
+  const { AutonomousActionsEmail } = await import('./autonomous-actions');
+
+  return sendEmail({
+    to,
+    subject: "Your agents don't wait for instructions",
+    react: AutonomousActionsEmail({
+      recipientName: options?.recipientName,
+      companyName: options?.companyName,
+    }),
   });
 }
 

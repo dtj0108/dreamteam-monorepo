@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { useUser } from "@/hooks/use-user"
+import { useWorkspace } from "@/providers/workspace-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -113,6 +114,7 @@ function FormRow({
 
 function AccountPageContent() {
   const { user, loading: userLoading, refreshUser } = useUser()
+  const { currentWorkspace } = useWorkspace()
   const searchParams = useSearchParams()
   const tabFromUrl = searchParams.get("tab")
   const [selectedTab, setSelectedTab] = useState(tabFromUrl || "details")
@@ -142,7 +144,7 @@ function AccountPageContent() {
   const [teamLoading, setTeamLoading] = useState(true)
 
   // Get workspace info from user
-  const workspaceId = user?.workspaceId
+  const workspaceId = currentWorkspace?.id
   const currentUserRole = user?.workspaceRole || "member"
 
   // Delete state
@@ -478,14 +480,14 @@ function AccountPageContent() {
           {/* My Details Tab */}
           <TabsContent value="details" className="mt-6 space-y-8">
             {/* Organization Card */}
-            {user?.workspaceId && (
+            {workspaceId && (
               <div className="rounded-lg border bg-muted/30 p-6">
                 <div className="flex items-start gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
                     <Building2 className="h-6 w-6 text-primary" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold">{user.workspaceName || "Your Organization"}</h3>
+                    <h3 className="text-lg font-semibold">{currentWorkspace?.name || user?.workspaceName || "Your Organization"}</h3>
                     <div className="mt-2 flex items-center gap-2">
                       {currentUserRole === "owner" ? (
                         <>

@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/check-pre-notifications",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/apply-pending-agent-downgrades",
+      "schedule": "0 * * * *"
     }
   ]
 }

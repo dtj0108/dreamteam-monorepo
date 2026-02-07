@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, type FormEvent } from "react"
 import { useParams } from "next/navigation"
+import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAgentChat, type AgentMessage } from "@/hooks/use-agent-chat"
 import { dbMessagesToAgentMessages } from "@/lib/message-mapper"
@@ -23,7 +24,9 @@ import {
 } from "@/components/ai-elements/prompt-input"
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
 import { useAgents } from "@/providers/agents-provider"
+import { useBillingContext } from "@/providers/billing-provider"
 import { useUser } from "@/hooks/use-user"
+import { useWorkspace } from "@/providers/workspace-provider"
 import {
   Conversation,
   ConversationContent,
@@ -33,10 +36,22 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Attachments,
   Attachment,
@@ -58,6 +73,9 @@ import {
   PanelLeft,
   Info,
   Settings,
+  Cpu,
+  CheckCircle,
+  ShieldAlert,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -112,8 +130,11 @@ export default function AgentChatPage() {
   const params = useParams()
   const agentId = params.id as string
   const { user } = useUser()
-  const workspaceId = user?.workspaceId || ""
+  const { currentWorkspace } = useWorkspace()
+  const workspaceId = currentWorkspace?.id || ""
   const { fetchAgent, currentAgent, isLoadingAgent, getLocalAgentById } = useAgents()
+  const { canAccessFeature, loading: billingLoading } = useBillingContext()
+  const canAccessAgents = canAccessFeature('agents')
 
   const cachedAgent = getLocalAgentById(agentId)
 
@@ -126,6 +147,22 @@ export default function AgentChatPage() {
   const [isInfoOpen, setIsInfoOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
+
+  // Style presets from agent config (persisted to server)
+  const [stylePresets, setStylePresets] = useState<{
+    verbosity: 'concise' | 'balanced' | 'detailed'
+    tone: 'casual' | 'balanced' | 'formal'
+    examples: 'few' | 'moderate' | 'many'
+  }>({
+    verbosity: 'balanced',
+    tone: 'balanced',
+    examples: 'moderate',
+  })
+  const [isSavingStyle, setIsSavingStyle] = useState(false)
+  const [styleSaved, setStyleSaved] = useState(false)
+
+  // Local UI preferences (client-side only via localStorage)
+  const [soundEnabled, setSoundEnabled] = useState(false)
   const { announcement, politeness, announcePolite } = useSRAnnouncer()
 
   // Loading states
@@ -283,6 +320,25 @@ export default function AgentChatPage() {
     previousStatusRef.current = status
   }, [status, announcePolite])
 
+  // Sync style presets when agent data loads
+  useEffect(() => {
+    if (currentAgent?.style_presets) {
+      setStylePresets({
+        verbosity: currentAgent.style_presets.verbosity || 'balanced',
+        tone: currentAgent.style_presets.tone || 'balanced',
+        examples: currentAgent.style_presets.examples || 'moderate',
+      })
+    }
+  }, [currentAgent?.style_presets])
+
+  // Load sound preference from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem(`agent-${agentId}-sound`)
+    if (stored !== null) {
+      setSoundEnabled(stored === 'true')
+    }
+  }, [agentId])
+
   const fetchConversations = useCallback(async () => {
     if (!workspaceId) return
     setIsLoadingActivity(true)
@@ -432,6 +488,56 @@ export default function AgentChatPage() {
     sendMessage(suggestion)
   }, [sendMessage])
 
+  const handleStyleChange = async (
+    key: 'verbosity' | 'tone' | 'examples',
+    value: string
+  ) => {
+    const newPresets = { ...stylePresets, [key]: value }
+
+    // Optimistic update
+    setStylePresets(newPresets as typeof stylePresets)
+    setIsSavingStyle(true)
+    setStyleSaved(false)
+
+    try {
+      const response = await fetch(`/api/team/agents/${agentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stylePresets: newPresets }),
+      })
+
+      if (response.ok) {
+        setStyleSaved(true)
+        setTimeout(() => setStyleSaved(false), 2000)
+      } else {
+        // Revert on error
+        if (currentAgent?.style_presets) {
+          setStylePresets({
+            verbosity: currentAgent.style_presets.verbosity || 'balanced',
+            tone: currentAgent.style_presets.tone || 'balanced',
+            examples: currentAgent.style_presets.examples || 'moderate',
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Failed to save style:', error)
+      if (currentAgent?.style_presets) {
+        setStylePresets({
+          verbosity: currentAgent.style_presets.verbosity || 'balanced',
+          tone: currentAgent.style_presets.tone || 'balanced',
+          examples: currentAgent.style_presets.examples || 'moderate',
+        })
+      }
+    } finally {
+      setIsSavingStyle(false)
+    }
+  }
+
+  const handleSoundToggle = (enabled: boolean) => {
+    setSoundEnabled(enabled)
+    localStorage.setItem(`agent-${agentId}-sound`, String(enabled))
+  }
+
   const displayName = currentAgent?.name || cachedAgent?.name || "Agent"
   const displayDescription = currentAgent?.description || cachedAgent?.description
   const displayAvatar = currentAgent?.avatar_url || cachedAgent?.avatar_url
@@ -493,8 +599,36 @@ export default function AgentChatPage() {
   }
 
   return (
-    <div className="flex flex-1 min-h-0 overflow-hidden">
+    <div className="relative flex flex-1 min-h-0 overflow-hidden">
       <SRAnnouncer message={announcement} politeness={politeness} />
+
+      {billingLoading && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4 p-8">
+            <Skeleton className="size-12 rounded-full" />
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+        </div>
+      )}
+
+      {!billingLoading && !canAccessAgents && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4 max-w-md text-center p-8">
+            <ShieldAlert className="size-12 text-muted-foreground" />
+            <h2 className="text-xl font-semibold">Agent Access Unavailable</h2>
+            <p className="text-muted-foreground">
+              An active agent subscription is required to chat with agents.
+              Please subscribe or renew your plan to continue.
+            </p>
+            <Button asChild>
+              <Link href="/team/settings?tab=billing">
+                Manage Subscription
+              </Link>
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Conversation sidebar (desktop) */}
       <div className="hidden md:flex">
@@ -557,26 +691,87 @@ export default function AgentChatPage() {
                   <span className="sr-only">Agent info</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right">
-                <SheetHeader>
-                  <SheetTitle>Agent info</SheetTitle>
-                  <SheetDescription>Overview and capabilities.</SheetDescription>
-                </SheetHeader>
-                <div className="space-y-4 text-sm">
-                  <div>
-                    <div className="font-medium">Name</div>
-                    <div className="text-muted-foreground">{displayName}</div>
-                  </div>
-                  {displayDescription && (
+              <SheetContent side="right" className="overflow-y-auto">
+                <SheetHeader className="pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="size-12 rounded-xl bg-muted flex items-center justify-center text-2xl">
+                      {displayAvatar || <Sparkles className="size-6 text-muted-foreground" />}
+                    </div>
                     <div>
-                      <div className="font-medium">Description</div>
-                      <div className="text-muted-foreground">{displayDescription}</div>
+                      <SheetTitle className="text-lg">{displayName}</SheetTitle>
+                      <SheetDescription className="text-xs">
+                        {currentAgent?.department?.name || "General Assistant"}
+                      </SheetDescription>
+                    </div>
+                  </div>
+                </SheetHeader>
+
+                <div className="space-y-6 px-4">
+                  {/* Status Badge */}
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className={statusBadgeClass}>
+                      {statusLabel}
+                    </Badge>
+                  </div>
+
+                  {/* Model Disclosure */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Powered by</Label>
+                    <div className="flex items-center gap-2">
+                      <Cpu className="size-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Internal Agent Harness with SOTA models</span>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Description */}
+                  {displayDescription && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wider">About</Label>
+                      <p className="text-sm text-muted-foreground">{displayDescription}</p>
                     </div>
                   )}
-                  <div>
-                    <div className="font-medium">Status</div>
-                    <div className="text-muted-foreground">{statusLabel}</div>
-                  </div>
+
+                  {/* Capabilities from system_prompt */}
+                  {currentAgent?.system_prompt && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wider">Capabilities</Label>
+                      <p className="text-sm text-muted-foreground line-clamp-4">
+                        {currentAgent.system_prompt.length > 200
+                          ? `${currentAgent.system_prompt.slice(0, 200)}...`
+                          : currentAgent.system_prompt}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Tools */}
+                  {currentAgent?.tools && currentAgent.tools.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wider">Tools</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {currentAgent.tools.filter(t => t.is_enabled).map(tool => (
+                          <Badge key={tool.id} variant="secondary" className="text-xs">
+                            {tool.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Skills */}
+                  {currentAgent?.skills && currentAgent.skills.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wider">Skills</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {currentAgent.skills.filter(s => s.is_enabled).map(skill => (
+                          <Badge key={skill.id} variant="outline" className="text-xs">
+                            {skill.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </SheetContent>
             </Sheet>
@@ -588,13 +783,91 @@ export default function AgentChatPage() {
                   <span className="sr-only">Chat settings</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right">
+              <SheetContent side="right" className="w-[400px] sm:w-[440px] sm:max-w-[440px]">
                 <SheetHeader>
-                  <SheetTitle>Chat settings</SheetTitle>
-                  <SheetDescription>Preferences for this chat.</SheetDescription>
+                  <SheetTitle>Chat Settings</SheetTitle>
+                  <SheetDescription>Customize how this agent responds.</SheetDescription>
                 </SheetHeader>
-                <div className="space-y-3 text-sm text-muted-foreground">
-                  <p>Preferences will appear here in a future update.</p>
+
+                <div className="px-4 mt-6 space-y-6">
+                  {/* Response Length */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Response Length</Label>
+                      {isSavingStyle && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
+                      {styleSaved && <CheckCircle className="size-3 text-muted-foreground" />}
+                    </div>
+                    <Select
+                      value={stylePresets.verbosity}
+                      onValueChange={(v) => handleStyleChange('verbosity', v)}
+                      disabled={isSavingStyle}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="concise">Concise</SelectItem>
+                        <SelectItem value="balanced">Balanced</SelectItem>
+                        <SelectItem value="detailed">Detailed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">How much detail to include in responses.</p>
+                  </div>
+
+                  {/* Tone */}
+                  <div className="space-y-2">
+                    <Label>Tone</Label>
+                    <Select
+                      value={stylePresets.tone}
+                      onValueChange={(v) => handleStyleChange('tone', v)}
+                      disabled={isSavingStyle}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="casual">Casual</SelectItem>
+                        <SelectItem value="balanced">Balanced</SelectItem>
+                        <SelectItem value="formal">Formal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">The communication style of responses.</p>
+                  </div>
+
+                  {/* Examples */}
+                  <div className="space-y-2">
+                    <Label>Examples</Label>
+                    <Select
+                      value={stylePresets.examples}
+                      onValueChange={(v) => handleStyleChange('examples', v)}
+                      disabled={isSavingStyle}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="few">Few</SelectItem>
+                        <SelectItem value="moderate">Moderate</SelectItem>
+                        <SelectItem value="many">Many</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">How often to include examples.</p>
+                  </div>
+
+                  <Separator />
+
+                  {/* Sound Effects */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label htmlFor="sound-enabled">Sound Effects</Label>
+                      <p className="text-xs text-muted-foreground">Play sound when agent responds.</p>
+                    </div>
+                    <Switch
+                      id="sound-enabled"
+                      checked={soundEnabled}
+                      onCheckedChange={handleSoundToggle}
+                    />
+                  </div>
                 </div>
               </SheetContent>
             </Sheet>

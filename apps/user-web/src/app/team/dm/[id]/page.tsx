@@ -20,8 +20,7 @@ interface DMParticipant {
 export default function DMPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: dmId } = use(params)
   const { user } = useUser()
-  const { getDMById, refreshDMs } = useTeam()
-  const workspaceId = user?.workspaceId
+  const { getDMById, refreshDMs, workspaceId } = useTeam()
 
   // Get cached DM data from sidebar for instant display
   const cachedDM = getDMById(dmId)

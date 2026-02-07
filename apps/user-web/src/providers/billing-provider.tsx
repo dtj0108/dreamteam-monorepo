@@ -2,6 +2,7 @@
 
 import { createContext, useContext, ReactNode } from 'react'
 import { useBilling } from '@/hooks/use-billing'
+import { useWorkspaceOptional } from './workspace-provider'
 import type { BillingState, BillingInvoice } from '@/types/billing'
 
 /**
@@ -11,6 +12,8 @@ interface CheckoutResult {
   upgraded?: boolean
   newTier?: string
   redirected?: boolean
+  downgradeScheduled?: boolean
+  effectiveAt?: string | null
 }
 
 /**
@@ -82,6 +85,10 @@ interface BillingProviderProps {
  * to enable access to billing state and feature gating.
  */
 export function BillingProvider({ children }: BillingProviderProps) {
+  // Get current workspace to refresh billing when workspace changes
+  const workspaceContext = useWorkspaceOptional()
+  const currentWorkspaceId = workspaceContext?.currentWorkspace?.id
+
   const {
     billing,
     invoices,
@@ -96,7 +103,7 @@ export function BillingProvider({ children }: BillingProviderProps) {
     hasAgents,
     agentCount,
     trialDaysRemaining,
-  } = useBilling()
+  } = useBilling(currentWorkspaceId)
 
   /**
    * Check if user can access a specific feature based on billing

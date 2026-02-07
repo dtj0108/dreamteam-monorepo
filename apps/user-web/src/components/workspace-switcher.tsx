@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Popover, PopoverContent, PopoverAnchor } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
+import { getLearnProductFromPath } from "@/components/learn"
 
 const workspaces: {
   id: ProductId
@@ -71,16 +72,27 @@ const workspaces: {
     href: "/knowledge",
     matchPaths: ["/knowledge"],
   },
+  {
+    id: "agents",
+    name: "Agents",
+    description: "AI assistants",
+    emoji: "🤖",
+    href: "/agents",
+    matchPaths: ["/agents"],
+  },
 ]
 
 export type WorkspaceId = ProductId
 
 export function useCurrentWorkspace(): WorkspaceId {
   const pathname = usePathname()
+  const learnProduct = getLearnProductFromPath(pathname)
+
+  if (learnProduct) return learnProduct
 
   if (pathname.startsWith("/sales")) return "sales"
   if (pathname.startsWith("/team")) return "team"
-  if (pathname.startsWith("/projects") || pathname.startsWith("/learn/projects")) return "projects"
+  if (pathname.startsWith("/projects")) return "projects"
   if (pathname.startsWith("/knowledge")) return "knowledge"
   if (pathname.startsWith("/agents")) return "agents"
   return "finance"
@@ -107,7 +119,7 @@ export function WorkspaceSwitcher() {
   }
 
   // Get user's allowed products (default to all if not set)
-  const allowedProducts = user?.allowedProducts || ["finance", "sales", "team", "projects", "knowledge"]
+  const allowedProducts = user?.allowedProducts || ["finance", "sales", "team", "projects", "knowledge", "agents"]
 
   // Filter workspaces based on user's access
   const accessibleWorkspaces = workspaces.filter(w => allowedProducts.includes(w.id))
@@ -193,7 +205,7 @@ export function WorkspaceSwitcher() {
             })}
             <DropdownMenuSeparator />
             <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              Switch with ⌘1-5
+              Switch with ⌘1-6
             </div>
           </DropdownMenuContent>
           </DropdownMenu>

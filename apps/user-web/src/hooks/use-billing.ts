@@ -15,6 +15,8 @@ interface CheckoutResult {
   redirected?: boolean
   deploymentFailed?: boolean
   deploymentError?: string
+  downgradeScheduled?: boolean
+  effectiveAt?: string | null
   requiresAction?: boolean // 3DS needed
   clientSecret?: string // For 3DS confirmation
 }
@@ -58,8 +60,9 @@ interface UseBillingReturn {
 
 /**
  * Hook for managing billing state and actions
+ * @param workspaceId - Optional workspace ID to trigger refresh when workspace changes
  */
-export function useBilling(): UseBillingReturn {
+export function useBilling(workspaceId?: string): UseBillingReturn {
   const [billing, setBilling] = useState<BillingState | null>(null)
   const [invoices, setInvoices] = useState<BillingInvoice[]>([])
   const [isOwner, setIsOwner] = useState(false)
@@ -92,10 +95,10 @@ export function useBilling(): UseBillingReturn {
     }
   }, [])
 
-  // Fetch billing data on mount
+  // Fetch billing data on mount and when workspace changes
   useEffect(() => {
     refresh()
-  }, [refresh])
+  }, [refresh, workspaceId])
 
   /**
    * Create a checkout session and redirect to Stripe, or handle immediate upgrade
@@ -135,6 +138,14 @@ export function useBilling(): UseBillingReturn {
           newTier: data.newTier,
           deploymentFailed: data.deploymentFailed,
           deploymentError: data.deploymentError,
+        }
+      }
+
+      if (data.downgradeScheduled) {
+        await refresh()
+        return {
+          downgradeScheduled: true,
+          effectiveAt: data.effectiveAt || null,
         }
       }
 

@@ -11,6 +11,8 @@ import {
   savePaymentMethodFromIntent,
   type WorkspacePlan,
   type AgentTier,
+  type SubscriptionStatus,
+  getTierLevel,
 } from '@/lib/billing-queries'
 import {
   findPendingSMSPurchase,
@@ -21,7 +23,7 @@ import {
   markCallMinutesPurchaseFailed,
 } from '@/lib/addons-queries'
 import { type CreditBundle } from '@/types/addons'
-import { autoDeployTeamForPlan } from '@dreamteam/database'
+import { autoDeployTeamForPlan, applyPendingTierChange } from '@dreamteam/database'
 import {
   logBillingEvent,
   logSubscriptionCreated,
@@ -182,21 +184,70 @@ export async function POST(request: NextRequest) {
         await completeCheckoutSession(session.id)
 
         // Update billing from subscription
-        await updateBillingFromSubscription(workspaceId, subscriptionId, sessionType as 'workspace_plan' | 'agent_tier', targetPlan)
+        await updateBillingFromSubscription(
+          workspaceId,
+          subscriptionId,
+          sessionType as 'workspace_plan' | 'agent_tier',
+          targetPlan
+        )
 
-        // Auto-deploy team for agent tier subscriptions
-        if (sessionType === 'agent_tier' && targetPlan) {
+        // Retrieve subscription once for status + logging
+        const fullSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+
+        // Auto-deploy team for agent tier subscriptions (active only)
+        if (sessionType === 'agent_tier' && targetPlan && fullSubscription.status === 'active') {
           console.log(`[auto-deploy] Triggering deployment for workspace ${workspaceId} with plan ${targetPlan}`)
-          const deployResult = await autoDeployTeamForPlan(workspaceId, targetPlan)
-          if (deployResult.deployed) {
-            console.log(`[auto-deploy] Successfully deployed team ${deployResult.teamId} to workspace ${workspaceId}`)
-          } else {
-            console.error(`[auto-deploy] Failed to deploy team for workspace ${workspaceId}: ${deployResult.error}`)
+
+          // Set deploy status to pending before attempting
+          await supabase
+            .from('workspace_billing')
+            .update({
+              agent_deploy_status: 'pending',
+              agent_deploy_error: null,
+              agent_deploy_attempted_at: new Date().toISOString(),
+            })
+            .eq('workspace_id', workspaceId)
+
+          try {
+            const deployResult = await autoDeployTeamForPlan(workspaceId, targetPlan)
+            if (deployResult.deployed) {
+              console.log(`[auto-deploy] Successfully deployed team ${deployResult.teamId} to workspace ${workspaceId}`)
+              await supabase
+                .from('workspace_billing')
+                .update({ agent_deploy_status: 'deployed', agent_deploy_error: null })
+                .eq('workspace_id', workspaceId)
+            } else {
+              console.error(`[auto-deploy] Failed to deploy team for workspace ${workspaceId}: ${deployResult.error}`)
+              await supabase
+                .from('workspace_billing')
+                .update({ agent_deploy_status: 'failed', agent_deploy_error: deployResult.error || 'deploy_failed' })
+                .eq('workspace_id', workspaceId)
+              await supabase.from('billing_alerts').insert({
+                workspace_id: workspaceId,
+                alert_type: 'deploy_failed',
+                severity: 'high',
+                title: 'Agent deployment failed',
+                description: `Auto-deploy failed after checkout for plan ${targetPlan}: ${deployResult.error || 'unknown error'}`,
+              })
+            }
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : 'unknown error'
+            console.error(`[auto-deploy] Deploy error for workspace ${workspaceId}:`, err)
+            await supabase
+              .from('workspace_billing')
+              .update({ agent_deploy_status: 'failed', agent_deploy_error: errMsg })
+              .eq('workspace_id', workspaceId)
+            await supabase.from('billing_alerts').insert({
+              workspace_id: workspaceId,
+              alert_type: 'deploy_failed',
+              severity: 'high',
+              title: 'Agent deployment failed',
+              description: `Auto-deploy threw error after checkout for plan ${targetPlan}: ${errMsg}`,
+            })
           }
         }
 
         // Log billing event for subscription creation
-        const fullSubscription = await stripe.subscriptions.retrieve(subscriptionId)
         await logSubscriptionCreated(
           workspaceId,
           fullSubscription,
@@ -216,6 +267,164 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription
         const workspaceId = subscription.metadata?.workspace_id
         const subscriptionType = subscription.metadata?.type as 'workspace_plan' | 'agent_tier'
+
+        const resolveAgentTier = async (): Promise<AgentTier | null> => {
+          const metadataTier = subscription.metadata?.agent_tier || subscription.metadata?.target_plan
+          if (metadataTier) {
+            return metadataTier as AgentTier
+          }
+
+          const priceId = subscription.items?.data?.[0]?.price?.id
+          if (!priceId) return null
+
+          const { data: plan } = await supabase
+            .from('plans')
+            .select('slug')
+            .eq('plan_type', 'agent_tier')
+            .eq('stripe_price_id', priceId)
+            .single()
+
+          return (plan?.slug as AgentTier) || null
+        }
+
+        const applyAgentTierUpdate = async (workspaceId: string, targetPlan: AgentTier | null) => {
+          if (!targetPlan) return
+
+          const { data: billing } = await supabase
+            .from('workspace_billing')
+            .select('agent_tier, agent_tier_pending, agent_tier_pending_effective_at')
+            .eq('workspace_id', workspaceId)
+            .single()
+
+          const currentTier = (billing?.agent_tier as AgentTier) || 'none'
+          const pendingTier = (billing?.agent_tier_pending as AgentTier | null) || null
+          const pendingEffectiveAt = billing?.agent_tier_pending_effective_at || null
+
+          const isDowngrade = getTierLevel(targetPlan) < getTierLevel(currentTier)
+          const isUpgrade = getTierLevel(targetPlan) > getTierLevel(currentTier)
+
+          const periodEndTs = (subscription as unknown as { current_period_end?: number }).current_period_end
+          const periodEnd = typeof periodEndTs === 'number'
+            ? new Date(periodEndTs * 1000).toISOString()
+            : null
+
+          if (isDowngrade) {
+            await supabase
+              .from('workspace_billing')
+              .update({
+                stripe_agent_subscription_id: subscription.id,
+                agent_status: subscription.status as SubscriptionStatus,
+                agent_period_end: periodEnd,
+                agent_tier_pending: targetPlan,
+                agent_tier_pending_effective_at: periodEnd,
+              })
+              .eq('workspace_id', workspaceId)
+            return
+          }
+
+          if (isUpgrade) {
+            if (subscription.status === 'active') {
+              await supabase
+                .from('workspace_billing')
+                .update({
+                  stripe_agent_subscription_id: subscription.id,
+                  agent_tier: targetPlan,
+                  agent_status: subscription.status as SubscriptionStatus,
+                  agent_period_end: periodEnd,
+                  agent_tier_pending: null,
+                  agent_tier_pending_effective_at: null,
+                  agent_deploy_status: 'pending',
+                  agent_deploy_error: null,
+                  agent_deploy_attempted_at: new Date().toISOString(),
+                })
+                .eq('workspace_id', workspaceId)
+
+              try {
+                const deployResult = await autoDeployTeamForPlan(workspaceId, targetPlan)
+                if (deployResult.deployed) {
+                  await supabase
+                    .from('workspace_billing')
+                    .update({ agent_deploy_status: 'deployed', agent_deploy_error: null })
+                    .eq('workspace_id', workspaceId)
+                } else {
+                  console.error(`[auto-deploy] Failed to deploy team for workspace ${workspaceId}: ${deployResult.error}`)
+                  await supabase
+                    .from('workspace_billing')
+                    .update({ agent_deploy_status: 'failed', agent_deploy_error: deployResult.error || 'deploy_failed' })
+                    .eq('workspace_id', workspaceId)
+                  await supabase.from('billing_alerts').insert({
+                    workspace_id: workspaceId,
+                    alert_type: 'deploy_failed',
+                    severity: 'high',
+                    title: 'Agent deployment failed',
+                    description: `Auto-deploy failed after upgrade to ${targetPlan}: ${deployResult.error || 'unknown error'}`,
+                  })
+                }
+              } catch (err) {
+                const errMsg = err instanceof Error ? err.message : 'unknown error'
+                console.error(`[auto-deploy] Deploy error for workspace ${workspaceId}:`, err)
+                await supabase
+                  .from('workspace_billing')
+                  .update({ agent_deploy_status: 'failed', agent_deploy_error: errMsg })
+                  .eq('workspace_id', workspaceId)
+                await supabase.from('billing_alerts').insert({
+                  workspace_id: workspaceId,
+                  alert_type: 'deploy_failed',
+                  severity: 'high',
+                  title: 'Agent deployment failed',
+                  description: `Auto-deploy threw error after upgrade to ${targetPlan}: ${errMsg}`,
+                })
+              }
+            } else {
+              await supabase
+                .from('workspace_billing')
+                .update({
+                  stripe_agent_subscription_id: subscription.id,
+                  agent_status: subscription.status as SubscriptionStatus,
+                  agent_period_end: periodEnd,
+                  agent_tier_pending: targetPlan,
+                  agent_tier_pending_effective_at: null,
+                })
+                .eq('workspace_id', workspaceId)
+            }
+            return
+          }
+
+          // Same tier: update status/period, and apply pending if due + active
+          if (
+            pendingTier &&
+            subscription.status === 'active' &&
+            pendingEffectiveAt &&
+            new Date(pendingEffectiveAt).getTime() <= Date.now()
+          ) {
+            // Update subscription status fields first
+            await supabase
+              .from('workspace_billing')
+              .update({
+                stripe_agent_subscription_id: subscription.id,
+                agent_status: subscription.status as SubscriptionStatus,
+                agent_period_end: periodEnd,
+              })
+              .eq('workspace_id', workspaceId)
+
+            // Use atomic CAS to apply the pending tier change
+            const casResult = await applyPendingTierChange(workspaceId, pendingTier)
+            if (!casResult.applied) {
+              console.warn(`[webhook] CAS did not apply pending tier for workspace ${workspaceId}: ${casResult.error}`)
+            } else if (casResult.error) {
+              console.error(`[webhook] Pending tier applied but deploy issue for workspace ${workspaceId}: ${casResult.error}`)
+            }
+          } else {
+            await supabase
+              .from('workspace_billing')
+              .update({
+                stripe_agent_subscription_id: subscription.id,
+                agent_status: subscription.status as SubscriptionStatus,
+                agent_period_end: periodEnd,
+              })
+              .eq('workspace_id', workspaceId)
+          }
+        }
 
         if (!workspaceId) {
           // Try to find workspace by subscription ID
@@ -238,40 +447,26 @@ export async function POST(request: NextRequest) {
             .single()
 
           const type = isWorkspacePlan.data ? 'workspace_plan' : 'agent_tier'
-          await updateBillingFromSubscription(billing.workspace_id, subscription.id, type)
-        } else {
-          let previousAgentTier: AgentTier | null = null
-          if (subscriptionType === 'agent_tier') {
-            const { data: billing } = await supabase
-              .from('workspace_billing')
-              .select('agent_tier')
-              .eq('workspace_id', workspaceId)
-              .single()
-            previousAgentTier = (billing?.agent_tier as AgentTier) || null
+          const targetPlan = type === 'agent_tier' ? await resolveAgentTier() : undefined
+          if (type === 'agent_tier') {
+            await applyAgentTierUpdate(billing.workspace_id, targetPlan || null)
+          } else {
+            await updateBillingFromSubscription(billing.workspace_id, subscription.id, type, targetPlan || undefined)
           }
+        } else {
+          const targetPlan = subscriptionType === 'agent_tier'
+            ? await resolveAgentTier()
+            : subscription.metadata?.target_plan
 
-          const targetPlan = subscription.metadata?.agent_tier
-
-          await updateBillingFromSubscription(
-            workspaceId,
-            subscription.id,
-            subscriptionType,
-            subscriptionType === 'agent_tier' && targetPlan ? targetPlan : undefined
-          )
-
-          if (
-            subscriptionType === 'agent_tier' &&
-            targetPlan &&
-            previousAgentTier &&
-            targetPlan !== previousAgentTier
-          ) {
-            console.log(`[auto-deploy] Subscription updated - deploying ${targetPlan} for workspace ${workspaceId}`)
-            const deployResult = await autoDeployTeamForPlan(workspaceId, targetPlan)
-            if (deployResult.deployed) {
-              console.log(`[auto-deploy] Successfully deployed team ${deployResult.teamId} to workspace ${workspaceId}`)
-            } else {
-              console.error(`[auto-deploy] Failed to deploy team for workspace ${workspaceId}: ${deployResult.error}`)
-            }
+          if (subscriptionType === 'agent_tier') {
+            await applyAgentTierUpdate(workspaceId, (targetPlan as AgentTier | null) || null)
+          } else {
+            await updateBillingFromSubscription(
+              workspaceId,
+              subscription.id,
+              subscriptionType,
+              targetPlan || undefined
+            )
           }
         }
 

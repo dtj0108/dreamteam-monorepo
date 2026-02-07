@@ -29,6 +29,8 @@ export interface BillingState {
   plan_period_end: string | null
   plan_cancel_at_period_end: boolean
   agent_tier: AgentTier
+  agent_tier_pending?: AgentTier | null
+  agent_tier_pending_effective_at?: string | null
   agent_status: SubscriptionStatus | null
   agent_period_end: string | null
   trial_start: string | null

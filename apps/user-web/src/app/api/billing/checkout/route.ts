@@ -11,11 +11,24 @@ import {
   getWorkspaceBilling,
   getOrCreateStripeCustomer,
   recordCheckoutSession,
-  isActiveSubscription,
   updateAgentTierSubscription,
   createAgentTierSubscription,
+  getTierLevel,
+  resolveAgentTierSubscription,
 } from '@/lib/billing-queries'
 import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
+
+/**
+ * Timeout wrapper for operations that might hang
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
+    ),
+  ])
+}
 
 /**
  * POST /api/billing/checkout
@@ -121,35 +134,130 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Log the price being used for debugging
+    console.log(`[checkout] Using price ID: ${priceId} for ${sessionType} (${targetPlan})`)
+
+    let isDowngrade = false
+    if (type === 'agent_tier' && tier) {
+      const currentTier = billing?.agent_tier || 'none'
+      isDowngrade = currentTier !== 'none' && getTierLevel(tier) < getTierLevel(currentTier)
+    }
+
     // For agent tier: Check if changing from existing tier
     if (type === 'agent_tier' && tier) {
+
       // Check if user has an existing agent subscription to update
       if (billing?.stripe_agent_subscription_id && billing.agent_tier !== 'none') {
         // Allow both upgrades and downgrades - updateAgentTierSubscription handles proration
-        // Perform direct subscription update with proration
-        const result = await updateAgentTierSubscription(
-          workspaceId,
-          billing.stripe_agent_subscription_id,
-          tier,
-          priceId
+        // Perform direct subscription update with proration (30s timeout)
+        try {
+          const result = await withTimeout(
+            updateAgentTierSubscription(
+              workspaceId,
+              billing.stripe_agent_subscription_id,
+              tier,
+              priceId,
+              {
+                prorationBehavior: isDowngrade ? 'none' : 'create_prorations',
+                deferDeployment: isDowngrade,
+                pendingEffectiveAt: isDowngrade ? undefined : null,
+              }
+            ),
+            30000,
+            'Subscription update'
+          )
+
+          if (!result.success) {
+            return NextResponse.json(
+              { error: result.error || 'Failed to upgrade subscription' },
+              { status: 500 }
+            )
+          }
+
+          if (isDowngrade) {
+            return NextResponse.json({
+              success: true,
+              downgradeScheduled: true,
+              effectiveAt: result.periodEnd || null,
+            })
+          }
+
+          // Return success without redirect (immediate upgrade)
+          return NextResponse.json({
+            success: true,
+            upgraded: true,
+            newTier: tier,
+            ...(result.prorationInvoiceFailed ? { prorationInvoiceFailed: true } : {}),
+          })
+        } catch (error) {
+          // If timeout, subscription likely succeeded but deploy is slow
+          if (error instanceof Error && error.message.includes('timed out')) {
+            console.warn('[checkout] Subscription update timed out, returning partial success')
+            if (isDowngrade) {
+              return NextResponse.json({
+                success: true,
+                downgradeScheduled: true,
+                effectiveAt: null,
+                message: 'Downgrade scheduled. Your plan will switch at period end.',
+              })
+            }
+            return NextResponse.json({
+              success: true,
+              upgraded: true,
+              newTier: tier,
+              deploymentPending: true,
+              message: 'Subscription updated. Your agents will be available shortly.',
+            })
+          }
+          throw error
+        }
+      }
+
+      // Check Stripe for existing subscription before creating a new one
+      // This handles cases where database is out of sync
+      const { primary: existingAgentSub } = await resolveAgentTierSubscription(
+        customerId,
+        billing?.stripe_agent_subscription_id || undefined
+      )
+
+      if (existingAgentSub) {
+        console.log(`[checkout] Found existing agent subscription ${existingAgentSub.id}, updating instead of creating new`)
+
+        const result = await withTimeout(
+          updateAgentTierSubscription(workspaceId, existingAgentSub.id, tier, priceId, {
+            prorationBehavior: isDowngrade ? 'none' : 'create_prorations',
+            deferDeployment: isDowngrade,
+            pendingEffectiveAt: isDowngrade ? undefined : null,
+          }),
+          30000,
+          'Subscription update (existing found)'
         )
 
-        if (!result.success) {
-          return NextResponse.json(
-            { error: result.error || 'Failed to upgrade subscription' },
-            { status: 500 }
-          )
-        }
+        if (result.success) {
+          if (isDowngrade) {
+            return NextResponse.json({
+              success: true,
+              downgradeScheduled: true,
+              effectiveAt: result.periodEnd || null,
+            })
+          }
 
-        // Return success without redirect (immediate upgrade)
-        // Include deployment status so UI can show warning if agents failed to deploy
-        return NextResponse.json({
-          success: true,
-          upgraded: true,
-          newTier: tier,
-          deploymentFailed: result.deploymentFailed,
-          deploymentError: result.deploymentError,
-        })
+          if (billing?.stripe_agent_subscription_id !== existingAgentSub.id) {
+            await supabase
+              .from('workspace_billing')
+              .update({ stripe_agent_subscription_id: existingAgentSub.id })
+              .eq('workspace_id', workspaceId)
+          }
+
+            return NextResponse.json({
+              success: true,
+              upgraded: true,
+              newTier: tier,
+              ...(result.prorationInvoiceFailed ? { prorationInvoiceFailed: true } : {}),
+            })
+          }
+
+        console.error(`[checkout] Failed to update existing subscription: ${result.error}`)
       }
 
       // NEW: Direct subscription creation for users with saved payment method
@@ -157,34 +265,51 @@ export async function POST(request: NextRequest) {
       if (billing?.default_payment_method_id) {
         console.log(`[checkout] User has saved payment method, attempting direct subscription creation`)
 
-        const result = await createAgentTierSubscription(workspaceId, tier, priceId)
-
-        if (result.requiresAction) {
-          // 3DS required - return client secret for frontend handling
-          return NextResponse.json({
-            success: false,
-            requiresAction: true,
-            clientSecret: result.clientSecret,
-          })
-        }
-
-        if (!result.success) {
-          // Payment failed - could fall through to Checkout, but better to show error
-          // so user knows their saved card failed
-          return NextResponse.json(
-            { error: result.error || 'Failed to create subscription' },
-            { status: 500 }
+        try {
+          const result = await withTimeout(
+            createAgentTierSubscription(workspaceId, tier, priceId),
+            30000,
+            'Subscription creation'
           )
-        }
 
-        // Success - subscription created with saved card
-        return NextResponse.json({
-          success: true,
-          upgraded: true, // Use same response shape as upgrades
-          newTier: tier,
-          deploymentFailed: result.deploymentFailed,
-          deploymentError: result.deploymentError,
-        })
+          if (result.requiresAction) {
+            // 3DS required - return client secret for frontend handling
+            return NextResponse.json({
+              success: false,
+              requiresAction: true,
+              clientSecret: result.clientSecret,
+            })
+          }
+
+          if (!result.success) {
+            // Payment failed - could fall through to Checkout, but better to show error
+            // so user knows their saved card failed
+            return NextResponse.json(
+              { error: result.error || 'Failed to create subscription' },
+              { status: 500 }
+            )
+          }
+
+          // Success - subscription created with saved card
+          return NextResponse.json({
+            success: true,
+            upgraded: true, // Use same response shape as upgrades
+            newTier: tier,
+          })
+        } catch (error) {
+          // If timeout, subscription likely succeeded but deploy is slow
+          if (error instanceof Error && error.message.includes('timed out')) {
+            console.warn('[checkout] Subscription creation timed out, returning partial success')
+            return NextResponse.json({
+              success: true,
+              upgraded: true,
+              newTier: tier,
+              deploymentPending: true,
+              message: 'Subscription created. Your agents will be available shortly.',
+            })
+          }
+          throw error
+        }
       }
     }
 
@@ -216,6 +341,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           workspace_id: workspaceId,
           type: sessionType,
+          ...(sessionType === 'agent_tier' && { agent_tier: targetPlan }),
         },
       },
     })

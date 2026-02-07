@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { useUser } from "@/hooks/use-user"
+import { useWorkspace } from "@/providers/workspace-provider"
 
 export interface KnowledgeCategory {
   id: string
@@ -229,9 +229,9 @@ function transformWhiteboard(wb: Record<string, unknown>): Whiteboard {
 }
 
 export function KnowledgeProvider({ children }: { children: ReactNode }) {
-  const { user } = useUser()
+  const { currentWorkspace } = useWorkspace()
   const router = useRouter()
-  const workspaceId = user?.workspaceId || undefined
+  const workspaceId = currentWorkspace?.id || undefined
 
   const [pages, setPages] = useState<KnowledgePage[]>([])
   const [templates, setTemplates] = useState<KnowledgeTemplate[]>([])

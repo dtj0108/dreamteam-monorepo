@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, getWorkspaceDeployment } from "@dreamteam/database"
 import { getSession } from "@dreamteam/auth/session"
-import type { AgentWithHireStatus, AgentDepartment } from "@/lib/types/agents"
+import type { AgentWithHireStatus, AgentDepartment, ToolCategory } from "@/lib/types/agents"
+
+// Types for deployed agent tools/skills from active_config
+interface DeployedTool {
+  id: string
+  name: string
+  description?: string
+  category?: string
+}
+
+interface DeployedSkill {
+  id: string
+  name: string
+  content?: string
+}
 
 // Type for deployed agent from active_config
 interface DeployedAgent {
@@ -14,8 +28,8 @@ interface DeployedAgent {
   model: string
   provider?: string
   is_enabled: boolean
-  tools: unknown[]
-  skills: unknown[]
+  tools: DeployedTool[]
+  skills: DeployedSkill[]
   mind: unknown[]
   rules: unknown[]
   department_id?: string | null
@@ -117,6 +131,23 @@ export async function GET(request: NextRequest) {
           published_version: 1,
           created_at: deployedAt,
           updated_at: deployedAt,
+          // Tools and skills from deployed config
+          tools: (agent.tools || []).map((t) => ({
+            id: t.id,
+            name: t.name,
+            description: t.description || '',
+            category: (t.category || 'agents') as ToolCategory,
+            input_schema: {},
+            is_builtin: true,
+            is_enabled: true,
+          })),
+          skills: (agent.skills || []).map((s) => ({
+            id: s.id,
+            name: s.name,
+            description: s.content || '',
+            skill_content: s.content || '',
+            is_enabled: true,
+          })),
           // New fields for auto-hire model
           isHired: agent.is_enabled, // Hired = in deployed team AND enabled
           isInPlan: true, // All agents from deployed team are part of the plan

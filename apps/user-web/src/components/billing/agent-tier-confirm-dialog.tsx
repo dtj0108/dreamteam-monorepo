@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Bot, Loader2, ArrowRight, CreditCard, Sparkles, AlertTriangle } from 'lucide-react'
+import { toast } from 'sonner'
 import { type AgentTier, formatPrice, formatCardBrand } from '@/types/billing'
 
 export interface AgentTierPricing {
@@ -77,9 +78,17 @@ export function AgentTierConfirmDialog({
 
   const handleConfirm = async () => {
     setIsProcessing(true)
+
+    // Safety timeout - reset processing state after 45 seconds if request hangs
+    const timeoutId = setTimeout(() => {
+      setIsProcessing(false)
+      toast.error('Request timed out. Please check your billing status and refresh the page.')
+    }, 45000)
+
     try {
       await onConfirm()
     } finally {
+      clearTimeout(timeoutId)
       setIsProcessing(false)
     }
   }
@@ -152,7 +161,7 @@ export function AgentTierConfirmDialog({
               {isDowngrade && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <p className="text-sm text-amber-800">
-                    You&apos;ll lose access to your current agents and switch to the {targetTierInfo.name} product line.
+                    Downgrades take effect at the end of your current billing period. You&apos;ll keep your current agents until then.
                   </p>
                 </div>
               )}

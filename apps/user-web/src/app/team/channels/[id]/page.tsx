@@ -52,9 +52,8 @@ export default function ChannelPage({ params }: { params: Promise<{ id: string }
   const { id: channelId } = use(params)
   const router = useRouter()
   const { user } = useUser()
-  const { getChannelById } = useTeam()
+  const { getChannelById, workspaceId } = useTeam()
   const { createMeeting } = useMeeting()
-  const workspaceId = user?.workspaceId
 
   // Get cached channel data from sidebar for instant display
   const cachedChannel = getChannelById(channelId)

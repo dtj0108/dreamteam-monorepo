@@ -1,14 +1,19 @@
 "use client"
 
 import Link from "next/link"
-import { BookOpen, ArrowRight } from "lucide-react"
-import { articles } from "@/components/learn"
+import { ArrowRight, BookOpen } from "lucide-react"
+import { learnSections } from "@/components/learn"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 
 export default function LearnPage() {
+  const starterSections = learnSections.map((section) => ({
+    ...section,
+    firstTopic: section.topics[0],
+  }))
+
   return (
     <div>
-      {/* Hero Section */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-3 rounded-xl bg-sky-100">
@@ -17,48 +22,54 @@ export default function LearnPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Learning Center</h1>
             <p className="text-muted-foreground">
-              Everything you need to master your business finances
+              Product guides and playbooks for Finance, Sales, Team, Projects, Knowledge, and Agents.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Quick Start */}
       <div className="mb-8">
-        <h2 className="text-lg font-semibold mb-4">New here? Start with the basics</h2>
+        <h2 className="text-lg font-semibold mb-4">New here? Start with a product path</h2>
         <Link
           href="/learn/getting-started"
           className="group flex items-center justify-between p-6 rounded-xl border-2 border-sky-200 bg-sky-50 hover:border-sky-300 transition-colors"
         >
           <div>
-            <p className="font-semibold text-lg text-sky-900">Getting Started Guide</p>
+            <p className="font-semibold text-lg text-sky-900">Finance Getting Started</p>
             <p className="text-sky-700">
-              Learn the fundamentals and set up your first account in minutes
+              Learn the platform flow and complete your first core workflows quickly.
             </p>
           </div>
           <ArrowRight className="h-5 w-5 text-sky-600 group-hover:translate-x-1 transition-transform" />
         </Link>
       </div>
 
-      {/* All Topics */}
       <div>
-        <h2 className="text-lg font-semibold mb-4">Browse All Topics</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {articles.map((article) => {
-            const Icon = article.icon
+        <h2 className="text-lg font-semibold mb-4">Browse by Product</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          {starterSections.map((section) => {
             return (
-              <Link key={article.href} href={article.href}>
+              <Link key={section.id} href={section.baseHref}>
                 <Card className="h-full hover:border-sky-300 hover:shadow-sm transition-all cursor-pointer">
                   <CardHeader className="pb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-muted">
-                        <Icon className="h-5 w-5 text-sky-600" />
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-base">
+                          <span className="mr-2">{section.emoji}</span>
+                          {section.title}
+                        </CardTitle>
+                        <CardDescription className="mt-2">{section.description}</CardDescription>
                       </div>
-                      <CardTitle className="text-base">{article.title}</CardTitle>
+                      <Badge variant="secondary">{section.topics.length} guides</Badge>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <CardDescription>{article.description}</CardDescription>
+                    <div className="rounded-lg border bg-muted/40 px-3 py-2">
+                      <p className="text-sm font-medium">Start here: {section.firstTopic?.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {section.firstTopic?.description}
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
               </Link>
@@ -73,10 +84,9 @@ export default function LearnPage() {
           Can&apos;t find what you&apos;re looking for?
         </p>
         <p className="text-sm text-muted-foreground">
-          Our documentation is constantly improving. Check back soon for more guides!
+          We are expanding guides across every product. Support can help with anything missing.
         </p>
       </div>
     </div>
   )
 }
-

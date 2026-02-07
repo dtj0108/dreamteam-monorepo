@@ -77,9 +77,12 @@ import type { WorkspaceDeployedTeamWithRelations, DeployedTeamConfig, Customizat
 
 interface Profile {
   id: string
-  email: string
+  email: string | null
   name: string | null
   avatar_url?: string | null
+  is_agent?: boolean | null
+  linked_agent_id?: string | null
+  agent_slug?: string | null
 }
 
 interface Workspace {
@@ -105,6 +108,7 @@ interface Member {
   role: string
   display_name?: string | null
   status?: string
+  status_text?: string | null
   allowed_products?: string[]
   joined_at: string
   profile: Profile
@@ -402,6 +406,9 @@ export default function WorkspaceDetailPage() {
     }
   }
 
+  const humanMembers = members.filter(member => !member.profile?.is_agent)
+  const agentMembers = members.filter(member => Boolean(member.profile?.is_agent))
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -501,7 +508,11 @@ export default function WorkspaceDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="members" className="gap-2">
             <Users className="h-4 w-4" />
-            Members ({members.length})
+            Members ({humanMembers.length})
+          </TabsTrigger>
+          <TabsTrigger value="agents" className="gap-2">
+            <Bot className="h-4 w-4" />
+            Agents ({agentMembers.length})
           </TabsTrigger>
           <TabsTrigger value="settings" className="gap-2">
             <Settings className="h-4 w-4" />
@@ -561,7 +572,7 @@ export default function WorkspaceDetailPage() {
                 <div className="flex items-center gap-3">
                   <Avatar>
                     <AvatarFallback>
-                      {getInitials(workspace.owner.name, workspace.owner.email)}
+                      {getInitials(workspace.owner.name, workspace.owner.email || 'UN')}
                     </AvatarFallback>
                   </Avatar>
                   <div>
@@ -580,79 +591,142 @@ export default function WorkspaceDetailPage() {
             <CardHeader>
               <CardTitle>Members</CardTitle>
               <CardDescription>
-                All users with access to this workspace
+                Human users with access to this workspace
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Joined</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {members.map(member => (
-                    <TableRow key={member.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarImage src={member.profile.avatar_url || undefined} />
-                            <AvatarFallback>
-                              {getInitials(member.profile.name, member.profile.email)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{member.profile.name || 'No name'}</p>
-                            <p className="text-sm text-muted-foreground">{member.profile.email}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getRoleBadgeVariant(member.role) as 'default' | 'secondary' | 'outline'} className="gap-1">
-                          {getRoleIcon(member.role)}
-                          {member.role}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDistanceToNow(new Date(member.joined_at), { addSuffix: true })}
-                      </TableCell>
-                      <TableCell>
-                        {member.role !== 'owner' && (
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setMemberDialog({
-                                open: true,
-                                type: 'role',
-                                member,
-                                newRole: member.role === 'admin' ? 'member' : 'admin'
-                              })}
-                            >
-                              Change role
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-destructive"
-                              onClick={() => setMemberDialog({
-                                open: true,
-                                type: 'remove',
-                                member
-                              })}
-                            >
-                              <UserX className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        )}
-                      </TableCell>
+              {humanMembers.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">No human members</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Joined</TableHead>
+                      <TableHead className="w-[100px]">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {humanMembers.map(member => (
+                      <TableRow key={member.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={member.profile.avatar_url || undefined} />
+                              <AvatarFallback>
+                                {getInitials(member.profile.name, member.profile.email || 'UN')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">{member.profile.name || 'No name'}</p>
+                              <p className="text-sm text-muted-foreground">{member.profile.email || 'No email'}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getRoleBadgeVariant(member.role) as 'default' | 'secondary' | 'outline'} className="gap-1">
+                            {getRoleIcon(member.role)}
+                            {member.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatDistanceToNow(new Date(member.joined_at), { addSuffix: true })}
+                        </TableCell>
+                        <TableCell>
+                          {member.role !== 'owner' && (
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setMemberDialog({
+                                  open: true,
+                                  type: 'role',
+                                  member,
+                                  newRole: member.role === 'admin' ? 'member' : 'admin'
+                                })}
+                              >
+                                Change role
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive"
+                                onClick={() => setMemberDialog({
+                                  open: true,
+                                  type: 'remove',
+                                  member
+                                })}
+                              >
+                                <UserX className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="agents">
+          <Card>
+            <CardHeader>
+              <CardTitle>Agents</CardTitle>
+              <CardDescription>
+                Agent profiles provisioned in this workspace
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {agentMembers.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">No agents in this workspace</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Agent</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Joined</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {agentMembers.map(member => (
+                      <TableRow key={member.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={member.profile.avatar_url || undefined} />
+                              <AvatarFallback>
+                                <Bot className="h-4 w-4" />
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">
+                                {member.profile.name || member.display_name || member.profile.agent_slug || 'Agent'}
+                              </p>
+                              {member.profile.agent_slug && (
+                                <p className="text-sm text-muted-foreground">@{member.profile.agent_slug}</p>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="gap-1">
+                            <Bot className="h-3 w-3" />
+                            {member.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatDistanceToNow(new Date(member.joined_at), { addSuffix: true })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -764,7 +838,7 @@ export default function WorkspaceDetailPage() {
                     <div key={log.id} className="flex items-start gap-3 pb-4 border-b last:border-0">
                       <Avatar className="h-8 w-8">
                         <AvatarFallback className="text-xs">
-                          {log.user ? getInitials(log.user.name, log.user.email) : '??'}
+                          {log.user ? getInitials(log.user.name, log.user.email || 'UN') : '??'}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">

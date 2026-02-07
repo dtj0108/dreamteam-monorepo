@@ -241,13 +241,67 @@ export async function POST(request: NextRequest) {
     // 6. Deploy agents for the purchased tier
     if (subscriptionType === 'agent_tier' && tier !== 'none') {
       console.log(`[complete-signup] Deploying agents for tier ${tier} to workspace ${workspace.id}`)
-      const deployResult = await autoDeployTeamForPlan(workspace.id, tier, authData.user.id)
+      await adminSupabase
+        .from('workspace_billing')
+        .update({
+          agent_deploy_status: 'pending',
+          agent_deploy_error: null,
+          agent_deploy_attempted_at: new Date().toISOString(),
+        })
+        .eq('workspace_id', workspace.id)
 
-      if (!deployResult.deployed) {
-        console.error(`[complete-signup] Auto-deploy failed:`, deployResult.error)
-        // Don't fail signup - log error and continue
-      } else {
-        console.log(`[complete-signup] Agents deployed successfully: deployment ${deployResult.deploymentId}`)
+      try {
+        const deployResult = await autoDeployTeamForPlan(workspace.id, tier, authData.user.id)
+
+        if (!deployResult.deployed) {
+          const deployError = deployResult.error || deployResult.errorCode || 'deploy_failed'
+          console.error(`[complete-signup] Auto-deploy failed:`, deployError)
+
+          await adminSupabase
+            .from('workspace_billing')
+            .update({
+              agent_deploy_status: 'failed',
+              agent_deploy_error: deployError,
+            })
+            .eq('workspace_id', workspace.id)
+
+          await adminSupabase.from('billing_alerts').insert({
+            workspace_id: workspace.id,
+            alert_type: 'deploy_failed',
+            severity: 'high',
+            title: 'Agent deployment failed',
+            description: `Auto-deploy failed after complete-signup for tier ${tier}: ${deployError}`,
+          })
+        } else {
+          await adminSupabase
+            .from('workspace_billing')
+            .update({
+              agent_deploy_status: 'deployed',
+              agent_deploy_error: null,
+            })
+            .eq('workspace_id', workspace.id)
+
+          console.log(`[complete-signup] Agents deployed successfully: deployment ${deployResult.deploymentId}`)
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : 'unknown_error'
+        console.error(`[complete-signup] Auto-deploy error:`, err)
+
+        await adminSupabase
+          .from('workspace_billing')
+          .update({
+            agent_deploy_status: 'failed',
+            agent_deploy_error: errMsg,
+          })
+          .eq('workspace_id', workspace.id)
+
+        await adminSupabase.from('billing_alerts').insert({
+          workspace_id: workspace.id,
+          alert_type: 'deploy_failed',
+          severity: 'high',
+          title: 'Agent deployment failed',
+          description: `Auto-deploy threw after complete-signup for tier ${tier}: ${errMsg}`,
+        })
       }
     }
 
