@@ -254,6 +254,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Log billing event for subscription creation
+        const fullSubscription = await getStripe().subscriptions.retrieve(subscriptionId)
         await logSubscriptionCreated(
           workspaceId,
           fullSubscription,

@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase-server'
-import { getStripe, STRIPE_PRICES } from '@/lib/stripe'
+import { stripe, STRIPE_PRICES } from '@/lib/stripe'
 import type Stripe from 'stripe'
+import { getStripe } from '@/lib/stripe'
 import { autoDeployTeamForPlan } from '@dreamteam/database'
 
 // Type definitions for billing data
@@ -85,7 +86,7 @@ async function invoiceProrationNow(params: {
   const { subscriptionId, customerId } = params
 
   try {
-    const existingDrafts = await getStripe().invoices.list({
+    const existingDrafts = await stripe.invoices.list({
       subscription: subscriptionId,
       status: 'draft',
       limit: 1,
@@ -94,7 +95,7 @@ async function invoiceProrationNow(params: {
     let invoice = existingDrafts.data[0] || null
 
     if (!invoice) {
-      invoice = await getStripe().invoices.create({
+      invoice = await stripe.invoices.create({
         customer: customerId,
         subscription: subscriptionId,
         auto_advance: true,
@@ -102,11 +103,11 @@ async function invoiceProrationNow(params: {
     }
 
     if (invoice.status === 'draft') {
-      invoice = await getStripe().invoices.finalizeInvoice(invoice.id)
+      invoice = await stripe.invoices.finalizeInvoice(invoice.id)
     }
 
     if (invoice.amount_due > 0 && invoice.status !== 'paid') {
-      invoice = await getStripe().invoices.pay(invoice.id)
+      invoice = await stripe.invoices.pay(invoice.id)
     }
 
     return {
@@ -203,7 +204,7 @@ export async function resolveAgentTierSubscription(
 ): Promise<{ primary: Stripe.Subscription | null; canceled: string[] }> {
   const agentTierPriceIds = await getAgentTierPriceIds()
 
-  const subscriptions = await getStripe().subscriptions.list({
+  const subscriptions = await stripe.subscriptions.list({
     customer: customerId,
     status: 'all',
     limit: 100,
@@ -231,7 +232,7 @@ export async function resolveAgentTierSubscription(
 
   for (const sub of toCancel) {
     try {
-      await getStripe().subscriptions.cancel(sub.id, { invoice_now: false, prorate: false })
+      await stripe.subscriptions.cancel(sub.id, { invoice_now: false, prorate: false })
       canceled.push(sub.id)
       console.warn(
         `[billing] Canceled duplicate agent-tier subscription ${sub.id} for customer ${customerId}`
@@ -415,7 +416,7 @@ export async function updateBillingFromSubscription(
           ? (existingBilling?.agent_tier as AgentTier) || 'none'
           : (targetPlan as AgentTier) || existingBilling?.agent_tier || 'none',
         agent_status: sub.status as SubscriptionStatus,
-        agent_period_end: timestampToISO(subRecord.current_period_end as number | null),
+        agent_period_end: timestampToISO(sub.current_period_end),
         ...(keepCurrentTier
           ? {
               agent_tier_pending: existingBilling?.agent_tier_pending || null,
@@ -520,6 +521,7 @@ export async function syncBillingFromStripeSubscription(
               agent_tier_pending_effective_at: existingBilling?.agent_tier_pending_effective_at || null,
             }
           : { agent_tier_pending: null, agent_tier_pending_effective_at: null }),
+        agent_period_end: timestampToISO(subRecord.current_period_end as number | null),
       })
       .eq('workspace_id', workspaceId)
   }
@@ -803,7 +805,7 @@ export async function updateAgentTierSubscription(
     console.log(`[updateAgentTierSubscription] Updating subscription ${subscriptionId} to tier ${newTier} with price ${newPriceId}`)
 
     // Get current subscription to find the item ID
-    const subscription = await getStripe().subscriptions.retrieve(subscriptionId)
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
     const customerId =
       typeof subscription.customer === 'string'
         ? subscription.customer
@@ -822,13 +824,16 @@ export async function updateAgentTierSubscription(
         `[updateAgentTierSubscription] Using resolved subscription ${subscriptionIdToUse} instead of ${subscriptionId}`
       )
     }
+    const subscription = await getStripe().subscriptions.retrieve(subscriptionId)
+    const itemId = subscription.items.data[0]?.id
 
     if (!itemId) {
       return { success: false, error: 'Subscription item not found' }
     }
 
     // Update the subscription with proration
-    const updatedSubResponse = await getStripe().subscriptions.update(subscriptionIdToUse, {
+    const updatedSubResponse = await stripe.subscriptions.update(subscriptionIdToUse, {
+    const updatedSubResponse = await getStripe().subscriptions.update(subscriptionId, {
       items: [{
         id: itemId,
         price: newPriceId,
@@ -1420,6 +1425,16 @@ export async function createAgentTierSubscription(
     // and also de-dupes any accidental multiple subscriptions.
     console.log(
       `[createAgentTierSubscription] Checking for existing subscriptions for customer ${billing.stripe_customer_id}`
+    // but an active subscription already exists in Stripe
+    console.log(`[createAgentTierSubscription] Checking for existing subscriptions for customer ${billing.stripe_customer_id}`)
+    const existingSubscriptions = await getStripe().subscriptions.list({
+      customer: billing.stripe_customer_id,
+      status: 'active',
+      limit: 10,
+    })
+
+    const existingAgentSub = existingSubscriptions.data.find(
+      sub => sub.metadata?.type === 'agent_tier'
     )
     const { primary: existingAgentSub } = await resolveAgentTierSubscription(billing.stripe_customer_id)
 
