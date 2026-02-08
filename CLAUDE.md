@@ -66,6 +66,11 @@ Runs on Railway in production:
 - MCP (Model Context Protocol) server integration
 - Handles long-running operations not suited for serverless
 
+## Production URLs
+
+- **User Web**: https://dreamteam.ai
+- **Stripe Webhook**: https://dreamteam.ai/api/billing/webhook
+
 ## App-Specific Documentation
 
 See nested CLAUDE.md files for app-specific guidance:

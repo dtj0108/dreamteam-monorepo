@@ -13,9 +13,10 @@ import RegisterForm from '@/components/shadcn-studio/blocks/register-01/register
 interface RegisterProps {
   sessionId?: string
   plan?: string
+  redirectTo?: string | null
 }
 
-const Register = ({ sessionId, plan }: RegisterProps) => {
+const Register = ({ sessionId, plan, redirectTo }: RegisterProps) => {
   const isPostCheckout = !!sessionId
   const planLabel = plan === 'annual' ? 'Pro Annual' : 'Pro Monthly'
 
@@ -52,11 +53,11 @@ const Register = ({ sessionId, plan }: RegisterProps) => {
 
         <CardContent>
           <div className='space-y-4'>
-            <RegisterForm sessionId={sessionId} />
+            <RegisterForm sessionId={sessionId} redirectTo={redirectTo} />
 
             <p className='text-muted-foreground text-center'>
               Already have an account?{' '}
-              <Link href='/login' className='text-card-foreground hover:underline'>
+              <Link href={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : '/login'} className='text-card-foreground hover:underline'>
                 Sign in instead
               </Link>
             </p>

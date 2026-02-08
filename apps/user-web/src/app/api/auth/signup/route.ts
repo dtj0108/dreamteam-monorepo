@@ -4,13 +4,24 @@ import { sendVerificationCode } from '@/lib/twilio'
 import { getStripe } from '@/lib/stripe'
 import { updateBillingFromSubscription, ensureWorkspaceBilling } from '@/lib/billing-queries'
 
+const normalizeEmail = (value: string) => value.trim().toLowerCase()
+
+type PendingInviteRecord = {
+  id: string
+  workspace_id: string
+  role: "owner" | "admin" | "member"
+  expires_at: string | null
+  workspaces: unknown
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { name, email, phone, companyName, password, sessionId } = body
+    const normalizedEmail = typeof email === 'string' ? normalizeEmail(email) : ''
 
     // Validate required fields
-    if (!name || !email || !phone || !password) {
+    if (!name || !normalizedEmail || !phone || !password) {
       return NextResponse.json(
         { error: 'Name, email, phone, and password are required' },
         { status: 400 }
@@ -19,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(normalizedEmail)) {
       return NextResponse.json(
         { error: 'Invalid email format' },
         { status: 400 }
@@ -47,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     // Sign up with Supabase Auth
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
-      email: email.toLowerCase(),
+      email: normalizedEmail,
       password,
       options: {
         data: {
@@ -92,7 +103,7 @@ export async function POST(request: NextRequest) {
       .from('profiles')
       .upsert({
         id: authData.user.id,
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         name,
         phone,
         company_name: companyName || null,
@@ -109,12 +120,18 @@ export async function POST(request: NextRequest) {
 
     const { data: pendingInvites } = await adminSupabase
       .from('pending_invites')
-      .select('id, workspace_id, role, workspaces:workspace_id(name)')
-      .eq('email', email.toLowerCase())
+      .select('id, workspace_id, role, expires_at, workspaces:workspace_id(name)')
+      .ilike('email', normalizedEmail)
+      .is('accepted_at', null)
 
-    if (pendingInvites && pendingInvites.length > 0) {
+    const activePendingInvites = ((pendingInvites || []) as PendingInviteRecord[]).filter((invite) => {
+      if (!invite.expires_at) return true
+      return new Date(invite.expires_at) > new Date()
+    })
+
+    if (activePendingInvites.length > 0) {
       // Process each invite
-      for (const invite of pendingInvites) {
+      for (const invite of activePendingInvites) {
         // Add user to workspace
         const { error: memberError } = await adminSupabase
           .from('workspace_members')
@@ -248,13 +265,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update profile with default workspace and role
+    // Update profile with default workspace and role.
+    // Invite-based signups skip onboarding and go directly to the workspace.
+    const profileUpdate: {
+      default_workspace_id: string | null
+      role: string
+      onboarding_completed?: boolean
+    } = {
+      default_workspace_id: defaultWorkspaceId,
+      role: userRole,
+    }
+
+    if (joinedTeam) {
+      profileUpdate.onboarding_completed = true
+    }
+
     await adminSupabase
       .from('profiles')
-      .update({ 
-        default_workspace_id: defaultWorkspaceId,
-        role: userRole,
-      })
+      .update(profileUpdate)
       .eq('id', authData.user.id)
 
     // Send Twilio OTP for phone verification

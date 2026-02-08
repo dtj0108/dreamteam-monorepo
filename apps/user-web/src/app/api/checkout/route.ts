@@ -99,6 +99,7 @@ export async function POST(request: NextRequest) {
     // Note: No customer is created yet - Stripe will collect email
     const checkoutSession = await getStripe().checkout.sessions.create({
       payment_method_types: ['card'],
+      allow_promotion_codes: true,
       mode: 'subscription',
       line_items: [
         {

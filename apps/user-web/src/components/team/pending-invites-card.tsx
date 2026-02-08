@@ -18,14 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { UserPlus, Clock, Trash2, Loader2, Shield, User, Copy, Check, Ticket } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { UserPlus, Clock, Trash2, Loader2, Shield, User, Mail } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
 export interface PendingInvite {
   id: string
   email?: string | null
   role: "admin" | "member"
-  invite_code?: string
   created_at: string
   expires_at?: string | null
   inviter?: {
@@ -38,7 +38,7 @@ interface PendingInvitesCardProps {
   invites: PendingInvite[]
   isLoading?: boolean
   canInvite?: boolean
-  onGenerateInvite?: (role: "admin" | "member") => Promise<void>
+  onGenerateInvite?: (role: "admin" | "member", email: string) => Promise<void>
   onRevokeInvite?: (inviteId: string) => Promise<void>
 }
 
@@ -50,20 +50,23 @@ export function PendingInvitesCard({
   onRevokeInvite,
 }: PendingInvitesCardProps) {
   const [role, setRole] = useState<"admin" | "member">("member")
+  const [email, setEmail] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [revokingId, setRevokingId] = useState<string | null>(null)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleGenerate = async () => {
     if (!onGenerateInvite) return
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail) return
 
     setIsSubmitting(true)
     setError(null)
 
     try {
-      await onGenerateInvite(role)
+      await onGenerateInvite(role, trimmedEmail)
       setRole("member")
+      setEmail("")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate invite")
     } finally {
@@ -81,24 +84,6 @@ export function PendingInvitesCard({
     }
   }
 
-  const copyToClipboard = async (inviteId: string, code: string) => {
-    try {
-      await navigator.clipboard.writeText(code)
-      setCopiedId(inviteId)
-      setTimeout(() => setCopiedId(null), 2000)
-    } catch {
-      // Fallback for older browsers
-      const textArea = document.createElement("textarea")
-      textArea.value = code
-      document.body.appendChild(textArea)
-      textArea.select()
-      document.execCommand("copy")
-      document.body.removeChild(textArea)
-      setCopiedId(inviteId)
-      setTimeout(() => setCopiedId(null), 2000)
-    }
-  }
-
   const isExpired = (expiresAt?: string | null) => {
     if (!expiresAt) return false
     return new Date(expiresAt) < new Date()
@@ -112,7 +97,7 @@ export function PendingInvitesCard({
           <CardTitle>Invite Team Members</CardTitle>
         </div>
         <CardDescription>
-          Generate invite codes to share with team members
+          Invite team members by email
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -120,7 +105,18 @@ export function PendingInvitesCard({
         {canInvite && (
           <div className="space-y-4">
             <div className="flex items-end gap-3">
-              <div className="w-40 space-y-2">
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="invite-email">Email</Label>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  placeholder="teammate@company.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="w-36 space-y-2">
                 <Label htmlFor="invite-role">Role</Label>
                 <Select
                   value={role}
@@ -146,13 +142,13 @@ export function PendingInvitesCard({
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={handleGenerate} disabled={isSubmitting}>
+              <Button onClick={handleGenerate} disabled={isSubmitting || !email.trim()}>
                 {isSubmitting ? (
                   <Loader2 className="size-4 animate-spin mr-2" />
                 ) : (
-                  <Ticket className="size-4 mr-2" />
+                  <Mail className="size-4 mr-2" />
                 )}
-                Generate Invite
+                Send Invite
               </Button>
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -182,30 +178,14 @@ export function PendingInvitesCard({
                     className={`flex items-center gap-3 p-3 rounded-lg border bg-card ${expired ? "opacity-60" : ""}`}
                   >
                     <div className="size-10 rounded-full bg-muted flex items-center justify-center">
-                      <Ticket className="size-5 text-muted-foreground" />
+                      <Mail className="size-5 text-muted-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      {invite.invite_code ? (
-                        <div className="flex items-center gap-2">
-                          <code className="font-mono text-sm font-semibold bg-muted px-2 py-0.5 rounded">
-                            {invite.invite_code}
-                          </code>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-7"
-                            onClick={() => copyToClipboard(invite.id, invite.invite_code!)}
-                            disabled={expired}
-                          >
-                            {copiedId === invite.id ? (
-                              <Check className="size-3.5 text-green-600" />
-                            ) : (
-                              <Copy className="size-3.5" />
-                            )}
-                          </Button>
+                      {invite.email && (
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Mail className="size-3 text-muted-foreground" />
+                          <span className="text-sm font-medium truncate">{invite.email}</span>
                         </div>
-                      ) : (
-                        <p className="font-medium truncate">{invite.email || "No code"}</p>
                       )}
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Clock className="size-3" />

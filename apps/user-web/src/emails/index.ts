@@ -23,6 +23,7 @@ export { ContactConfirmationEmail } from './contact-confirmation';
 export { MarketingOutreachEmail } from './marketing-outreach';
 export { LandingPageEmail } from './landing-page-email';
 export { AutonomousActionsEmail } from './autonomous-actions';
+export { WorkspaceInviteEmail } from './workspace-invite';
 
 // Sender configuration
 // Use RESEND_FROM_EMAIL if set (should be verified domain like hello@dreamteam.ai)
@@ -119,6 +120,35 @@ export async function sendAutonomousActionsEmail(
     react: AutonomousActionsEmail({
       recipientName: options?.recipientName,
       companyName: options?.companyName,
+    }),
+  });
+}
+
+/**
+ * Send a workspace invitation email
+ */
+export async function sendWorkspaceInviteEmail(
+  to: string,
+  options: {
+    inviterName: string;
+    workspaceName: string;
+    role: string;
+    inviteId: string;
+  }
+) {
+  const { WorkspaceInviteEmail } = await import('./workspace-invite');
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
+  const joinUrl = `${baseUrl}/workspaces/join?invite=${options.inviteId}`;
+
+  return sendEmail({
+    to,
+    subject: `You've been invited to ${options.workspaceName} on DreamTeam`,
+    react: WorkspaceInviteEmail({
+      inviterName: options.inviterName,
+      workspaceName: options.workspaceName,
+      role: options.role,
+      joinUrl,
     }),
   });
 }

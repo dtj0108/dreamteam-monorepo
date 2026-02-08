@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useUser } from "@/hooks/use-user"
 import Link from "next/link"
 import { Loader2, Building2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -22,10 +23,12 @@ import {
 function VerifyForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  
+  const { refreshUser } = useUser()
+
   const phone = searchParams.get("phone") || ""
   const userId = searchParams.get("userId") || ""
   const isSignup = searchParams.get("signup") === "true"
+  const redirectTo = searchParams.get("redirectTo")
 
   const [otp, setOtp] = useState("")
   const [loading, setLoading] = useState(false)
@@ -143,8 +146,9 @@ function VerifyForm() {
 
       const data = await response.json()
 
-      // Redirect to onboarding on success (will redirect to / if already completed)
-      router.push("/onboarding")
+      // Refresh user state before navigating so dashboard shows correct data
+      await refreshUser()
+      router.push(redirectTo || "/onboarding")
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to verify code")
