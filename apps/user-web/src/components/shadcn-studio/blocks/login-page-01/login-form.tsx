@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { EyeIcon, EyeOffIcon, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,8 @@ import { Label } from '@/components/ui/label'
 
 const LoginForm = () => {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirectTo')
   const [isVisible, setIsVisible] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,7 +54,8 @@ const LoginForm = () => {
       }
 
       // Redirect to verify page for 2FA
-      router.push(`/verify?phone=${encodeURIComponent(data.phone)}&userId=${data.userId}`)
+      const verifyUrl = `/verify?phone=${encodeURIComponent(data.phone)}&userId=${data.userId}${redirectTo ? `&redirectTo=${encodeURIComponent(redirectTo)}` : ''}`
+      router.push(verifyUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {

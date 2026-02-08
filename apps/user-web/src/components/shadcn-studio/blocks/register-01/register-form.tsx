@@ -26,9 +26,10 @@ interface InviteInfo {
 
 interface RegisterFormProps {
   sessionId?: string
+  redirectTo?: string | null
 }
 
-const RegisterForm = ({ sessionId }: RegisterFormProps) => {
+const RegisterForm = ({ sessionId, redirectTo }: RegisterFormProps) => {
   const router = useRouter()
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -112,7 +113,12 @@ const RegisterForm = ({ sessionId }: RegisterFormProps) => {
       }
 
       // Redirect to verify page for phone OTP
-      router.push(`/verify?phone=${encodeURIComponent(`+1${formData.phone}`)}&signup=true`)
+      const verifyParams = new URLSearchParams({
+        phone: `+1${formData.phone}`,
+        signup: 'true',
+      })
+      if (redirectTo) verifyParams.set('redirectTo', redirectTo)
+      router.push(`/verify?${verifyParams.toString()}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create account')
     } finally {

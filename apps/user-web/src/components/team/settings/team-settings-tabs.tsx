@@ -27,7 +27,7 @@ interface TeamSettingsTabsProps {
   onUpdateRole: (memberId: string, role: "admin" | "member") => Promise<void>
   onUpdateProducts: (memberId: string, products: ProductId[]) => Promise<void>
   onRemoveMember: (memberId: string) => Promise<void>
-  onGenerateInvite: (role: "admin" | "member") => Promise<void>
+  onGenerateInvite: (role: "admin" | "member", email: string) => Promise<void>
   onRevokeInvite: (inviteId: string) => Promise<void>
 }
 
@@ -108,7 +108,6 @@ export function TeamSettingsTabs({
                   behavior: "smooth",
                   block: "start",
                 })
-                onGenerateInvite("member")
               }}
             />
 
@@ -143,7 +142,7 @@ export function TeamSettingsTabs({
               id: m.id,
               role: m.role,
               allowed_products: m.allowed_products || [],
-              profile: m.profile ? { name: m.profile.name } : null,
+              profile: m.profile ? { name: m.profile.name ?? 'Unknown' } : null,
             }))}
             onUpdateProducts={onUpdateProducts}
           />

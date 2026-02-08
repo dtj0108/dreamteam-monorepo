@@ -1,7 +1,9 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react"
+import type { AuthChangeEvent } from "@supabase/supabase-js"
 import type { IndustryType } from "@/lib/types"
+import { getSupabaseClient } from "@/lib/supabase"
 
 export type WorkspaceRole = "owner" | "admin" | "member"
 export type ProductId = "finance" | "sales" | "team" | "projects" | "knowledge" | "agents"
@@ -68,6 +70,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void fetchUser()
+  }, [fetchUser])
+
+  // Re-fetch user data whenever auth state changes (login, logout, token refresh)
+  useEffect(() => {
+    const supabase = getSupabaseClient()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event: AuthChangeEvent) => {
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+          void fetchUser()
+        }
+      }
+    )
+    return () => subscription.unsubscribe()
   }, [fetchUser])
 
   const refreshUser = useCallback(async () => {

@@ -50,7 +50,7 @@ export interface TeamMember {
   id: string
   profile: {
     id: string
-    name: string
+    name: string | null
     email: string
     avatar_url?: string | null
   }
@@ -104,13 +104,20 @@ export function TeamMembersCard({
 
   const canManageMembers = currentUserRole === "owner" || currentUserRole === "admin"
 
-  const getInitials = (name: string) =>
-    name
+  const getDisplayName = (member: TeamMember) =>
+    member.profile.name?.trim() || member.profile.email || "Unknown User"
+
+  const getInitials = (name?: string | null) => {
+    const normalizedName = name?.trim()
+    if (!normalizedName) return "?"
+
+    return normalizedName
       .split(" ")
       .map((n) => n[0])
       .join("")
       .toUpperCase()
       .slice(0, 2)
+  }
 
   const handleUpdateRole = async (memberId: string, newRole: "admin" | "member") => {
     if (!onUpdateRole) return
@@ -221,14 +228,12 @@ export function TeamMembersCard({
                   >
                     <Avatar className="size-10">
                       <AvatarImage src={member.profile.avatar_url || undefined} />
-                      <AvatarFallback>
-                        {getInitials(member.profile.name)}
-                      </AvatarFallback>
+                      <AvatarFallback>{getInitials(member.profile.name)}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-medium truncate">
-                          {member.profile.name}
+                          {getDisplayName(member)}
                           {isCurrentUser && (
                             <span className="text-muted-foreground ml-1">(you)</span>
                           )}
@@ -358,7 +363,7 @@ export function TeamMembersCard({
           <AlertDialogHeader>
             <AlertDialogTitle>Remove team member?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove {confirmRemove?.profile.name} from
+              Are you sure you want to remove {confirmRemove ? getDisplayName(confirmRemove) : "this member"} from
               the team? They will lose access to all team resources.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -382,7 +387,7 @@ export function TeamMembersCard({
           open={!!permissionsMember}
           onOpenChange={(open) => !open && setPermissionsMember(null)}
           memberId={permissionsMember.id}
-          memberName={permissionsMember.profile.name}
+          memberName={getDisplayName(permissionsMember)}
         />
       )}
     </>

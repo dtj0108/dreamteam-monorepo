@@ -66,7 +66,27 @@ export async function GET(request: NextRequest) {
       ? members
       : members?.filter((m: { profile: { is_agent?: boolean } }) => !m.profile?.is_agent)
 
-    return NextResponse.json(filteredMembers)
+    const normalizedMembers = (filteredMembers ?? []).map(
+      (member: { display_name?: string | null; profile?: { name?: string | null; email?: string | null } | null }) => {
+        if (!member.profile) return member
+
+        const normalizedName =
+          member.profile.name?.trim() ||
+          member.display_name?.trim() ||
+          member.profile.email?.trim() ||
+          "Unknown User"
+
+        return {
+          ...member,
+          profile: {
+            ...member.profile,
+            name: normalizedName,
+          },
+        }
+      }
+    )
+
+    return NextResponse.json(normalizedMembers)
   } catch (error) {
     console.error("Error in GET /api/team/members:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -171,4 +191,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
-

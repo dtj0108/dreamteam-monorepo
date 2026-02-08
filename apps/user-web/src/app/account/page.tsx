@@ -185,14 +185,14 @@ function AccountPageContent() {
   }, [workspaceId])
 
   // Team handlers
-  const handleGenerateInvite = async (role: "admin" | "member") => {
+  const handleGenerateInvite = async (role: "admin" | "member", email: string) => {
     if (!workspaceId) {
       throw new Error("No workspace available")
     }
     const res = await fetch("/api/team/invites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workspaceId, role }),
+      body: JSON.stringify({ workspaceId, role, email }),
     })
     if (!res.ok) {
       const data = await res.json()

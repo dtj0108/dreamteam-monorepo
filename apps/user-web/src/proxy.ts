@@ -8,8 +8,10 @@ const publicRoutes = [
   '/login',
   '/signup',
   '/verify',
+  '/workspaces/join',
   '/api/auth/login',
   '/api/auth/signup',
+  '/api/auth/invite-signup',
   '/api/auth/verify-otp',
   '/api/auth/send-otp',
   '/api/auth/me',
@@ -62,6 +64,7 @@ const protected2FARoutes = [
 const noWorkspaceRoutes = [
   '/workspaces/new',
   '/workspaces/join',
+  '/api/workspaces/join',
   '/invite',
 ]
 
@@ -128,9 +131,17 @@ export async function proxy(request: NextRequest) {
 
     // If user is not logged in and trying to access protected route
     if (!user && !isPublicRoute) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/login'
-      url.searchParams.set('redirectTo', pathname)
+      // API callers expect JSON; avoid HTML redirect responses that break response.json() calls.
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+
+      const url = new URL('/login', request.nextUrl.origin)
+      const fullPath = request.nextUrl.search ? `${pathname}${request.nextUrl.search}` : pathname
+      url.searchParams.set('redirectTo', fullPath)
       return NextResponse.redirect(url)
     }
 

@@ -2,20 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
 import { getSession } from "@dreamteam/auth/session"
 
-// Generate readable invite code like "K4M-X7N-P2Q"
-function generateInviteCode(): string {
-  // Exclude confusing characters: 0, O, I, 1, L
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-  const segments: string[] = []
-  for (let i = 0; i < 3; i++) {
-    let segment = ""
-    for (let j = 0; j < 3; j++) {
-      segment += chars[Math.floor(Math.random() * chars.length)]
-    }
-    segments.push(segment)
-  }
-  return segments.join("-")
-}
+const normalizeEmail = (value: string) => value.trim().toLowerCase()
+const isExpired = (expiresAt?: string | null) =>
+  !!expiresAt && new Date(expiresAt) <= new Date()
 
 // GET /api/team/invites - List pending invites for workspace
 export async function GET(request: NextRequest) {
@@ -56,7 +45,6 @@ export async function GET(request: NextRequest) {
         id,
         email,
         role,
-        invite_code,
         created_at,
         accepted_at,
         expires_at,
@@ -79,7 +67,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/team/invites - Generate a new invite code
+// POST /api/team/invites - Create a new invite
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession()
@@ -89,11 +77,19 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
     const body = await request.json()
-    const { workspaceId, role = "member" } = body
+    const { workspaceId, role = "member", email } = body
+    const normalizedEmail = typeof email === "string" ? normalizeEmail(email) : ""
 
     if (!workspaceId) {
       return NextResponse.json(
         { error: "Workspace ID required" },
+        { status: 400 }
+      )
+    }
+
+    if (!normalizedEmail) {
+      return NextResponse.json(
+        { error: "Email is required" },
         { status: 400 }
       )
     }
@@ -119,61 +115,146 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Only admins can invite members" }, { status: 403 })
     }
 
-    // Generate a unique invite code (retry if collision)
-    let inviteCode: string
-    let attempts = 0
-    const maxAttempts = 5
+    // If this email already has a profile and active membership, do not create another invite.
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", normalizedEmail)
+      .maybeSingle()
 
-    do {
-      inviteCode = generateInviteCode()
-      const { data: existing } = await supabase
-        .from("pending_invites")
+    if (existingProfile?.id) {
+      const { data: existingMember } = await supabase
+        .from("workspace_members")
         .select("id")
-        .eq("invite_code", inviteCode)
-        .single()
+        .eq("workspace_id", workspaceId)
+        .eq("profile_id", existingProfile.id)
+        .maybeSingle()
 
-      if (!existing) break
-      attempts++
-    } while (attempts < maxAttempts)
-
-    if (attempts >= maxAttempts) {
-      return NextResponse.json(
-        { error: "Failed to generate unique invite code" },
-        { status: 500 }
-      )
+      if (existingMember) {
+        return NextResponse.json({ error: "User is already a member of this workspace" }, { status: 400 })
+      }
     }
 
     // Set expiration to 7 days from now
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 7)
 
-    // Create the invite with generated code
-    const { data: invite, error: insertError } = await supabase
-      .from("pending_invites")
-      .insert({
-        workspace_id: workspaceId,
-        role,
-        invite_code: inviteCode,
-        expires_at: expiresAt.toISOString(),
-        invited_by: session.id,
-      })
-      .select(`
-        id,
-        role,
-        invite_code,
-        created_at,
-        expires_at,
-        invited_by,
-        inviter:invited_by(id, name)
-      `)
-      .single()
+    const baseInviteQuery = `
+      id,
+      email,
+      role,
+      created_at,
+      expires_at,
+      invited_by,
+      inviter:invited_by(id, name)
+    `
 
-    if (insertError) {
-      console.error("Error creating invite:", insertError)
-      return NextResponse.json({ error: insertError.message }, { status: 500 })
+    // Reuse existing invite row for this workspace/email to avoid unique-key collisions
+    // from previously accepted/expired invites.
+    const { data: existingInvite, error: existingInviteError } = await supabase
+      .from("pending_invites")
+      .select("id, accepted_at, expires_at")
+      .eq("workspace_id", workspaceId)
+      .eq("email", normalizedEmail)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (existingInviteError) {
+      console.error("Error checking existing invite:", existingInviteError)
+      return NextResponse.json({ error: existingInviteError.message }, { status: 500 })
     }
 
-    return NextResponse.json(invite, { status: 201 })
+    let inviteStatus = 201
+    let invite: {
+      id: string
+      email: string
+      role: "admin" | "member"
+      created_at: string
+      expires_at?: string | null
+      invited_by: string
+      inviter?: { id: string; name: string } | null
+    } | null = null
+
+    if (existingInvite) {
+      const { data: updatedInvite, error: updateError } = await supabase
+        .from("pending_invites")
+        .update({
+          role,
+          expires_at: expiresAt.toISOString(),
+          invited_by: session.id,
+          accepted_at: null,
+        })
+        .eq("id", existingInvite.id)
+        .select(baseInviteQuery)
+        .single()
+
+      if (updateError) {
+        console.error("Error refreshing invite:", updateError)
+        return NextResponse.json({ error: updateError.message }, { status: 500 })
+      }
+
+      invite = updatedInvite
+
+      // This was already a valid pending invite; treat as resend/refresh.
+      if (!existingInvite.accepted_at && !isExpired(existingInvite.expires_at)) {
+        inviteStatus = 200
+      }
+    } else {
+      const { data: insertedInvite, error: insertError } = await supabase
+        .from("pending_invites")
+        .insert({
+          workspace_id: workspaceId,
+          role,
+          expires_at: expiresAt.toISOString(),
+          invited_by: session.id,
+          email: normalizedEmail,
+        })
+        .select(baseInviteQuery)
+        .single()
+
+      if (insertError) {
+        console.error("Error creating invite:", insertError)
+        return NextResponse.json({ error: insertError.message }, { status: 500 })
+      }
+
+      invite = insertedInvite
+    }
+
+    // Send invitation email
+    if (invite) {
+      try {
+        // Look up workspace name and inviter name
+        const [workspaceResult, profileResult] = await Promise.all([
+          supabase
+            .from("workspaces")
+            .select("name")
+            .eq("id", workspaceId)
+            .single(),
+          supabase
+            .from("profiles")
+            .select("name")
+            .eq("id", session.id)
+            .single(),
+        ])
+
+        const workspaceName = workspaceResult.data?.name || "a workspace"
+        const inviterName = profileResult.data?.name || "A teammate"
+
+        const { sendWorkspaceInviteEmail } = await import("@/emails")
+        await sendWorkspaceInviteEmail(normalizedEmail, {
+          inviterName,
+          workspaceName,
+          role,
+          inviteId: invite.id,
+        })
+      } catch (emailError) {
+        // Log but don't block — the invite was already created
+        console.error("Failed to send invite email:", emailError)
+      }
+    }
+
+    return NextResponse.json(invite, { status: inviteStatus })
   } catch (error) {
     console.error("Error in POST /api/team/invites:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

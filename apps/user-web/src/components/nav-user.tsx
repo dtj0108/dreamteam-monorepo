@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/sidebar"
 import { useCurrentProduct } from "@/components/product-switcher"
 import { getLearnHomeHref } from "@/components/learn"
+import { useUser } from "@/hooks/use-user"
 
 export function NavUser({
   user,
@@ -44,6 +45,7 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const router = useRouter()
+  const { refreshUser } = useUser()
   const currentProduct = useCurrentProduct()
   const learnHref = getLearnHomeHref(currentProduct)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -59,6 +61,7 @@ export function NavUser({
     setLoggingOut(true)
     try {
       await fetch("/api/auth/logout", { method: "POST" })
+      await refreshUser()
       router.push("/login")
       router.refresh()
     } catch (error) {

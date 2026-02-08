@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
 
+const normalizeEmail = (value: string) => value.trim().toLowerCase()
+
 // POST /api/team/invites/check - Check if an email has pending invites
 export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json()
-    console.log("[InviteCheck] Checking for email:", email)
+    const normalizedEmail = typeof email === "string" ? normalizeEmail(email) : ""
+    console.log("[InviteCheck] Checking for email:", normalizedEmail)
 
-    if (!email) {
+    if (!normalizedEmail) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 })
     }
 
@@ -17,7 +20,8 @@ export async function POST(request: NextRequest) {
     const { data: invite, error: inviteError } = await supabase
       .from("pending_invites")
       .select("id, role, workspace_id")
-      .eq("email", email.toLowerCase())
+      .ilike("email", normalizedEmail)
+      .is("accepted_at", null)
       .limit(1)
       .single()
 
@@ -28,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (inviteError || !invite) {
-      console.log("[InviteCheck] No invite found for:", email.toLowerCase())
+      console.log("[InviteCheck] No invite found for:", normalizedEmail)
       return NextResponse.json({
         hasInvite: false,
       })
@@ -63,4 +67,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

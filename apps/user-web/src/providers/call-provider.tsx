@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react"
 import { Device, Call } from "@twilio/voice-sdk"
+import { useUser } from "@/hooks/use-user"
 
 // Call status types matching Twilio's status values
 export type CallStatus =
@@ -93,6 +94,7 @@ const ENDED_STATUSES: CallStatus[] = [
 ]
 
 export function CallProvider({ children }: { children: ReactNode }) {
+  const { user, loading: userLoading } = useUser()
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null)
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null)
   const [isWidgetExpanded, setIsWidgetExpanded] = useState(false)
@@ -104,19 +106,31 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const pendingCallParamsRef = useRef<InitiateCallParams | null>(null)
 
   // Fetch a new access token
-  const fetchToken = useCallback(async (): Promise<string | null> => {
+  const fetchToken = useCallback(async (): Promise<{ token: string | null; unauthorized: boolean }> => {
     try {
       const res = await fetch("/api/twilio/token")
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || "Failed to fetch token")
+        let errorMessage = "Failed to fetch token"
+        try {
+          const data = await res.json()
+          errorMessage = data.error || errorMessage
+        } catch {
+          // Keep fallback error message.
+        }
+
+        if (res.status === 401) {
+          setDeviceError(null)
+          return { token: null, unauthorized: true }
+        }
+
+        throw new Error(errorMessage)
       }
       const data = await res.json()
-      return data.token
+      return { token: data.token ?? null, unauthorized: false }
     } catch (err) {
       console.error("Failed to fetch Twilio token:", err)
       setDeviceError(err instanceof Error ? err.message : "Failed to fetch token")
-      return null
+      return { token: null, unauthorized: false }
     }
   }, [])
 
@@ -125,9 +139,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setDeviceState("initializing")
     setDeviceError(null)
 
-    const token = await fetchToken()
+    const { token, unauthorized } = await fetchToken()
     if (!token) {
-      setDeviceState("error")
+      setDeviceState(unauthorized ? "idle" : "error")
       return
     }
 
@@ -156,7 +170,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       newDevice.on("tokenWillExpire", async () => {
         console.log("Twilio token will expire, refreshing...")
-        const newToken = await fetchToken()
+        const { token: newToken } = await fetchToken()
         if (newToken && deviceRef.current) {
           deviceRef.current.updateToken(newToken)
         }
@@ -183,8 +197,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchToken])
 
-  // Initialize device on mount
+  // Initialize device only for authenticated users.
   useEffect(() => {
+    if (userLoading) return
+
+    if (!user) {
+      setDeviceState("idle")
+      setDeviceError(null)
+      if (deviceRef.current) {
+        deviceRef.current.destroy()
+        deviceRef.current = null
+      }
+      return
+    }
+
     initializeDevice()
 
     return () => {
@@ -193,7 +219,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         deviceRef.current = null
       }
     }
-  }, [initializeDevice])
+  }, [initializeDevice, user, userLoading])
 
   // Initiate an outbound call using Device.connect()
   const initiateCall = useCallback(
