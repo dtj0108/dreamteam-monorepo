@@ -85,6 +85,14 @@ export default function RootLayout({
             gtag('config', 'G-99SC8E71GY');
           `}
         </Script>
+        <Script
+          id="vtag-ai-js"
+          src="https://r2.leadsy.ai/tag.js"
+          data-pid="1aIZOzDXKDLwLdWO8"
+          data-version="062024"
+          strategy="afterInteractive"
+          async
+        />
         <Script id="apollo-tracker" strategy="afterInteractive">
           {`
             function initApollo(){
