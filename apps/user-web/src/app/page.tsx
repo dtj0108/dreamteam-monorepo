@@ -6,18 +6,18 @@ import { HomeHub } from "@/components/home/home-hub"
 import { LandingPage } from "@/components/marketing/landing-page"
 
 export const metadata: Metadata = {
-  title: "dreamteam.ai - Business in the AI era",
+  title: "Have up to 38 autonomous AI agents working for you in minutes",
   description: "Finance, CRM, and Team collaboration—all powered by AI. Build, sell, and scale with the tools modern businesses need.",
   openGraph: {
     title: "Have up to 38 autonomous AI agents working for you in minutes",
     description: "Finance, CRM, and Team collaboration—all powered by AI. Build, sell, and scale with the tools modern businesses need.",
     url: "https://dreamteam.ai",
-    images: ["/api/og?title=dreamteam.ai&description=Business%20in%20the%20AI%20era&type=marketing"],
+    images: ["/api/og"],
   },
   twitter: {
     title: "Have up to 38 autonomous AI agents working for you in minutes",
     description: "Finance, CRM, and Team collaboration—all powered by AI. Build, sell, and scale with the tools modern businesses need.",
-    images: ["/api/og?title=dreamteam.ai&description=Business%20in%20the%20AI%20era&type=marketing"],
+    images: ["/api/og"],
   },
 }
 
