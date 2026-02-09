@@ -8,12 +8,15 @@ const publicRoutes = [
   '/login',
   '/signup',
   '/verify',
+  '/forgot-password',
   '/workspaces/join',
   '/api/auth/login',
   '/api/auth/signup',
   '/api/auth/invite-signup',
   '/api/auth/verify-otp',
   '/api/auth/send-otp',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
   '/api/auth/me',
   '/api/auth/complete-signup', // Guest checkout signup completion (pay first, sign up after)
   '/api/team/invites/check', // Allow checking for invites during signup
