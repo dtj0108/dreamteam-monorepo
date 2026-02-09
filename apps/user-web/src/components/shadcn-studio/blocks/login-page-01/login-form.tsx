@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { EyeIcon, EyeOffIcon, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -128,9 +129,9 @@ const LoginForm = () => {
           </Label>
         </div>
 
-        <a href='#' className='text-sm hover:underline'>
+        <Link href='/forgot-password' className='text-sm hover:underline'>
           Forgot Password?
-        </a>
+        </Link>
       </div>
 
       <Button className='w-full' type='submit' disabled={loading}>
