@@ -3,7 +3,7 @@ import { ImageResponse } from "@vercel/og";
 export const runtime = "edge";
 
 export async function GET() {
-  const title = "Do you work with humans, AI, or both?";
+  const title = "Have up to 38 autonomous AI agents working for you in minutes";
 
   // Get logo URL - must be absolute for edge runtime
   const logoUrl = "https://dreamteam.ai/logo.png";
@@ -68,7 +68,7 @@ export async function GET() {
               textAlign: "center",
             }}
           >
-            Do you work with humans,
+            Have up to 38 autonomous AI agents
           </h1>
           <h1
             style={{
@@ -80,7 +80,7 @@ export async function GET() {
               textAlign: "center",
             }}
           >
-            AI, or both?
+            working for you in minutes
           </h1>
         </div>
 

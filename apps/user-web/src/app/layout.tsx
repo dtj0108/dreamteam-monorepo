@@ -24,20 +24,20 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "dreamteam.ai",
     locale: "en_US",
-    title: "Do you work with humans, AI, or both?",
+    title: "Have up to 38 autonomous AI agents working for you in minutes",
     description: "Have up to 38 autonomous AI agents working for you in minutes.",
     images: [
       {
         url: "/api/og",
         width: 1200,
         height: 630,
-        alt: "dreamteam.ai - Do you work with humans, AI, or both?",
+        alt: "dreamteam.ai - Have up to 38 autonomous AI agents working for you in minutes",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Do you work with humans, AI, or both?",
+    title: "Have up to 38 autonomous AI agents working for you in minutes",
     description: "Have up to 38 autonomous AI agents working for you in minutes.",
     images: ["/api/og"],
   },
