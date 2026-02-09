@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Inter } from "next/font/google";
 import { RouteProvider, ThemeProvider, UserProvider, WorkspaceProvider, CallProvider } from "@/providers";
 import { KeyboardShortcutsProvider } from "@/providers/keyboard-shortcuts-provider";
@@ -72,6 +73,18 @@ export default function RootLayout({
             </TooltipProvider>
           </ThemeProvider>
         </RouteProvider>
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-99SC8E71GY"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-99SC8E71GY');
+          `}
+        </Script>
       </body>
     </html>
   );
