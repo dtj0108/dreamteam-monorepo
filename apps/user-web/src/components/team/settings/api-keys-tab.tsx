@@ -42,6 +42,9 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
+  ExternalLink,
+  BookOpen,
+  Puzzle,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
@@ -442,26 +445,65 @@ export function ApiKeysTab({ workspaceId, isOwner, isAdmin }: ApiKeysTabProps) {
         </Card>
       )}
 
-      {/* Usage Instructions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Using API Keys</CardTitle>
-          <CardDescription>
-            Include your API key in the Authorization header
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="p-4 bg-muted rounded-lg">
-            <code className="text-sm font-mono">
-              Authorization: Bearer sk_live_...
-            </code>
-          </div>
-          <p className="text-sm text-muted-foreground mt-3">
-            API keys provide full access to all workspace resources. Keep them
-            secure and never share them publicly.
-          </p>
-        </CardContent>
-      </Card>
+      {/* API Documentation & Usage */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <CardTitle className="text-base">API Documentation</CardTitle>
+                <CardDescription>Full REST API reference</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-3">
+              Manage leads, contacts, projects, tasks, messages, and more. Includes endpoint details, parameters, and example requests.
+            </p>
+            <div className="p-3 bg-muted rounded-lg mb-4">
+              <code className="text-sm font-mono text-muted-foreground">
+                Authorization: Bearer sk_live_...
+              </code>
+            </div>
+            <a
+              href="/docs/api"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button variant="outline" className="w-full">
+                <BookOpen className="h-4 w-4 mr-2" />
+                View API Docs
+                <ExternalLink className="h-3.5 w-3.5 ml-auto" />
+              </Button>
+            </a>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                <Puzzle className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Make.com Integration</CardTitle>
+                <CardDescription>No-code automation</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-3">
+              Use our Make.com module to build automations without writing code. It uses this same API under the hood — just add your API key in Make.com to get started.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Supports triggers (webhooks) for real-time events and actions for all resources like leads, tasks, and messages.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

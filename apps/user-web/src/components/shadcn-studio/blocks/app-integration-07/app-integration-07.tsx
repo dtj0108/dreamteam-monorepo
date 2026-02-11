@@ -87,7 +87,7 @@ const AppIntegration = () => {
           </div>
           <div className='flex flex-col gap-3'>
             <Button
-              href='/integrations'
+              href='#'
               size='lg'
               color='secondary'
             >

@@ -52,33 +52,56 @@ export async function fireWebhooks(
       return
     }
 
-    try {
-      const response = await fetch(webhook.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          event,
-          timestamp: new Date().toISOString(),
-          data: payload,
-        }),
-      })
+    const body = JSON.stringify({
+      event,
+      timestamp: new Date().toISOString(),
+      data: payload,
+    })
 
-      if (!response.ok) {
+    const maxRetries = 3
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await fetch(webhook.url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        })
+
+        if (response.ok) {
+          break // Success, no need to retry
+        }
+
         console.error(
-          `Webhook ${webhook.id} returned ${response.status}: ${response.statusText}`
+          `Webhook ${webhook.id} returned ${response.status}: ${response.statusText} (attempt ${attempt + 1}/${maxRetries})`
         )
 
-        // Auto-deactivate webhooks that return 410 (Gone) or 404 (Not Found)
+        // Auto-deactivate webhooks that return 410 (Gone) or 404 (Not Found) — don't retry
         if (response.status === 410 || response.status === 404) {
           await supabase
             .from("make_webhooks")
             .update({ is_active: false })
             .eq("id", webhook.id)
           console.log(`Deactivated stale webhook ${webhook.id}`)
+          break
+        }
+
+        // Don't retry 4xx client errors (except 408 Request Timeout, 429 Too Many Requests)
+        if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
+          break
+        }
+
+        // Wait before retrying (exponential backoff: 1s, 2s, 4s)
+        if (attempt < maxRetries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
+        }
+      } catch (err) {
+        console.error(`Failed to fire webhook ${webhook.id} (attempt ${attempt + 1}/${maxRetries}):`, err)
+
+        // Wait before retrying on network errors
+        if (attempt < maxRetries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
         }
       }
-    } catch (err) {
-      console.error(`Failed to fire webhook ${webhook.id}:`, err)
     }
   })
 

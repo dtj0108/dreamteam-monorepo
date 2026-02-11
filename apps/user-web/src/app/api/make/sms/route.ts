@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fire webhook
-    fireWebhooks("sms.sent", {
+    await fireWebhooks("sms.sent", {
       id: comm.id,
       twilio_sid: result.messageSid,
       from: ownedNumber.phone_number,

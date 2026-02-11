@@ -68,10 +68,10 @@ export async function PUT(
     const body = await request.json()
     const supabase = createAdminClient()
 
-    // Get the current lead to check for status changes
+    // Get the current lead to check for status/stage changes
     const { data: currentLead } = await supabase
       .from("leads")
-      .select("status")
+      .select("status, stage_id")
       .eq("id", id)
       .eq("workspace_id", auth.workspaceId)
       .single()
@@ -81,6 +81,7 @@ export async function PUT(
     }
 
     const oldStatus = currentLead.status
+    const oldStageId = currentLead.stage_id
 
     // Build update object with allowed fields
     const allowedFields = [
@@ -123,6 +124,15 @@ export async function PUT(
       await fireWebhooks(
         "lead.status_changed",
         { ...data, old_status: oldStatus, new_status: body.status },
+        auth.workspaceId
+      )
+    }
+
+    // Fire stage change webhook if stage changed
+    if (body.stage_id && body.stage_id !== oldStageId) {
+      await fireWebhooks(
+        "lead.stage_changed",
+        { ...data, old_stage_id: oldStageId, new_stage_id: body.stage_id },
         auth.workspaceId
       )
     }

@@ -59,7 +59,7 @@ const footerNavList = [
             { label: "Blog", href: "#" },
             { label: "Help Center", href: "#" },
             { label: "Tutorials", href: "/learn" },
-            { label: "API Docs", href: "#" },
+            { label: "API Docs", href: "/docs/api" },
         ],
     },
     {
