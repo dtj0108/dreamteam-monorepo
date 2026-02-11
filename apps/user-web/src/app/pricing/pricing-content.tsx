@@ -185,9 +185,6 @@ function AgentTierCard({ tier }: { tier: DisplayAgentTier }) {
             {/* Header */}
             <div className="mb-4">
                 <h3 className="text-lg font-semibold text-text-primary">{tier.name}</h3>
-                {tier.tagline && (
-                    <p className="mt-1 text-xs italic text-text-tertiary">"{tier.tagline}"</p>
-                )}
             </div>
 
             {/* Price + Agent Count */}
@@ -215,13 +212,6 @@ function AgentTierCard({ tier }: { tier: DisplayAgentTier }) {
             {tier.humanEquivalent && (
                 <p className="mb-4 text-xs text-text-tertiary">
                     vs <span className="font-medium text-text-secondary">{tier.humanEquivalent}/year</span> in human salaries
-                </p>
-            )}
-
-            {/* Description */}
-            {tier.description && (
-                <p className="mb-4 rounded-lg bg-bg-secondary p-3 text-center text-xs font-medium text-text-secondary">
-                    {tier.description}
                 </p>
             )}
 
@@ -268,9 +258,11 @@ export function PricingContent() {
 
     // Fetch plans from API
     useEffect(() => {
+        const controller = new AbortController();
+
         async function fetchPlans() {
             try {
-                const res = await fetch('/api/plans');
+                const res = await fetch('/api/plans', { signal: controller.signal });
                 if (res.ok) {
                     const data = await res.json();
                     const plans: PublicPlan[] = data.plans || [];
@@ -280,13 +272,22 @@ export function PricingContent() {
                     setFetchedAgentTiers(plans.filter(p => p.plan_type === 'agent_tier'));
                 }
             } catch (error) {
+                if (controller.signal.aborted) {
+                    return;
+                }
                 console.error('Failed to fetch plans:', error);
                 // Will fall back to hardcoded data
             } finally {
-                setPlansLoaded(true);
+                if (!controller.signal.aborted) {
+                    setPlansLoaded(true);
+                }
             }
         }
         fetchPlans();
+
+        return () => {
+            controller.abort();
+        };
     }, []);
 
     // Transform API plans to display format
@@ -338,25 +339,92 @@ export function PricingContent() {
                             Do you work with humans, AI, or both?
                         </h1>
                         <p className="mt-3 text-md text-text-tertiary md:text-lg">
-                            Start with a workspace for your team. Add AI agents when you're ready to scale.
+                            Start with AI agents. Add a workspace when your human team is ready.
                         </p>
                     </div>
                 </div>
             </section>
 
-            {/* Workspace Pricing Section */}
+            {/* Agent Pricing Section */}
             <section className="pb-16 md:pb-20">
                 <div className="mx-auto max-w-container px-4 md:px-8">
                     {/* Centered Header */}
-                    <div className="mb-10 text-center">
+                    <div className="mb-6 text-center">
                         <Button
                             color="secondary"
                             size="sm"
                             className="mb-4"
-                            onClick={() => document.getElementById('agents')?.scrollIntoView({ behavior: 'smooth' })}
+                            onClick={() => document.getElementById('workspace')?.scrollIntoView({ behavior: 'smooth' })}
                         >
-                            No, I want AI agents →
+                            No, I want a workspace →
                         </Button>
+                        <h2 className="text-xl font-semibold text-text-primary">Your AI Team</h2>
+                        <p className="mt-1 text-sm text-text-tertiary">DreamTeam doesn't scale features. It scales headcount.</p>
+                    </div>
+
+                    {/* Agent Count Comparison */}
+                    {plansLoaded && displayAgentTiers.length >= 3 && (
+                        <div className="mb-10 flex items-center justify-center gap-2 text-center">
+                            <span className="text-2xl font-bold text-text-primary">{displayAgentTiers[0]?.agentCount || 7}</span>
+                            <span className="text-text-tertiary">→</span>
+                            <span className="text-2xl font-bold text-text-primary">{displayAgentTiers[1]?.agentCount || 18}</span>
+                            <span className="text-text-tertiary">→</span>
+                            <span className="text-2xl font-bold text-brand-600">{displayAgentTiers[2]?.agentCount || 38} agents</span>
+                        </div>
+                    )}
+
+                    <p className="mb-8 text-center text-lg italic text-text-tertiary">
+                        The work of a full department at a fraction of the cost
+                    </p>
+
+                    {/* Agent Tier Cards */}
+                    <div className="grid gap-6 lg:grid-cols-3">
+                        {!plansLoaded ? (
+                            // Loading skeletons for agent tiers
+                            <>
+                                {[1, 2, 3].map((i) => (
+                                    <div key={i} className="relative flex flex-col rounded-2xl p-6 bg-bg-primary ring-1 ring-border-secondary shadow-md animate-pulse">
+                                        <div className="h-6 w-32 bg-gray-200 rounded mb-4" />
+                                        <div className="h-10 w-20 bg-gray-200 rounded mb-2" />
+                                        <div className="h-8 w-16 bg-gray-200 rounded mb-4" />
+                                        <div className="h-20 bg-gray-200 rounded mb-4" />
+                                        <div className="flex-1 space-y-2">
+                                            {[1, 2, 3, 4, 5, 6, 7].map((j) => (
+                                                <div key={j} className="h-4 bg-gray-200 rounded w-full" />
+                                            ))}
+                                        </div>
+                                        <div className="h-10 w-full bg-gray-200 rounded mt-4" />
+                                    </div>
+                                ))}
+                            </>
+                        ) : displayAgentTiers.length === 0 ? (
+                            // No plans loaded - show message
+                            <div className="col-span-3 text-center py-8 text-text-tertiary">
+                                <p>Agent tiers are being configured. Please check back soon.</p>
+                            </div>
+                        ) : (
+                            displayAgentTiers.map((tier) => (
+                                <AgentTierCard key={tier.id} tier={tier} />
+                            ))
+                        )}
+                    </div>
+                </div>
+            </section>
+
+            {/* Divider */}
+            <div className="mx-auto max-w-container px-4 md:px-8">
+                <div className="flex items-center gap-4">
+                    <hr className="flex-1 border-border-secondary" />
+                    <span className="text-sm font-medium text-text-quaternary">ADD YOUR HUMAN TEAM</span>
+                    <hr className="flex-1 border-border-secondary" />
+                </div>
+            </div>
+
+            {/* Workspace Pricing Section */}
+            <section id="workspace" className="py-16 md:py-20 scroll-mt-8">
+                <div className="mx-auto max-w-container px-4 md:px-8">
+                    {/* Centered Header */}
+                    <div className="mb-10 text-center">
                         <h2 className="text-xl font-semibold text-text-primary">For Your Human Team</h2>
                         <p className="mt-1 text-sm text-text-tertiary">If you want humans working in the workspace, this is for you</p>
                     </div>
@@ -459,73 +527,6 @@ export function PricingContent() {
                                 </div>
                             </div>
                         ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* Divider */}
-            <div className="mx-auto max-w-container px-4 md:px-8">
-                <div className="flex items-center gap-4">
-                    <hr className="flex-1 border-border-secondary" />
-                    <span className="text-sm font-medium text-text-quaternary">ADD AI POWER</span>
-                    <hr className="flex-1 border-border-secondary" />
-                </div>
-            </div>
-
-            {/* Agent Pricing Section */}
-            <section id="agents" className="py-16 md:py-20 scroll-mt-8">
-                <div className="mx-auto max-w-container px-4 md:px-8">
-                    {/* Centered Header */}
-                    <div className="mb-6 text-center">
-                        <h2 className="text-xl font-semibold text-text-primary">Your AI Team</h2>
-                        <p className="mt-1 text-sm text-text-tertiary">DreamTeam doesn't scale features. It scales headcount.</p>
-                    </div>
-
-                    {/* Agent Count Comparison */}
-                    {plansLoaded && displayAgentTiers.length >= 3 && (
-                        <div className="mb-10 flex items-center justify-center gap-2 text-center">
-                            <span className="text-2xl font-bold text-text-primary">{displayAgentTiers[0]?.agentCount || 7}</span>
-                            <span className="text-text-tertiary">→</span>
-                            <span className="text-2xl font-bold text-text-primary">{displayAgentTiers[1]?.agentCount || 18}</span>
-                            <span className="text-text-tertiary">→</span>
-                            <span className="text-2xl font-bold text-brand-600">{displayAgentTiers[2]?.agentCount || 38} agents</span>
-                        </div>
-                    )}
-
-                    <p className="mb-8 text-center text-lg italic text-text-tertiary">
-                        Startup package customers get early access to new agent packages
-                    </p>
-
-                    {/* Agent Tier Cards */}
-                    <div className="grid gap-6 lg:grid-cols-3">
-                        {!plansLoaded ? (
-                            // Loading skeletons for agent tiers
-                            <>
-                                {[1, 2, 3].map((i) => (
-                                    <div key={i} className="relative flex flex-col rounded-2xl p-6 bg-bg-primary ring-1 ring-border-secondary shadow-md animate-pulse">
-                                        <div className="h-6 w-32 bg-gray-200 rounded mb-4" />
-                                        <div className="h-10 w-20 bg-gray-200 rounded mb-2" />
-                                        <div className="h-8 w-16 bg-gray-200 rounded mb-4" />
-                                        <div className="h-20 bg-gray-200 rounded mb-4" />
-                                        <div className="flex-1 space-y-2">
-                                            {[1, 2, 3, 4, 5, 6, 7].map((j) => (
-                                                <div key={j} className="h-4 bg-gray-200 rounded w-full" />
-                                            ))}
-                                        </div>
-                                        <div className="h-10 w-full bg-gray-200 rounded mt-4" />
-                                    </div>
-                                ))}
-                            </>
-                        ) : displayAgentTiers.length === 0 ? (
-                            // No plans loaded - show message
-                            <div className="col-span-3 text-center py-8 text-text-tertiary">
-                                <p>Agent tiers are being configured. Please check back soon.</p>
-                            </div>
-                        ) : (
-                            displayAgentTiers.map((tier) => (
-                                <AgentTierCard key={tier.id} tier={tier} />
-                            ))
-                        )}
                     </div>
                 </div>
             </section>
