@@ -28,12 +28,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "API key has no associated user" }, { status: 400 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const limit = parseInt(searchParams.get("limit") || "100")
+    const offset = parseInt(searchParams.get("offset") || "0")
+
     // Query by user_id (the actual column in the table)
     const { data, error } = await supabase
       .from("twilio_numbers")
       .select("id, phone_number, friendly_name, capabilities, is_primary, created_at")
       .eq("user_id", apiKey.created_by)
       .order("friendly_name", { ascending: true })
+      .range(offset, offset + limit - 1)
 
     if (error) {
       console.error("Error fetching Twilio numbers:", error)

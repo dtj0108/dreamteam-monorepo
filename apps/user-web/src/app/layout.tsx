@@ -53,6 +53,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const isProduction = process.env.NODE_ENV === "production";
+
   return (
     <html lang="en" className={`${inter.variable} scroll-smooth h-full`} suppressHydrationWarning>
       <body className="bg-background antialiased h-full">
@@ -73,43 +75,45 @@ export default function RootLayout({
             </TooltipProvider>
           </ThemeProvider>
         </RouteProvider>
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-99SC8E71GY"
-          strategy="afterInteractive"
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-99SC8E71GY');
-          `}
-        </Script>
-        <Script
-          id="vtag-ai-js"
-          src="https://r2.leadsy.ai/tag.js"
-          data-pid="1aIZOzDXKDLwLdWO8"
-          data-version="062024"
-          strategy="afterInteractive"
-          async
-        />
-        <Script id="apollo-tracker" strategy="afterInteractive">
-          {`
-            function initApollo(){
-              var n=Math.random().toString(36).substring(7),
-                  o=document.createElement("script");
-              o.src="https://assets.apollo.io/micro/website-tracker/tracker.iife.js?nocache="+n;
-              o.async=true;
-              o.defer=true;
-              o.onload=function(){window.trackingFunctions.onLoad({appId:"69890482badb1100152c3efc"})};
-              document.head.appendChild(o)
-            }
-            initApollo();
-          `}
-        </Script>
-        {/* Meta Pixel */}
-        <Script id="meta-pixel" strategy="afterInteractive">
-          {`!function(f,b,e,v,n,t,s)
+        {isProduction && (
+          <>
+            <Script
+              src="https://www.googletagmanager.com/gtag/js?id=G-99SC8E71GY"
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', 'G-99SC8E71GY');
+              `}
+            </Script>
+            <Script
+              id="vtag-ai-js"
+              src="https://r2.leadsy.ai/tag.js"
+              data-pid="1aIZOzDXKDLwLdWO8"
+              data-version="062024"
+              strategy="afterInteractive"
+              async
+            />
+            <Script id="apollo-tracker" strategy="afterInteractive">
+              {`
+                function initApollo(){
+                  var n=Math.random().toString(36).substring(7),
+                      o=document.createElement("script");
+                  o.src="https://assets.apollo.io/micro/website-tracker/tracker.iife.js?nocache="+n;
+                  o.async=true;
+                  o.defer=true;
+                  o.onload=function(){window.trackingFunctions.onLoad({appId:"69890482badb1100152c3efc"})};
+                  document.head.appendChild(o)
+                }
+                initApollo();
+              `}
+            </Script>
+            {/* Meta Pixel */}
+            <Script id="meta-pixel" strategy="afterInteractive">
+              {`!function(f,b,e,v,n,t,s)
 {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
 n.callMethod.apply(n,arguments):n.queue.push(arguments)};
 if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
@@ -119,12 +123,14 @@ s.parentNode.insertBefore(t,s)}(window, document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
 fbq('init', '1592916305089297');
 fbq('track', 'PageView');`}
-        </Script>
-        <noscript>
-          <img height="1" width="1" style={{display:'none'}}
-            src="https://www.facebook.com/tr?id=1592916305089297&ev=PageView&noscript=1"
-          />
-        </noscript>
+            </Script>
+            <noscript>
+              <img height="1" width="1" style={{display:'none'}}
+                src="https://www.facebook.com/tr?id=1592916305089297&ev=PageView&noscript=1"
+              />
+            </noscript>
+          </>
+        )}
       </body>
     </html>
   );

@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get("limit") || "100")
+    const offset = parseInt(searchParams.get("offset") || "0")
 
     const { data, error } = await supabase
       .from("workspace_members")
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
         profile:profiles(id, name, email, avatar_url, phone)
       `)
       .eq("workspace_id", auth.workspaceId)
-      .limit(limit)
+      .range(offset, offset + limit - 1)
 
     if (error) {
       console.error("Error fetching users:", error)

@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get("limit") || "100")
+    const offset = parseInt(searchParams.get("offset") || "0")
     const lead_id = searchParams.get("lead_id")
 
     let query = supabase
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
       .select("id, lead_id, first_name, last_name, email, phone, title, notes, created_at")
       .eq("workspace_id", auth.workspaceId)
       .order("first_name", { ascending: true })
-      .limit(limit)
+      .range(offset, offset + limit - 1)
 
     if (lead_id) {
       query = query.eq("lead_id", lead_id)
