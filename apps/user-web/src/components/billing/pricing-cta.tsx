@@ -23,6 +23,20 @@ interface PricingCTAProps {
   isComingSoon?: boolean
 }
 
+function trackGa4Event(eventName: "start_cta" | "start_purchase", params: Record<string, unknown>) {
+  if (typeof window === "undefined") return
+  const gtag = (window as Window & { gtag?: (...args: unknown[]) => void }).gtag
+  if (!gtag) return
+  gtag("event", eventName, params)
+}
+
+function trackMetaEvent(eventName: "start_cta" | "start_purchase", params: Record<string, unknown>) {
+  if (typeof window === "undefined") return
+  const fbq = (window as Window & { fbq?: (...args: unknown[]) => void }).fbq
+  if (!fbq) return
+  fbq("trackCustom", eventName, params)
+}
+
 /**
  * CTA button for pricing page that handles:
  * - Authenticated users: Redirect to authenticated checkout (/api/billing/checkout)
@@ -43,6 +57,16 @@ export function PricingCTA({
   const handleClick = async () => {
     // Don't do anything if coming soon
     if (isComingSoon) return
+
+    const eventParams = {
+      source: "pricing_page",
+      plan: plan ?? null,
+      tier: tier ?? null,
+      pricing_type: plan ? "workspace_plan" : "agent_tier",
+      is_authenticated: isAuthenticated,
+    }
+    trackGa4Event("start_cta", eventParams)
+    trackMetaEvent("start_cta", eventParams)
 
     console.log('[PricingCTA] Button clicked!', { plan, tier, isAuthenticated })
     setLoading(true)
@@ -88,11 +112,15 @@ export function PricingCTA({
           throw new Error(redirectData.error || "Failed to create checkout session")
         }
         console.log('[PricingCTA] Redirecting to Stripe:', redirectData.url)
+        trackGa4Event("start_purchase", eventParams)
+        trackMetaEvent("start_purchase", eventParams)
         window.location.href = redirectData.url
         return
       }
 
       console.log('[PricingCTA] Redirecting to Stripe:', data.url)
+      trackGa4Event("start_purchase", eventParams)
+      trackMetaEvent("start_purchase", eventParams)
       window.location.href = data.url
     } catch (error) {
       console.error("[PricingCTA] Checkout error:", error)
