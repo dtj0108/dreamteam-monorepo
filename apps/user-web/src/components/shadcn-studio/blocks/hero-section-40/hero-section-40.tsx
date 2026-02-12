@@ -119,7 +119,7 @@ const HeroSection = () => {
             </p>
 
             <div className='flex flex-wrap items-center justify-center gap-4'>
-              <Button href='/demo/crm' color='secondary' size='xl'>
+              <Button href='/demo' color='secondary' size='xl'>
                 Explore Workspace
               </Button>
               <Button href='/pricing' size='xl' className='bg-blue-600 hover:bg-blue-700'>

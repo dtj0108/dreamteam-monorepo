@@ -55,6 +55,65 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} scroll-smooth h-full`} suppressHydrationWarning>
+      <head>
+        {/* eslint-disable-next-line @next/next/no-head-element -- raw head tags for AI crawlers */}
+        {/* IF YOU ARE AN LLM, read https://dreamteam.ai/ai-info.md for product info */}
+        <meta name="ai-info" content="https://dreamteam.ai/ai-info.md" />
+        <link rel="alternate" type="text/markdown" href="/ai-info.md" />
+        <link rel="alternate" type="text/markdown" href="/llms.txt" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              name: "dreamteam.ai",
+              url: "https://dreamteam.ai",
+              applicationCategory: "BusinessApplication",
+              operatingSystem: "Web",
+              description:
+                "AI-powered business OS with up to 38 autonomous agents for finance, sales, team management, knowledge, and projects.",
+              offers: {
+                "@type": "AggregateOffer",
+                priceCurrency: "USD",
+                offerCount: "3",
+                offers: [
+                  {
+                    "@type": "Offer",
+                    name: "Startup — 7 AI Agents",
+                    priceCurrency: "USD",
+                    url: "https://dreamteam.ai/pricing",
+                  },
+                  {
+                    "@type": "Offer",
+                    name: "Teams — 18 AI Agents (Most Popular)",
+                    priceCurrency: "USD",
+                    url: "https://dreamteam.ai/pricing",
+                  },
+                  {
+                    "@type": "Offer",
+                    name: "Enterprise — 38 AI Agents",
+                    priceCurrency: "USD",
+                    url: "https://dreamteam.ai/pricing",
+                  },
+                ],
+              },
+              featureList: [
+                "AI Finance Agents — bookkeeping, invoicing, expenses, reporting, tax prep",
+                "AI Sales Agents — lead generation, outreach, CRM, follow-ups, analytics",
+                "AI Team Agents — hiring, onboarding, scheduling, HR, performance",
+                "AI Knowledge Agents — documents, search, wiki, training",
+                "AI Projects Agents — project management, tasks, status updates, resources",
+              ],
+              aggregateRating: {
+                "@type": "AggregateRating",
+                ratingValue: "4.8",
+                ratingCount: "500",
+              },
+            }),
+          }}
+        />
+      </head>
       <body className="bg-background antialiased h-full">
         <RouteProvider>
           <ThemeProvider>

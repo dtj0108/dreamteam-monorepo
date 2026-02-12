@@ -123,7 +123,7 @@ const AgentFeatures = ({
             AI Agents
           </Badge>
           <h2 className='text-2xl font-semibold md:text-3xl lg:text-4xl'>
-            You built this business to have freedom.<br /><em className='underline'>Now actually take it.</em>
+            Every second without agents is wasted time.<br /><em className='underline'>Extreme intelligence. Real agency.</em>
           </h2>
           <p className='text-muted-foreground text-xl'>
             That's the power of unified intelligence. Agents share context and coordinate automatically.
