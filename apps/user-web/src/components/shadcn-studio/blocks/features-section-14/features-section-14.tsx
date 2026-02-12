@@ -12,7 +12,6 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import NotificationStack from '@/components/shadcn-studio/blocks/features-section-14/notification-stack'
 import type { NotificationCard } from '@/components/shadcn-studio/blocks/features-section-14/notification-stack'
 
-import { MotionPreset } from '@/components/ui/motion-preset'
 import { Cursor, CursorFollow, CursorProvider } from '@/components/ui/cursor'
 import { AnimatedBeam } from '@/components/ui/animated-beam'
 
@@ -120,41 +119,16 @@ const AgentFeatures = ({
         <div className='rounded-3xl bg-muted/50 p-6 sm:p-10 lg:p-16'>
         {/* Header */}
         <div className='mb-12 space-y-4 text-center sm:mb-16 lg:mb-24'>
-          <MotionPreset fade blur slide={{ direction: 'up', offset: 50 }} transition={{ duration: 0.5 }}>
-            <Badge className='text-sm font-normal' variant='outline'>
-              AI Agents
-            </Badge>
-          </MotionPreset>
-          <MotionPreset
-            component='h2'
-            className='text-2xl font-semibold md:text-3xl lg:text-4xl'
-            fade
-            blur
-            slide={{ direction: 'up', offset: 50 }}
-            delay={0.3}
-            transition={{ duration: 0.5 }}
-          >
+          <Badge className='text-sm font-normal' variant='outline'>
+            AI Agents
+          </Badge>
+          <h2 className='text-2xl font-semibold md:text-3xl lg:text-4xl'>
             You built this business to have freedom.<br /><em className='underline'>Now actually take it.</em>
-          </MotionPreset>
-          <MotionPreset
-            component='p'
-            className='text-muted-foreground text-xl'
-            fade
-            blur
-            slide={{ direction: 'up', offset: 50 }}
-            delay={0.5}
-            transition={{ duration: 0.5 }}
-          >
+          </h2>
+          <p className='text-muted-foreground text-xl'>
             That's the power of unified intelligence. Agents share context and coordinate automatically.
-          </MotionPreset>
-          <MotionPreset
-            fade
-            blur
-            slide={{ direction: 'up', offset: 50 }}
-            delay={0.7}
-            transition={{ duration: 0.5 }}
-            className='flex items-center justify-center gap-3 pt-2'
-          >
+          </p>
+          <div className='flex items-center justify-center gap-3 pt-2'>
             <Button asChild size='lg'>
               <Link href='/pricing'>
                 <RocketIcon className='mr-2 size-4' />
@@ -167,7 +141,7 @@ const AgentFeatures = ({
                 Demo Workspace
               </Link>
             </Button>
-          </MotionPreset>
+          </div>
         </div>
 
         <div ref={containerRef} className='relative flex w-full flex-col items-center gap-6 lg:gap-10'>
@@ -175,15 +149,8 @@ const AgentFeatures = ({
           <div className='relative flex w-full items-center justify-between px-2 sm:px-4 lg:px-0'>
             {/* Left department badges */}
             <div className='relative z-10 flex flex-col gap-2 sm:gap-3 lg:gap-10'>
-              {/* Ref on outer div, MotionPreset wraps content */}
               <div ref={div2Ref}>
-                <MotionPreset
-                  fade
-                  blur
-                  delay={0.05}
-                  transition={{ duration: 0.5 }}
-                  className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'
-                >
+                <div className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'>
                   <span
                     className='flex size-5 sm:size-6 lg:size-7 items-center justify-center rounded-md text-xs sm:text-sm lg:text-base'
                     style={{ backgroundColor: `${departments[0]?.color}20` }}
@@ -191,16 +158,10 @@ const AgentFeatures = ({
                     {departments[0]?.emoji}
                   </span>
                   {departments[0]?.name}
-                </MotionPreset>
+                </div>
               </div>
               <div ref={div3Ref}>
-                <MotionPreset
-                  fade
-                  blur
-                  delay={0.05}
-                  transition={{ duration: 0.5 }}
-                  className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'
-                >
+                <div className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'>
                   <span
                     className='flex size-5 sm:size-6 lg:size-7 items-center justify-center rounded-md text-xs sm:text-sm lg:text-base'
                     style={{ backgroundColor: `${departments[1]?.color}20` }}
@@ -208,16 +169,10 @@ const AgentFeatures = ({
                     {departments[1]?.emoji}
                   </span>
                   {departments[1]?.name}
-                </MotionPreset>
+                </div>
               </div>
               <div ref={div9Ref}>
-                <MotionPreset
-                  fade
-                  blur
-                  delay={0.05}
-                  transition={{ duration: 0.5 }}
-                  className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'
-                >
+                <div className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'>
                   <span
                     className='flex size-5 sm:size-6 lg:size-7 items-center justify-center rounded-md text-xs sm:text-sm lg:text-base'
                     style={{ backgroundColor: `${departments[2]?.color}20` }}
@@ -225,7 +180,7 @@ const AgentFeatures = ({
                     {departments[2]?.emoji}
                   </span>
                   {departments[2]?.name}
-                </MotionPreset>
+                </div>
               </div>
             </div>
 
@@ -239,19 +194,13 @@ const AgentFeatures = ({
 
             {/* Central hub */}
             <div ref={div1Ref} className='relative z-10'>
-              <MotionPreset
-                fade
-                blur
-                delay={0.05}
-                transition={{ duration: 0.5 }}
-                className='bg-primary animate-heartbeat z-1 flex h-10 sm:h-12 lg:h-14.5 w-fit items-center gap-2 sm:gap-3 lg:gap-4 rounded-full px-2.5 sm:px-3 lg:px-3.5 text-sm sm:text-lg lg:text-2xl font-medium text-white shadow-2xl [--heartbeat-color:var(--primary)] dark:text-black'
-              >
+              <div className='bg-primary animate-heartbeat z-1 flex h-10 sm:h-12 lg:h-14.5 w-fit items-center gap-2 sm:gap-3 lg:gap-4 rounded-full px-2.5 sm:px-3 lg:px-3.5 text-sm sm:text-lg lg:text-2xl font-medium text-white shadow-2xl [--heartbeat-color:var(--primary)] dark:text-black'>
                 <div className='bg-primary flex size-6 sm:size-8 lg:size-10 items-center justify-center rounded-full border-2 border-white dark:border-black'>
                   <DreamTeamLogo className='size-4 sm:size-5 lg:size-6 text-white dark:text-black' />
                 </div>
                 <span className='hidden sm:inline'>Your Agents</span>
                 <span className='sm:hidden'>Agents</span>
-              </MotionPreset>
+              </div>
             </div>
 
             {/* Right span anchors for beams */}
@@ -265,13 +214,7 @@ const AgentFeatures = ({
             {/* Right department badges */}
             <div className='relative z-10 flex flex-col gap-2 sm:gap-3 lg:gap-10'>
               <div ref={div4Ref}>
-                <MotionPreset
-                  fade
-                  blur
-                  delay={0.05}
-                  transition={{ duration: 0.5 }}
-                  className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'
-                >
+                <div className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'>
                   <span
                     className='flex size-5 sm:size-6 lg:size-7 items-center justify-center rounded-md text-xs sm:text-sm lg:text-base'
                     style={{ backgroundColor: `${departments[3]?.color}20` }}
@@ -279,17 +222,11 @@ const AgentFeatures = ({
                     {departments[3]?.emoji}
                   </span>
                   {departments[3]?.name}
-                </MotionPreset>
+                </div>
               </div>
 
               <div ref={div5Ref}>
-                <MotionPreset
-                  fade
-                  blur
-                  delay={0.05}
-                  transition={{ duration: 0.5 }}
-                  className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'
-                >
+                <div className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'>
                   <span
                     className='flex size-5 sm:size-6 lg:size-7 items-center justify-center rounded-md text-xs sm:text-sm lg:text-base'
                     style={{ backgroundColor: `${departments[4]?.color}20` }}
@@ -297,17 +234,11 @@ const AgentFeatures = ({
                     {departments[4]?.emoji}
                   </span>
                   {departments[4]?.name}
-                </MotionPreset>
+                </div>
               </div>
 
               <div ref={div10Ref}>
-                <MotionPreset
-                  fade
-                  blur
-                  delay={0.05}
-                  transition={{ duration: 0.5 }}
-                  className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'
-                >
+                <div className='bg-background flex h-8 sm:h-10 lg:h-11 w-fit items-center gap-1.5 sm:gap-2 rounded-md border px-2 sm:px-3 text-xs sm:text-sm lg:text-lg shadow-sm'>
                   <span
                     className='flex size-5 sm:size-6 lg:size-7 items-center justify-center rounded-md text-xs sm:text-sm lg:text-base'
                     style={{ backgroundColor: `${departments[5]?.color}20` }}
@@ -315,7 +246,7 @@ const AgentFeatures = ({
                     {departments[5]?.emoji}
                   </span>
                   {departments[5]?.name}
-                </MotionPreset>
+                </div>
               </div>
             </div>
           </div>
@@ -323,13 +254,7 @@ const AgentFeatures = ({
           {/* Feature cards */}
           <div className='relative z-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3'>
             {/* Card 1: Specialized Agents */}
-            <MotionPreset
-              fade
-              blur
-              delay={0.1}
-              transition={{ duration: 0.9 }}
-              className='relative flex flex-col items-center gap-4 lg:gap-18'
-            >
+            <div className='relative flex flex-col items-center gap-4 lg:gap-18'>
               <span ref={span7Ref} className='size-0.5 max-lg:hidden' />
               <div ref={div6Ref} className='bg-card h-full flex flex-col overflow-hidden rounded-xl border'>
                 <div className='flex-1 px-6 pt-6 text-center'>
@@ -356,16 +281,10 @@ const AgentFeatures = ({
                   </div>
                 </div>
               </div>
-            </MotionPreset>
+            </div>
 
             {/* Card 2: Real-time Communication */}
-            <MotionPreset
-              fade
-              blur
-              delay={0.12}
-              transition={{ duration: 0.9 }}
-              className='relative flex flex-col items-center gap-4 lg:gap-18'
-            >
+            <div className='relative flex flex-col items-center gap-4 lg:gap-18'>
               <span ref={span8Ref} className='size-0.5 max-lg:hidden' />
               <div ref={div7Ref} className='bg-card h-full flex flex-col overflow-hidden rounded-xl border'>
                 <div className='flex-1 px-6 pt-6 text-center'>
@@ -383,16 +302,10 @@ const AgentFeatures = ({
                   </div>
                 </div>
               </div>
-            </MotionPreset>
+            </div>
 
             {/* Card 3: Cross-Team Collaboration */}
-            <MotionPreset
-              fade
-              blur
-              delay={0.15}
-              transition={{ duration: 0.9 }}
-              className='relative flex flex-col items-center gap-4 lg:gap-18'
-            >
+            <div className='relative flex flex-col items-center gap-4 lg:gap-18'>
               <span ref={span9Ref} className='size-0.5 max-lg:hidden' />
               <div ref={div8Ref} className='bg-card h-full flex flex-col overflow-hidden rounded-xl border'>
                 <div className='flex-1 px-6 pt-6 text-center'>
@@ -439,7 +352,7 @@ const AgentFeatures = ({
                   </div>
                 </div>
               </div>
-            </MotionPreset>
+            </div>
           </div>
 
           {/* Animated beams - Top connections (hub to department badges) */}

@@ -73,10 +73,7 @@ function MotionPreset({
   const hiddenVariant: Variant = {}
   const visibleVariant: Variant = {}
 
-  if (blur) {
-    hiddenVariant.filter = blur === true ? 'blur(10px)' : `blur(${blur})`
-    visibleVariant.filter = 'blur(0px)'
-  }
+  // blur-in animation disabled
 
   if (slide) {
     const offset = slide === true ? 100 : (slide.offset ?? 100)
