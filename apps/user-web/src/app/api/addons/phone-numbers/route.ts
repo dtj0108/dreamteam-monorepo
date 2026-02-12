@@ -5,6 +5,7 @@ import {
   getPhoneNumberSubscription,
   getWorkspacePhoneNumbers,
   recalculatePhoneSubscription,
+  syncPhoneSubscriptionWithStripe,
 } from '@/lib/addons-queries'
 
 /**
@@ -71,8 +72,16 @@ export async function POST() {
       return NextResponse.json({ error: 'No workspace selected' }, { status: 400 })
     }
 
-    // Recalculate subscription totals
+    // Recalculate subscription totals from actual phone numbers
     await recalculatePhoneSubscription(workspaceId)
+
+    // Sync Stripe subscription quantities to match DB counts (self-healing)
+    try {
+      await syncPhoneSubscriptionWithStripe(workspaceId)
+    } catch (syncError) {
+      console.error('Failed to sync phone subscription with Stripe:', syncError)
+      // Don't fail the recalculation if Stripe sync fails
+    }
 
     // Return updated subscription
     const subscription = await getPhoneNumberSubscription(workspaceId)

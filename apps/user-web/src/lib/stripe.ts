@@ -49,7 +49,10 @@ export const STRIPE_PRICES = {
     growth: process.env.STRIPE_PRICE_MINUTES_GROWTH || '',
     pro: process.env.STRIPE_PRICE_MINUTES_PRO || '',
   },
-  phoneNumber: process.env.STRIPE_PRICE_PHONE_NUMBER || '',
+  phoneNumber: {
+    local: process.env.STRIPE_PRICE_PHONE_LOCAL || '',
+    tollFree: process.env.STRIPE_PRICE_PHONE_TOLL_FREE || '',
+  },
 } as const
 
 // Type helpers for Stripe integration

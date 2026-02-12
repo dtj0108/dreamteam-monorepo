@@ -6,6 +6,8 @@
  */
 
 import { createHmac, timingSafeEqual } from 'crypto'
+import { NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 // ============================================
 // Configuration
@@ -192,6 +194,38 @@ async function nylasRequest<T>(
       error: error instanceof Error ? error.message : 'Request failed',
     }
   }
+}
+
+/**
+ * Fetch a grant and verify it's active. Returns the grant or an error response.
+ */
+export async function requireActiveGrant(
+  supabase: SupabaseClient,
+  grantId: string,
+  workspaceId: string
+): Promise<{ grant: { grant_id: string } | null; errorResponse: NextResponse | null }> {
+  const { data: grant, error } = await supabase
+    .from('nylas_grants')
+    .select('grant_id, status')
+    .eq('id', grantId)
+    .eq('workspace_id', workspaceId)
+    .single()
+
+  if (error || !grant) {
+    return { grant: null, errorResponse: NextResponse.json({ error: 'Grant not found' }, { status: 404 }) }
+  }
+
+  if (grant.status !== 'active') {
+    return {
+      grant: null,
+      errorResponse: NextResponse.json(
+        { error: 'Email account disconnected. Please reconnect in Settings.', code: 'GRANT_INACTIVE', grantStatus: grant.status },
+        { status: 403 },
+      ),
+    }
+  }
+
+  return { grant, errorResponse: null }
 }
 
 // ============================================

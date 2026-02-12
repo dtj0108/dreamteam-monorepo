@@ -3,6 +3,8 @@
  */
 
 import { createAdminClient } from '@/lib/supabase-server'
+import { getStripe, STRIPE_PRICES } from '@/lib/stripe'
+import { getWorkspaceBilling } from '@/lib/billing-queries'
 import {
   type WorkspaceSMSCredits,
   type WorkspaceCallMinutes,
@@ -15,6 +17,8 @@ import {
   type TwilioNumberWithBilling,
   type CreditBundle,
   type AddOnsSummaryResponse,
+  PHONE_PRICING,
+  type PhoneNumberType,
   SMS_BUNDLES,
   MINUTES_BUNDLES,
   withMinutesDisplay,
@@ -650,6 +654,240 @@ export async function recalculatePhoneSubscription(
       monthly_total_cents: monthlyTotal,
     })
     .eq('workspace_id', workspaceId)
+}
+
+/**
+ * Get the Stripe price ID for a phone number type
+ */
+export function getPriceIdForNumberType(numberType: PhoneNumberType): string {
+  switch (numberType) {
+    case 'local':
+    case 'mobile':
+      return STRIPE_PRICES.phoneNumber.local
+    case 'tollFree':
+      return STRIPE_PRICES.phoneNumber.tollFree
+  }
+}
+
+/**
+ * Add a phone number to the workspace's Stripe subscription.
+ * Creates a new subscription if none exists, or updates quantities on the existing one.
+ */
+export async function addPhoneNumberToSubscription(
+  workspaceId: string,
+  numberType: PhoneNumberType
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const billing = await getWorkspaceBilling(workspaceId)
+    if (!billing?.stripe_customer_id) {
+      return { success: false, error: 'No Stripe customer for workspace' }
+    }
+
+    const priceId = getPriceIdForNumberType(numberType)
+    if (!priceId) {
+      return { success: false, error: `No Stripe price configured for ${numberType} numbers` }
+    }
+
+    const stripe = getStripe()
+    const phoneSub = await getPhoneNumberSubscription(workspaceId)
+
+    if (!phoneSub?.stripe_subscription_id) {
+      // Create new Stripe subscription with one line item
+      const subscription = await stripe.subscriptions.create({
+        customer: billing.stripe_customer_id,
+        items: [{ price: priceId, quantity: 1 }],
+        default_payment_method: billing.default_payment_method_id || undefined,
+        metadata: {
+          workspace_id: workspaceId,
+          type: 'phone_numbers',
+        },
+      })
+
+      const itemId = subscription.items.data[0]?.id || ''
+      await createPhoneSubscription(workspaceId, subscription.id, itemId)
+    } else {
+      // Update existing subscription
+      const subscription = await stripe.subscriptions.retrieve(phoneSub.stripe_subscription_id)
+      const existingItem = subscription.items.data.find(item => item.price.id === priceId)
+
+      if (existingItem) {
+        // Increment quantity on existing line item
+        await stripe.subscriptions.update(phoneSub.stripe_subscription_id, {
+          items: [{ id: existingItem.id, quantity: (existingItem.quantity || 0) + 1 }],
+          proration_behavior: 'create_prorations',
+        })
+      } else {
+        // Add new line item for this number type
+        await stripe.subscriptions.update(phoneSub.stripe_subscription_id, {
+          items: [{ price: priceId, quantity: 1 }],
+          proration_behavior: 'create_prorations',
+        })
+      }
+    }
+
+    // Update local counts
+    const delta = numberType === 'tollFree' ? { tollFree: 1 } : { local: 1 }
+    const currentMonthly = phoneSub?.monthly_total_cents || 0
+    await updatePhoneSubscriptionQuantity(workspaceId, delta, currentMonthly + PHONE_PRICING[numberType])
+
+    return { success: true }
+  } catch (error) {
+    console.error('[addPhoneNumberToSubscription] Error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update phone billing',
+    }
+  }
+}
+
+/**
+ * Remove a phone number from the workspace's Stripe subscription.
+ * Decrements quantity, removes the line item, or cancels the subscription as needed.
+ */
+export async function removePhoneNumberFromSubscription(
+  workspaceId: string,
+  numberType: PhoneNumberType
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const phoneSub = await getPhoneNumberSubscription(workspaceId)
+    const delta = numberType === 'tollFree' ? { tollFree: -1 } : { local: -1 }
+
+    if (!phoneSub?.stripe_subscription_id) {
+      // No Stripe subscription, just update local counts
+      if (phoneSub) {
+        const newMonthly = Math.max(0, phoneSub.monthly_total_cents - PHONE_PRICING[numberType])
+        await updatePhoneSubscriptionQuantity(workspaceId, delta, newMonthly)
+      }
+      return { success: true }
+    }
+
+    const stripe = getStripe()
+    const priceId = getPriceIdForNumberType(numberType)
+    const subscription = await stripe.subscriptions.retrieve(phoneSub.stripe_subscription_id)
+    const existingItem = subscription.items.data.find(item => item.price.id === priceId)
+
+    if (!existingItem) {
+      // Item not found in Stripe, just update local counts
+      const newMonthly = Math.max(0, phoneSub.monthly_total_cents - PHONE_PRICING[numberType])
+      await updatePhoneSubscriptionQuantity(workspaceId, delta, newMonthly)
+      return { success: true }
+    }
+
+    const currentQty = existingItem.quantity || 0
+    const otherItems = subscription.items.data.filter(item => item.price.id !== priceId)
+    const otherItemsQty = otherItems.reduce((sum, item) => sum + (item.quantity || 0), 0)
+
+    if (currentQty > 1) {
+      // Decrement quantity
+      await stripe.subscriptions.update(phoneSub.stripe_subscription_id, {
+        items: [{ id: existingItem.id, quantity: currentQty - 1 }],
+        proration_behavior: 'create_prorations',
+      })
+    } else if (otherItemsQty > 0) {
+      // Remove this line item, keep subscription for other number types
+      await stripe.subscriptions.update(phoneSub.stripe_subscription_id, {
+        items: [{ id: existingItem.id, deleted: true }],
+        proration_behavior: 'create_prorations',
+      })
+    } else {
+      // No items left - cancel the subscription
+      await stripe.subscriptions.cancel(phoneSub.stripe_subscription_id, {
+        invoice_now: true,
+        prorate: true,
+      })
+
+      const supabase = createAdminClient()
+      await supabase
+        .from('phone_number_subscriptions')
+        .update({
+          status: 'canceled',
+          stripe_subscription_id: null,
+          stripe_subscription_item_id: null,
+        })
+        .eq('workspace_id', workspaceId)
+    }
+
+    // Update local counts
+    const newMonthly = Math.max(0, phoneSub.monthly_total_cents - PHONE_PRICING[numberType])
+    await updatePhoneSubscriptionQuantity(workspaceId, delta, newMonthly)
+
+    return { success: true }
+  } catch (error) {
+    console.error('[removePhoneNumberFromSubscription] Error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update phone billing',
+    }
+  }
+}
+
+/**
+ * Sync phone subscription quantities in Stripe to match local DB counts.
+ * Used as a self-healing mechanism during recalculation.
+ */
+export async function syncPhoneSubscriptionWithStripe(
+  workspaceId: string
+): Promise<void> {
+  const phoneSub = await getPhoneNumberSubscription(workspaceId)
+  if (!phoneSub?.stripe_subscription_id) return
+
+  const stripe = getStripe()
+  const subscription = await stripe.subscriptions.retrieve(phoneSub.stripe_subscription_id)
+
+  const localPriceId = STRIPE_PRICES.phoneNumber.local
+  const tollFreePriceId = STRIPE_PRICES.phoneNumber.tollFree
+
+  const items: Array<{ id?: string; price?: string; quantity?: number; deleted?: boolean }> = []
+
+  // Check each existing Stripe item against DB counts
+  for (const item of subscription.items.data) {
+    if (item.price.id === localPriceId) {
+      if (phoneSub.local_numbers > 0 && item.quantity !== phoneSub.local_numbers) {
+        items.push({ id: item.id, quantity: phoneSub.local_numbers })
+      } else if (phoneSub.local_numbers === 0) {
+        items.push({ id: item.id, deleted: true })
+      }
+    } else if (item.price.id === tollFreePriceId) {
+      if (phoneSub.toll_free_numbers > 0 && item.quantity !== phoneSub.toll_free_numbers) {
+        items.push({ id: item.id, quantity: phoneSub.toll_free_numbers })
+      } else if (phoneSub.toll_free_numbers === 0) {
+        items.push({ id: item.id, deleted: true })
+      }
+    }
+  }
+
+  // Add items that exist in DB but not in Stripe
+  const hasLocalInStripe = subscription.items.data.some(item => item.price.id === localPriceId)
+  const hasTollFreeInStripe = subscription.items.data.some(item => item.price.id === tollFreePriceId)
+
+  if (!hasLocalInStripe && phoneSub.local_numbers > 0 && localPriceId) {
+    items.push({ price: localPriceId, quantity: phoneSub.local_numbers })
+  }
+  if (!hasTollFreeInStripe && phoneSub.toll_free_numbers > 0 && tollFreePriceId) {
+    items.push({ price: tollFreePriceId, quantity: phoneSub.toll_free_numbers })
+  }
+
+  if (items.length === 0) return
+
+  // If all numbers are gone, cancel the subscription
+  const totalNumbers = phoneSub.local_numbers + phoneSub.toll_free_numbers
+  if (totalNumbers === 0) {
+    await stripe.subscriptions.cancel(phoneSub.stripe_subscription_id, {
+      invoice_now: true,
+      prorate: true,
+    })
+
+    const supabase = createAdminClient()
+    await supabase
+      .from('phone_number_subscriptions')
+      .update({ status: 'canceled', stripe_subscription_id: null, stripe_subscription_item_id: null })
+      .eq('workspace_id', workspaceId)
+  } else {
+    await stripe.subscriptions.update(phoneSub.stripe_subscription_id, {
+      items,
+      proration_behavior: 'create_prorations',
+    })
+  }
 }
 
 // ============================================

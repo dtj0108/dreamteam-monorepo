@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@dreamteam/database/server'
 import { getSession } from '@dreamteam/auth/session'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
-import { listCalendars, isNylasConfigured } from '@/lib/nylas'
+import { listCalendars, isNylasConfigured, requireActiveGrant } from '@/lib/nylas'
 
 /**
  * GET /api/nylas/calendars
@@ -46,23 +46,12 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Verify grant access
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Fetch calendars from Nylas
-    const result = await listCalendars(grant.grant_id)
+    const result = await listCalendars(grant!.grant_id)
 
     if (!result.success) {
       return NextResponse.json(

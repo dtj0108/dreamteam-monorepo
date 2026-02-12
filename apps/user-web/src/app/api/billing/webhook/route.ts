@@ -272,7 +272,23 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
         const workspaceId = subscription.metadata?.workspace_id
-        const subscriptionType = subscription.metadata?.type as 'workspace_plan' | 'agent_tier'
+        const rawSubscriptionType = subscription.metadata?.type
+
+        // Handle phone number subscription updates
+        if (rawSubscriptionType === 'phone_numbers') {
+          const phoneStatus = subscription.status === 'active' ? 'active'
+            : subscription.status === 'past_due' ? 'past_due'
+            : subscription.status === 'canceled' ? 'canceled'
+            : 'pending'
+          await supabase
+            .from('phone_number_subscriptions')
+            .update({ status: phoneStatus })
+            .eq('stripe_subscription_id', subscription.id)
+          console.log(`Phone number subscription updated: ${subscription.id} -> ${phoneStatus}`)
+          break
+        }
+
+        const subscriptionType = rawSubscriptionType as 'workspace_plan' | 'agent_tier'
 
         const resolveAgentTier = async (): Promise<AgentTier | null> => {
           const metadataTier = subscription.metadata?.agent_tier || subscription.metadata?.target_plan
@@ -502,7 +518,23 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription
         const workspaceId = subscription.metadata?.workspace_id
-        const subscriptionType = subscription.metadata?.type as 'workspace_plan' | 'agent_tier'
+        const rawDeletedSubType = subscription.metadata?.type
+
+        // Handle phone number subscription cancellation
+        if (rawDeletedSubType === 'phone_numbers') {
+          await supabase
+            .from('phone_number_subscriptions')
+            .update({
+              status: 'canceled',
+              stripe_subscription_id: null,
+              stripe_subscription_item_id: null,
+            })
+            .eq('stripe_subscription_id', subscription.id)
+          console.log(`Phone number subscription canceled: ${subscription.id}`)
+          break
+        }
+
+        const subscriptionType = rawDeletedSubType as 'workspace_plan' | 'agent_tier'
 
         if (!workspaceId) {
           // Try to find workspace by subscription ID

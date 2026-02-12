@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@dreamteam/database/server'
 import { getSession } from '@dreamteam/auth/session'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
-import { getDraft, updateDraft, deleteDraft, sendDraft, isNylasConfigured } from '@/lib/nylas'
+import { getDraft, updateDraft, deleteDraft, sendDraft, isNylasConfigured, requireActiveGrant } from '@/lib/nylas'
 
 type RouteContext = {
   params: Promise<{ id: string }>
@@ -56,23 +56,12 @@ export async function GET(
 
     const supabase = createAdminClient()
 
-    // Fetch the grant to verify access and get the Nylas grant ID
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Fetch draft from Nylas
-    const result = await getDraft(grant.grant_id, draftId)
+    const result = await getDraft(grant!.grant_id, draftId)
 
     if (!result.success) {
       return NextResponse.json(
@@ -146,23 +135,12 @@ export async function PUT(
 
     const supabase = createAdminClient()
 
-    // Fetch the grant to verify access and get the Nylas grant ID
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Update draft in Nylas
-    const result = await updateDraft(grant.grant_id, draftId, {
+    const result = await updateDraft(grant!.grant_id, draftId, {
       to,
       cc,
       bcc,
@@ -237,23 +215,12 @@ export async function DELETE(
 
     const supabase = createAdminClient()
 
-    // Fetch the grant to verify access and get the Nylas grant ID
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Delete draft in Nylas
-    const result = await deleteDraft(grant.grant_id, draftId)
+    const result = await deleteDraft(grant!.grant_id, draftId)
 
     if (!result.success) {
       return NextResponse.json(
@@ -320,23 +287,12 @@ export async function POST(
 
     const supabase = createAdminClient()
 
-    // Fetch the grant to verify access and get the Nylas grant ID
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Send draft via Nylas
-    const result = await sendDraft(grant.grant_id, draftId)
+    const result = await sendDraft(grant!.grant_id, draftId)
 
     if (!result.success) {
       return NextResponse.json(

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@dreamteam/database/server'
 import { getSession } from '@dreamteam/auth/session'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
-import { listDrafts, createDraft, isNylasConfigured } from '@/lib/nylas'
+import { listDrafts, createDraft, isNylasConfigured, requireActiveGrant } from '@/lib/nylas'
 
 /**
  * GET /api/nylas/drafts
@@ -50,26 +50,15 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Fetch the grant to verify access and get the Nylas grant ID
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Parse options
     const limit = Math.min(parseInt(limitParam || '25', 10), 50)
 
     // Fetch drafts from Nylas
-    const result = await listDrafts(grant.grant_id, { limit })
+    const result = await listDrafts(grant!.grant_id, { limit })
 
     if (!result.success) {
       return NextResponse.json(
@@ -140,23 +129,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Fetch the grant to verify access and get the Nylas grant ID
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Create draft in Nylas
-    const result = await createDraft(grant.grant_id, {
+    const result = await createDraft(grant!.grant_id, {
       to,
       cc,
       bcc,
