@@ -63,12 +63,16 @@ export async function processScheduledEmails(): Promise<ProcessResult> {
       // 3. Get the Nylas grant ID from our internal grant record
       const { data: grant, error: grantError } = await supabase
         .from('nylas_grants')
-        .select('grant_id, email')
+        .select('grant_id, email, status')
         .eq('id', scheduled.grant_id)
         .single()
 
       if (grantError || !grant) {
         throw new Error('Connected email account not found')
+      }
+
+      if (grant.status !== 'active') {
+        throw new Error('Email account disconnected. Please reconnect in Settings.')
       }
 
       // 4. Send via Nylas

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
 import { releasePhoneNumber, updatePhoneNumber } from "@/lib/twilio"
 import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
+import { removePhoneNumberFromSubscription } from "@/lib/addons-queries"
+import { type PhoneNumberType } from "@/types/addons"
 
 // GET /api/twilio/numbers/owned - List workspace's phone numbers
 export async function GET() {
@@ -92,6 +94,13 @@ export async function DELETE(req: NextRequest) {
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 500 })
+    }
+
+    // Remove from Stripe subscription before deleting from DB
+    const numberType: PhoneNumberType = number.number_type || 'local'
+    const billingResult = await removePhoneNumberFromSubscription(workspaceId, numberType)
+    if (!billingResult.success) {
+      console.error("Failed to remove phone number from billing:", billingResult.error)
     }
 
     // Delete from database

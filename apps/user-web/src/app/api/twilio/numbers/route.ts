@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
 import { searchAvailableNumbers, purchasePhoneNumber } from "@/lib/twilio"
 import { getCurrentWorkspaceId } from "@/lib/workspace-auth"
+import { hasPaymentMethodSaved, getWorkspaceBilling } from "@/lib/billing-queries"
+import { addPhoneNumberToSubscription } from "@/lib/addons-queries"
+import { PHONE_PRICING, type PhoneNumberType } from "@/types/addons"
 
 // GET /api/twilio/numbers - Search for available phone numbers
 export async function GET(req: NextRequest) {
@@ -54,6 +57,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const { phoneNumber, friendlyName } = body
+    const numberType: PhoneNumberType = body.numberType || 'local'
 
     if (!phoneNumber) {
       return NextResponse.json(
@@ -72,6 +76,21 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Require a payment method before purchasing numbers.
+    // Check saved payment method first, then fall back to checking for an active
+    // subscription (which means Stripe already has a working payment method).
+    const hasPayment = await hasPaymentMethodSaved(workspaceId)
+    if (!hasPayment) {
+      const billing = await getWorkspaceBilling(workspaceId)
+      const hasActiveSubscription = billing?.plan_status === 'active' || billing?.agent_status === 'active'
+      if (!hasActiveSubscription && !billing?.stripe_customer_id) {
+        return NextResponse.json(
+          { error: "A payment method is required to purchase phone numbers. Please add a card in Billing settings." },
+          { status: 402 }
+        )
+      }
+    }
+
     // Purchase the number from Twilio
     const result = await purchasePhoneNumber(phoneNumber)
 
@@ -87,7 +106,7 @@ export async function POST(req: NextRequest) {
 
     const isFirst = count === 0
 
-    // Store in database
+    // Store in database with billing fields
     const { data: storedNumber, error: dbError } = await supabase
       .from("twilio_numbers")
       .insert({
@@ -98,6 +117,9 @@ export async function POST(req: NextRequest) {
         friendly_name: friendlyName || result.friendlyName,
         capabilities: { voice: true, sms: true, mms: false },
         is_primary: isFirst, // First number is automatically primary
+        number_type: numberType,
+        monthly_price_cents: PHONE_PRICING[numberType],
+        billing_status: 'active',
       })
       .select()
       .single()
@@ -115,9 +137,16 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Add to Stripe subscription (soft failure - number already purchased from Twilio)
+    const billingResult = await addPhoneNumberToSubscription(workspaceId, numberType)
+    if (!billingResult.success) {
+      console.error("Failed to add phone number to billing:", billingResult.error)
+    }
+
     return NextResponse.json({
       success: true,
       number: storedNumber,
+      ...(billingResult && !billingResult.success ? { billingWarning: billingResult.error } : {}),
     })
   } catch (error) {
     console.error("Error purchasing number:", error)

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@dreamteam/database/server'
 import { getSession } from '@dreamteam/auth/session'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
-import { sendEmail, isNylasConfigured } from '@/lib/nylas'
+import { sendEmail, isNylasConfigured, requireActiveGrant } from '@/lib/nylas'
 
 /**
  * POST /api/nylas/emails/send
@@ -59,23 +59,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Fetch the grant to verify access and get the Nylas grant ID
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Send email via Nylas
-    const result = await sendEmail(grant.grant_id, {
+    const result = await sendEmail(grant!.grant_id, {
       to,
       cc,
       bcc,

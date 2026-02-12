@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@dreamteam/database/server'
 import { getSession } from '@dreamteam/auth/session'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
-import { listEmails, isNylasConfigured } from '@/lib/nylas'
-import { decryptToken } from '@/lib/encryption'
+import { listEmails, isNylasConfigured, requireActiveGrant } from '@/lib/nylas'
 
 /**
  * GET /api/nylas/emails
@@ -57,27 +56,16 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Fetch the grant to verify access and get the Nylas grant ID
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id, encrypted_access_token')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Parse options
     const limit = Math.min(parseInt(limitParam || '25', 10), 50)
     const unread = unreadParam === 'true' ? true : unreadParam === 'false' ? false : undefined
 
     // Fetch emails from Nylas
-    const result = await listEmails(grant.grant_id, {
+    const result = await listEmails(grant!.grant_id, {
       limit,
       pageToken,
       unread,

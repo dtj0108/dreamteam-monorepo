@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@dreamteam/database/server'
 import { getSession } from '@dreamteam/auth/session'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
-import { getEvent, updateEvent, deleteEvent, isNylasConfigured } from '@/lib/nylas'
+import { getEvent, updateEvent, deleteEvent, isNylasConfigured, requireActiveGrant } from '@/lib/nylas'
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -66,23 +66,12 @@ export async function GET(
 
     const supabase = createAdminClient()
 
-    // Verify grant access
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Fetch event from Nylas
-    const result = await getEvent(grant.grant_id, calendarId, eventId)
+    const result = await getEvent(grant!.grant_id, calendarId, eventId)
 
     if (!result.success) {
       return NextResponse.json(
@@ -164,20 +153,9 @@ export async function PATCH(
 
     const supabase = createAdminClient()
 
-    // Verify grant access
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Build updates object
     const updates: {
@@ -204,7 +182,7 @@ export async function PATCH(
     }
 
     // Update event at Nylas
-    const result = await updateEvent(grant.grant_id, calendarId, eventId, updates)
+    const result = await updateEvent(grant!.grant_id, calendarId, eventId, updates)
 
     if (!result.success) {
       return NextResponse.json(
@@ -281,23 +259,12 @@ export async function DELETE(
 
     const supabase = createAdminClient()
 
-    // Verify grant access
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Delete event at Nylas
-    const result = await deleteEvent(grant.grant_id, calendarId, eventId)
+    const result = await deleteEvent(grant!.grant_id, calendarId, eventId)
 
     if (!result.success) {
       return NextResponse.json(

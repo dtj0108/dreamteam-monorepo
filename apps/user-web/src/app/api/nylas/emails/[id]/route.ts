@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@dreamteam/database/server'
 import { getSession } from '@dreamteam/auth/session'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
-import { getEmail, updateEmail, deleteEmail, isNylasConfigured } from '@/lib/nylas'
+import { getEmail, updateEmail, deleteEmail, isNylasConfigured, requireActiveGrant } from '@/lib/nylas'
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -55,23 +55,12 @@ export async function GET(
 
     const supabase = createAdminClient()
 
-    // Verify grant access
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Fetch email from Nylas
-    const result = await getEmail(grant.grant_id, messageId)
+    const result = await getEmail(grant!.grant_id, messageId)
 
     if (!result.success) {
       return NextResponse.json(
@@ -141,20 +130,9 @@ export async function PATCH(
 
     const supabase = createAdminClient()
 
-    // Verify grant access
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Update email at Nylas
     const updates: { unread?: boolean; starred?: boolean } = {}
@@ -168,7 +146,7 @@ export async function PATCH(
       )
     }
 
-    const result = await updateEmail(grant.grant_id, messageId, updates)
+    const result = await updateEmail(grant!.grant_id, messageId, updates)
 
     if (!result.success) {
       return NextResponse.json(
@@ -234,23 +212,12 @@ export async function DELETE(
 
     const supabase = createAdminClient()
 
-    // Verify grant access
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Delete email at Nylas
-    const result = await deleteEmail(grant.grant_id, messageId)
+    const result = await deleteEmail(grant!.grant_id, messageId)
 
     if (!result.success) {
       return NextResponse.json(

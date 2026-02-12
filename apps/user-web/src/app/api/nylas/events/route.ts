@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@dreamteam/database/server'
 import { getSession } from '@dreamteam/auth/session'
 import { getCurrentWorkspaceId, validateWorkspaceAccess } from '@/lib/workspace-auth'
-import { listEvents, createEvent, isNylasConfigured } from '@/lib/nylas'
+import { listEvents, createEvent, isNylasConfigured, requireActiveGrant } from '@/lib/nylas'
 
 /**
  * GET /api/nylas/events
@@ -65,20 +65,9 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Verify grant access
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Parse options
     const limit = Math.min(parseInt(limitParam || '25', 10), 50)
@@ -86,7 +75,7 @@ export async function GET(request: NextRequest) {
     const endTime = endTimeParam ? parseInt(endTimeParam, 10) : undefined
 
     // Fetch events from Nylas
-    const result = await listEvents(grant.grant_id, calendarId, {
+    const result = await listEvents(grant!.grant_id, calendarId, {
       startTime,
       endTime,
       limit,
@@ -185,23 +174,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Verify grant access
-    const { data: grant, error: grantError } = await supabase
-      .from('nylas_grants')
-      .select('grant_id')
-      .eq('id', grantId)
-      .eq('workspace_id', workspaceId)
-      .single()
-
-    if (grantError || !grant) {
-      return NextResponse.json(
-        { error: 'Connected account not found' },
-        { status: 404 }
-      )
-    }
+    // Verify grant access and status
+    const { grant, errorResponse } = await requireActiveGrant(supabase, grantId, workspaceId)
+    if (errorResponse) return errorResponse
 
     // Create event at Nylas
-    const result = await createEvent(grant.grant_id, calendarId, {
+    const result = await createEvent(grant!.grant_id, calendarId, {
       title,
       description,
       location,
