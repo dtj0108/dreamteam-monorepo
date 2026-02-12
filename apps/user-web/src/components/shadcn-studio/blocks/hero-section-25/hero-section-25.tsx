@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useCallback, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { CheckIcon, Loader2Icon } from 'lucide-react'
 import { Button } from '@/components/base/buttons/button'
@@ -305,51 +305,43 @@ function AgentCard({
 // --- Main hero section ---
 
 const HeroSection = () => {
-  const [mobileAgentIndex, setMobileAgentIndex] = useState(0)
-
-  // Mobile: cycle through agents
-  useEffect(() => {
-    const totalCycleTime = 12000
-    const id = setInterval(() => {
-      setMobileAgentIndex((prev) => (prev + 1) % AGENTS.length)
-    }, totalCycleTime)
-    return () => clearInterval(id)
-  }, [])
-
   return (
     <section className="flex-1 overflow-hidden py-8 sm:py-16 lg:py-24">
-      <div className="mx-auto flex max-w-7xl flex-col items-center gap-8 px-4 sm:gap-16 sm:px-6 lg:gap-24 lg:px-8">
-        {/* Hero Content — unchanged */}
-        <div className="flex flex-col items-center gap-4 text-center">
-          <Badge variant="outline" className="text-sm font-normal">
-            Introducing AI Agents
-          </Badge>
+      <div className="mx-auto flex max-w-7xl flex-col items-center px-4 sm:px-6 lg:px-8">
+        {/* Conical flow: narrow top → wide bottom */}
 
-          <h1 className="text-2xl font-semibold sm:text-3xl lg:text-5xl lg:font-bold">
-            Add AI Agents that work autonomously
-            <br />
-            <span className="underline underline-offset-3">in minutes</span>
-          </h1>
+        {/* 1. Badge — smallest element */}
+        <Badge variant="outline" className="text-sm font-normal">
+          Introducing AI Agents
+        </Badge>
 
-          <p className="text-muted-foreground max-w-4xl text-xl">
-            Set them up once, they work forever.
-            <br />
-            While you do, whatever.
-          </p>
+        {/* 2. Heading — slightly wider */}
+        <h1 className="mt-5 max-w-md text-center text-2xl font-semibold sm:mt-6 sm:max-w-2xl sm:text-3xl lg:mt-8 lg:max-w-4xl lg:text-5xl lg:font-bold lg:leading-[1.3]">
+          Add AI Agents that work
+          <br />
+          autonomously <span className="underline underline-offset-3">in minutes</span>
+        </h1>
 
-          <div className="flex flex-wrap items-center gap-4">
-            <Button href="/demo/crm" color="secondary" size="xl">
-              Explore Workspace
-            </Button>
-            <Button href="/pricing" size="xl" className="bg-blue-600 hover:bg-blue-700">
-              Deploy Agents
-            </Button>
-          </div>
+        {/* 3. Subtitle — wider still */}
+        <p className="text-muted-foreground mt-4 max-w-sm text-center text-lg sm:max-w-xl sm:text-xl lg:mt-6 lg:max-w-2xl">
+          Set them up once, they work forever.
+          <br />
+          While you do, whatever.
+        </p>
+
+        {/* 4. CTA buttons */}
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-4 sm:mt-8 lg:mt-10">
+          <Button href="/demo" color="secondary" size="xl" className="hidden sm:inline-flex">
+            Explore Workspace
+          </Button>
+          <Button href="/pricing" size="xl" className="bg-blue-600 hover:bg-blue-700">
+            Deploy Agents
+          </Button>
         </div>
 
-        {/* Live Agent Work Lanes */}
+        {/* 5. Agent preview — widest, full bleed */}
         <div
-          className="relative mx-auto w-full max-w-6xl md:[transform:perspective(2000px)_rotateX(4deg)] md:hover:[transform:perspective(2000px)_rotateX(0deg)] md:transition-transform md:duration-700"
+          className="relative mt-10 w-full max-w-6xl sm:mt-16 md:[transform:perspective(2000px)_rotateX(4deg)] md:hover:[transform:perspective(2000px)_rotateX(0deg)] md:transition-transform md:duration-700"
         >
           <div className="relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
             <BorderBeam
@@ -376,7 +368,7 @@ const HeroSection = () => {
               </div>
             </div>
 
-            {/* Agent cards — Desktop: 3x2 grid, Tablet: 2x2, Mobile: 1 col cycling */}
+            {/* Agent cards */}
             <div className="p-3 sm:p-4">
               {/* Desktop: all 6 agents in 3-col grid */}
               <div className="hidden lg:grid lg:grid-cols-3 lg:gap-3">
@@ -400,33 +392,15 @@ const HeroSection = () => {
                 ))}
               </div>
 
-              {/* Mobile: single agent, cycling */}
-              <div className="md:hidden">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={mobileAgentIndex}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <AgentCard
-                      agent={AGENTS[mobileAgentIndex]}
-                      delay={0}
-                    />
-                  </motion.div>
-                </AnimatePresence>
-                {/* Mobile dots indicator */}
-                <div className="flex justify-center gap-1.5 mt-3">
-                  {AGENTS.map((_, idx) => (
-                    <span
-                      key={idx}
-                      className={`size-1.5 rounded-full transition-colors ${
-                        idx === mobileAgentIndex ? 'bg-zinc-300' : 'bg-zinc-700'
-                      }`}
-                    />
-                  ))}
-                </div>
+              {/* Mobile: 2 agents stacked */}
+              <div className="flex flex-col gap-3 md:hidden">
+                {AGENTS.slice(0, 2).map((agent, idx) => (
+                  <AgentCard
+                    key={agent.name}
+                    agent={agent}
+                    delay={idx * AGENT_STAGGER}
+                  />
+                ))}
               </div>
             </div>
           </div>

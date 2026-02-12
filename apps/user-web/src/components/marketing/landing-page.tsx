@@ -321,10 +321,10 @@ const HeroSection = () => {
                                 Watch Demo
                             </Button>
                             <Button href="/pricing" size="xl" className="bg-blue-600 hover:bg-blue-700">
-                                Get Started Free
+                                Get Started
                             </Button>
                         </div>
-                        
+
                         {/* Trust indicators */}
                         <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-4 text-sm text-gray-500">
                             <div className="flex items-center gap-2">
@@ -382,105 +382,116 @@ const agentHierarchies = [
 
 const AgentsSection = () => {
     return (
-        <section className="bg-gradient-to-b from-white to-gray-50 py-16 md:py-24">
+        <section className="py-16 md:py-24">
             <div className="mx-auto w-full max-w-container px-4 md:px-8">
-                <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col items-center text-center md:mb-16">
-                    <span className="text-sm font-semibold uppercase tracking-wider text-blue-600">Agent Hierarchy</span>
-                    <h2 className="mt-3 text-display-sm font-semibold text-gray-900 md:text-display-md">
-                        Agents that do the work of entire teams — easy to train.
-                    </h2>
-                    <p className="mt-4 text-lg text-gray-600 md:mt-5 md:text-xl">
-                        Specialist agents organized in hierarchies—finance, sales, operations, knowledge—working together as a single cohesive being.
-                    </p>
-                </div>
+                {/* Dark hero card container */}
+                <div className="relative overflow-hidden rounded-3xl bg-gray-950 px-6 py-16 md:px-12 md:py-24">
+                    {/* Gradient glow accents */}
+                    <div className="pointer-events-none absolute -left-32 -top-32 size-[400px] rounded-full bg-blue-600/20 blur-3xl" />
+                    <div className="pointer-events-none absolute -right-32 -bottom-32 size-[400px] rounded-full bg-violet-600/20 blur-3xl" />
+                    <div className="pointer-events-none absolute right-1/4 top-0 size-[300px] rounded-full bg-purple-600/10 blur-3xl" />
 
-                {/* Org Chart Style Visualization */}
-                <div className="mx-auto max-w-5xl">
-                    <div className="rounded-2xl border border-gray-200 bg-white p-6 md:p-10">
-                        {/* Central Orchestrator */}
-                        <div className="flex flex-col items-center">
-                            {/* Avatar circle */}
-                            <div className="relative">
-                                <div className="flex size-20 items-center justify-center rounded-full bg-gray-100 border-[3px] border-gray-300 shadow-md">
-                                    <span className="text-3xl">🧠</span>
-                                </div>
-                            </div>
-                            <h3 className="mt-4 text-lg font-semibold text-gray-900">Central Orchestrator</h3>
-                            <p className="text-sm text-gray-500">Coordinates all hierarchies</p>
+                    <div className="relative z-10">
+                        {/* Header */}
+                        <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col items-center text-center md:mb-16">
+                            <span className="text-sm font-semibold uppercase tracking-wider text-blue-400">Agent Hierarchy</span>
+                            <h2 className="mt-3 text-display-sm font-semibold text-white md:text-display-md">
+                                Agents that do the work of entire teams — easy to train.
+                            </h2>
+                            <p className="mt-4 text-lg text-gray-400 md:mt-5 md:text-xl">
+                                Specialist agents organized in hierarchies—finance, sales, operations, knowledge—working together as a single cohesive being.
+                            </p>
+                        </div>
 
-                            {/* Vertical line down */}
-                            <div className="mt-6 h-10 w-px bg-gray-300" />
-
-                            {/* Horizontal connector line */}
-                            <div className="h-px w-full max-w-3xl bg-gray-300" />
-
-                            {/* Department nodes */}
-                            <div className="grid w-full max-w-4xl grid-cols-2 gap-6 md:grid-cols-4 md:gap-8">
-                                {agentHierarchies.map((dept) => (
-                                    <div key={dept.name} className="flex flex-col items-center">
-                                        {/* Vertical line from horizontal bar */}
-                                        <div className="h-6 w-px bg-gray-300" />
-
-                                        {/* Department avatar */}
-                                        <div
-                                            className="flex size-14 items-center justify-center rounded-full border-[3px] bg-white shadow-md"
-                                            style={{ borderColor: dept.color }}
-                                        >
-                                            <span className="text-2xl">{dept.emoji}</span>
-                                        </div>
-                                        <h4 className="mt-3 text-sm font-semibold text-gray-900">{dept.name}</h4>
-
-                                        {/* Specialists list */}
-                                        <div className="mt-4 flex flex-col items-center gap-2">
-                                            {dept.specialists.map((specialist) => (
-                                                <div
-                                                    key={specialist}
-                                                    className="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1"
-                                                >
-                                                    <div
-                                                        className="size-2 rounded-full"
-                                                        style={{ backgroundColor: dept.color }}
-                                                    />
-                                                    <span className="text-xs text-gray-600">{specialist}</span>
-                                                </div>
-                                            ))}
+                        {/* Org Chart Style Visualization */}
+                        <div className="mx-auto max-w-5xl">
+                            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 md:p-10">
+                                {/* Central Orchestrator */}
+                                <div className="flex flex-col items-center">
+                                    {/* Avatar circle */}
+                                    <div className="relative">
+                                        <div className="flex size-20 items-center justify-center rounded-full bg-white/10 border-[3px] border-white/20 shadow-md">
+                                            <span className="text-3xl">🧠</span>
                                         </div>
                                     </div>
-                                ))}
+                                    <h3 className="mt-4 text-lg font-semibold text-white">Central Orchestrator</h3>
+                                    <p className="text-sm text-gray-400">Coordinates all hierarchies</p>
+
+                                    {/* Vertical line down */}
+                                    <div className="mt-6 h-10 w-px bg-white/20" />
+
+                                    {/* Horizontal connector line */}
+                                    <div className="h-px w-full max-w-3xl bg-white/20" />
+
+                                    {/* Department nodes */}
+                                    <div className="grid w-full max-w-4xl grid-cols-2 gap-6 md:grid-cols-4 md:gap-8">
+                                        {agentHierarchies.map((dept) => (
+                                            <div key={dept.name} className="flex flex-col items-center">
+                                                {/* Vertical line from horizontal bar */}
+                                                <div className="h-6 w-px bg-white/20" />
+
+                                                {/* Department avatar */}
+                                                <div
+                                                    className="flex size-14 items-center justify-center rounded-full border-[3px] bg-white/5 shadow-md"
+                                                    style={{ borderColor: dept.color }}
+                                                >
+                                                    <span className="text-2xl">{dept.emoji}</span>
+                                                </div>
+                                                <h4 className="mt-3 text-sm font-semibold text-white">{dept.name}</h4>
+
+                                                {/* Specialists list */}
+                                                <div className="mt-4 flex flex-col items-center gap-2">
+                                                    {dept.specialists.map((specialist) => (
+                                                        <div
+                                                            key={specialist}
+                                                            className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1"
+                                                        >
+                                                            <div
+                                                                className="size-2 rounded-full"
+                                                                style={{ backgroundColor: dept.color }}
+                                                            />
+                                                            <span className="text-xs text-gray-300">{specialist}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                {/* Key Benefits */}
-                <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:mt-16 md:grid-cols-3">
-                    <div className="rounded-xl border border-gray-200 bg-white p-6 text-center">
-                        <h3 className="font-semibold text-gray-900">Hierarchical Coordination</h3>
-                        <p className="mt-2 text-sm text-gray-600">
-                            Agents delegate up and down the hierarchy, ensuring the right specialist handles each task.
-                        </p>
-                    </div>
-                    <div className="rounded-xl border border-gray-200 bg-white p-6 text-center">
-                        <h3 className="font-semibold text-gray-900">Autonomous Execution</h3>
-                        <p className="mt-2 text-sm text-gray-600">
-                            One command triggers a cascade of coordinated actions across multiple specialists.
-                        </p>
-                    </div>
-                    <div className="rounded-xl border border-gray-200 bg-white p-6 text-center">
-                        <h3 className="font-semibold text-gray-900">Unified Intelligence</h3>
-                        <p className="mt-2 text-sm text-gray-600">
-                            All agents share context and memory, working as one cohesive system.
-                        </p>
-                    </div>
-                </div>
+                        {/* Key Benefits */}
+                        <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:mt-16 md:grid-cols-3">
+                            <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
+                                <h3 className="font-semibold text-white">Hierarchical Coordination</h3>
+                                <p className="mt-2 text-sm text-gray-400">
+                                    Agents delegate up and down the hierarchy, ensuring the right specialist handles each task.
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
+                                <h3 className="font-semibold text-white">Autonomous Execution</h3>
+                                <p className="mt-2 text-sm text-gray-400">
+                                    One command triggers a cascade of coordinated actions across multiple specialists.
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
+                                <h3 className="font-semibold text-white">Unified Intelligence</h3>
+                                <p className="mt-2 text-sm text-gray-400">
+                                    All agents share context and memory, working as one cohesive system.
+                                </p>
+                            </div>
+                        </div>
 
-                {/* Custom Agent CTA */}
-                <div className="mt-12 flex flex-col items-center text-center md:mt-16">
-                    <h3 className="text-xl font-semibold text-gray-900">Extend with custom agents</h3>
-                    <p className="mt-2 max-w-md text-gray-600">Build your own specialists and add them to any hierarchy. No code required.</p>
-                    <Button href="/pricing" className="mt-6" size="lg">
-                        Get Started Free
-                    </Button>
+                        {/* Custom Agent CTA */}
+                        <div className="mt-12 flex flex-col items-center text-center md:mt-16">
+                            <h3 className="text-xl font-semibold text-white">Extend with custom agents</h3>
+                            <p className="mt-2 max-w-md text-gray-400">Build your own specialists and add them to any hierarchy. No code required.</p>
+                            <Button href="/pricing" className="mt-6 bg-blue-600 hover:bg-blue-700" size="lg">
+                                Get Started
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -500,7 +511,7 @@ const SuperpowersSection = () => {
                         Not just AI. Agents with memory, skills, and tools that make them genuinely autonomous.
                     </p>
                     <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
-                        <Button href="/demo/crm" color="secondary" size="xl">
+                        <Button href="/demo" color="secondary" size="xl">
                             Explore Workspace
                         </Button>
                         <Button href="/pricing" size="xl" className="bg-blue-600 hover:bg-blue-700">
@@ -652,33 +663,33 @@ const WhySection = () => {
 
 const ProductsSection = () => {
     return (
-        <section className="bg-gradient-to-b from-gray-50 to-gray-100 pb-16 md:pb-0">
-            <div className="bg-white pt-16 pb-28 md:pt-24 md:pb-40">
-                <div className="mx-auto w-full max-w-container px-4 md:px-8">
-                    <div className="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
-                        <span className="text-sm font-semibold uppercase tracking-wider text-blue-600 md:text-md">The Platform</span>
+        <section className="pb-16 md:pb-0">
+            <div className="mx-auto w-full max-w-container px-4 md:px-8">
+                <div className="relative overflow-hidden rounded-3xl bg-gray-950 px-6 pt-16 pb-0 md:px-12 md:pt-24">
+                    {/* Gradient glow accents */}
+                    <div className="pointer-events-none absolute -left-32 -top-32 size-[400px] rounded-full bg-blue-600/15 blur-3xl" />
+                    <div className="pointer-events-none absolute -right-32 top-1/3 size-[300px] rounded-full bg-violet-600/10 blur-3xl" />
 
-                        <h2 className="mt-3 text-display-sm font-semibold text-gray-900 md:text-display-md">Your people <em>can</em> work here too.</h2>
-                        <p className="mt-4 text-lg text-gray-600 md:mt-5 md:text-xl">
+                    <div className="mx-auto flex w-full max-w-3xl flex-col items-center text-center mb-12 md:mb-16">
+                        <span className="text-sm font-semibold uppercase tracking-wider text-blue-400 md:text-md">The Platform</span>
+
+                        <h2 className="mt-3 text-display-sm font-semibold text-white md:text-display-md">Your people <em>can</em> work here too.</h2>
+                        <p className="mt-4 text-lg text-gray-400 md:mt-5 md:text-xl">
                             Everything you need to run your business, unified with AI agents that share context.
                         </p>
                     </div>
-                </div>
-            </div>
 
-            <div className="mx-auto -mt-17 w-full max-w-container px-4 pt-1 md:-mt-26 md:overflow-hidden md:px-8 md:pt-2">
-                <div className="flex flex-col md:items-start">
-                    <div className="flex h-full w-full items-center justify-center md:w-full">
+                    <div className="mx-auto w-full max-w-5xl">
                         {/* Dashboard Mockup */}
-                        <div className="w-full rounded-xl bg-gray-50 ring-4 ring-gray-200 md:ring-8 overflow-hidden shadow-2xl dark:bg-gray-900 dark:ring-gray-700">
+                        <div className="w-full rounded-t-xl bg-gray-900 ring-1 ring-white/10 overflow-hidden shadow-2xl">
                             {/* Browser Chrome */}
-                            <div className="flex items-center gap-2 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+                            <div className="flex items-center gap-2 border-b border-white/10 bg-gray-900 px-4 py-3">
                                 <div className="flex gap-1.5">
-                                    <div className="size-3 rounded-full bg-red-400" />
-                                    <div className="size-3 rounded-full bg-yellow-400" />
-                                    <div className="size-3 rounded-full bg-green-400" />
+                                    <div className="size-3 rounded-full bg-red-500/60" />
+                                    <div className="size-3 rounded-full bg-yellow-500/60" />
+                                    <div className="size-3 rounded-full bg-green-500/60" />
                                 </div>
-                                <div className="ml-4 flex-1 rounded-md bg-gray-100 px-3 py-1 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                                <div className="ml-4 flex-1 rounded-md bg-white/5 px-3 py-1 text-xs text-gray-500">
                                     app.dreamteam.so/dashboard
                                 </div>
                             </div>
@@ -686,154 +697,154 @@ const ProductsSection = () => {
                             {/* Dashboard Content */}
                             <div className="flex">
                                 {/* Sidebar */}
-                                <div className="hidden w-56 shrink-0 border-r border-gray-200 bg-white p-4 md:block dark:border-gray-700 dark:bg-gray-800">
+                                <div className="hidden w-56 shrink-0 border-r border-white/10 bg-gray-950 p-4 md:block">
                                     <div className="mb-6 flex items-center gap-2">
-                                        <div className="size-8 rounded-lg bg-blue-400 flex items-center justify-center">
+                                        <div className="size-8 rounded-lg bg-blue-500 flex items-center justify-center">
                                             <span className="text-white text-sm font-bold">D</span>
                                         </div>
-                                        <span className="font-semibold text-gray-900 dark:text-white">DreamTeam</span>
+                                        <span className="font-semibold text-white">DreamTeam</span>
                                     </div>
                                     <nav className="space-y-1">
-                                        <div className="flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-500 dark:bg-sky-900/30 dark:text-sky-400">
+                                        <div className="flex items-center gap-2 rounded-lg bg-blue-500/10 px-3 py-2 text-sm font-medium text-blue-400">
                                             <span>📊</span>
                                             Dashboard
                                         </div>
-                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400">
                                             <span>🤝</span>
                                             Sales CRM
                                         </div>
-                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400">
                                             <span>📋</span>
                                             Projects
                                         </div>
-                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400">
                                             <span>💵</span>
                                             Finance
                                         </div>
-                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+                                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400">
                                             <span>💬</span>
                                             Team Chat
                                         </div>
                                     </nav>
-                                    <div className="mt-6 border-t border-gray-200 pt-4 dark:border-gray-700">
-                                        <p className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-500">AGENTS</p>
+                                    <div className="mt-6 border-t border-white/10 pt-4">
+                                        <p className="mb-2 text-xs font-medium text-gray-500">AGENTS</p>
                                         <div className="space-y-2">
                                             <div className="flex items-center gap-2 text-sm">
                                                 <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                                                <span className="text-gray-600 dark:text-gray-400">Sales Agent</span>
+                                                <span className="text-gray-400">Sales Agent</span>
                                             </div>
                                             <div className="flex items-center gap-2 text-sm">
                                                 <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                                                <span className="text-gray-600 dark:text-gray-400">Finance Agent</span>
+                                                <span className="text-gray-400">Finance Agent</span>
                                             </div>
                                             <div className="flex items-center gap-2 text-sm">
                                                 <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                                                <span className="text-gray-600 dark:text-gray-400">Project Agent</span>
+                                                <span className="text-gray-400">Project Agent</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Main Content */}
-                                <div className="flex-1 bg-gray-50 p-4 md:p-6 dark:bg-gray-900">
+                                <div className="flex-1 bg-gray-950 p-4 md:p-6">
                                     <div className="mb-4">
-                                        <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Dashboard</h1>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">Welcome back, here&apos;s what&apos;s happening</p>
+                                        <h1 className="text-lg font-semibold text-white">Dashboard</h1>
+                                        <p className="text-sm text-gray-500">Welcome back, here&apos;s what&apos;s happening</p>
                                     </div>
 
                                     {/* Stats Grid */}
                                     <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                                        <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">Total Balance</p>
-                                            <p className="text-lg font-bold text-gray-900 dark:text-white">$284,392</p>
-                                            <p className="text-xs text-emerald-500">+12.5%</p>
+                                        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                                            <p className="text-xs text-gray-500">Total Balance</p>
+                                            <p className="text-lg font-bold text-white">$284,392</p>
+                                            <p className="text-xs text-emerald-400">+12.5%</p>
                                         </div>
-                                        <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">Revenue</p>
-                                            <p className="text-lg font-bold text-emerald-600">$48,250</p>
-                                            <p className="text-xs text-emerald-500">+8.2%</p>
+                                        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                                            <p className="text-xs text-gray-500">Revenue</p>
+                                            <p className="text-lg font-bold text-emerald-400">$48,250</p>
+                                            <p className="text-xs text-emerald-400">+8.2%</p>
                                         </div>
-                                        <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">Deals Closed</p>
-                                            <p className="text-lg font-bold text-gray-900 dark:text-white">24</p>
-                                            <p className="text-xs text-emerald-500">+4 this week</p>
+                                        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                                            <p className="text-xs text-gray-500">Deals Closed</p>
+                                            <p className="text-lg font-bold text-white">24</p>
+                                            <p className="text-xs text-emerald-400">+4 this week</p>
                                         </div>
-                                        <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">Active Projects</p>
-                                            <p className="text-lg font-bold text-gray-900 dark:text-white">12</p>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">3 due soon</p>
+                                        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                                            <p className="text-xs text-gray-500">Active Projects</p>
+                                            <p className="text-lg font-bold text-white">12</p>
+                                            <p className="text-xs text-gray-500">3 due soon</p>
                                         </div>
                                     </div>
 
                                     {/* Activity Feed */}
                                     <div className="grid gap-4 md:grid-cols-2">
-                                        <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-                                            <h3 className="mb-3 text-sm font-medium text-gray-900 dark:text-white">Agent Activity</h3>
+                                        <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                                            <h3 className="mb-3 text-sm font-medium text-white">Agent Activity</h3>
                                             <div className="space-y-3">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="flex size-8 items-center justify-center rounded-full bg-sky-100 text-sm dark:bg-sky-900">🤝</div>
+                                                    <div className="flex size-8 items-center justify-center rounded-full bg-white/10 text-sm">🤝</div>
                                                     <div className="flex-1">
-                                                        <p className="text-sm text-gray-900 dark:text-white">Sales Agent closed deal</p>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400">Acme Corp - $12,500</p>
+                                                        <p className="text-sm text-white">Sales Agent closed deal</p>
+                                                        <p className="text-xs text-gray-500">Acme Corp - $12,500</p>
                                                     </div>
-                                                    <span className="text-xs text-gray-400">2m ago</span>
+                                                    <span className="text-xs text-gray-500">2m ago</span>
                                                 </div>
                                                 <div className="flex items-center gap-3">
-                                                    <div className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-sm dark:bg-emerald-900">💵</div>
+                                                    <div className="flex size-8 items-center justify-center rounded-full bg-white/10 text-sm">💵</div>
                                                     <div className="flex-1">
-                                                        <p className="text-sm text-gray-900 dark:text-white">Finance Agent categorized</p>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400">42 transactions</p>
+                                                        <p className="text-sm text-white">Finance Agent categorized</p>
+                                                        <p className="text-xs text-gray-500">42 transactions</p>
                                                     </div>
-                                                    <span className="text-xs text-gray-400">5m ago</span>
+                                                    <span className="text-xs text-gray-500">5m ago</span>
                                                 </div>
                                                 <div className="flex items-center gap-3">
-                                                    <div className="flex size-8 items-center justify-center rounded-full bg-purple-100 text-sm dark:bg-purple-900">📋</div>
+                                                    <div className="flex size-8 items-center justify-center rounded-full bg-white/10 text-sm">📋</div>
                                                     <div className="flex-1">
-                                                        <p className="text-sm text-gray-900 dark:text-white">Project Agent created tasks</p>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400">Website Redesign</p>
+                                                        <p className="text-sm text-white">Project Agent created tasks</p>
+                                                        <p className="text-xs text-gray-500">Website Redesign</p>
                                                     </div>
-                                                    <span className="text-xs text-gray-400">12m ago</span>
+                                                    <span className="text-xs text-gray-500">12m ago</span>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-                                            <h3 className="mb-3 text-sm font-medium text-gray-900 dark:text-white">Recent Transactions</h3>
+                                        <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                                            <h3 className="mb-3 text-sm font-medium text-white">Recent Transactions</h3>
                                             <div className="space-y-3">
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="size-8 rounded-full bg-emerald-100 flex items-center justify-center dark:bg-emerald-900">
-                                                            <span className="text-emerald-600 text-xs dark:text-emerald-400">↑</span>
+                                                        <div className="size-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                                                            <span className="text-emerald-400 text-xs">↑</span>
                                                         </div>
                                                         <div>
-                                                            <p className="text-sm text-gray-900 dark:text-white">Acme Corp</p>
-                                                            <p className="text-xs text-gray-500 dark:text-gray-400">Invoice Payment</p>
+                                                            <p className="text-sm text-white">Acme Corp</p>
+                                                            <p className="text-xs text-gray-500">Invoice Payment</p>
                                                         </div>
                                                     </div>
-                                                    <span className="text-sm font-medium text-emerald-600">+$12,500</span>
+                                                    <span className="text-sm font-medium text-emerald-400">+$12,500</span>
                                                 </div>
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="size-8 rounded-full bg-gray-100 flex items-center justify-center dark:bg-gray-700">
-                                                            <span className="text-gray-600 text-xs dark:text-gray-400">↓</span>
+                                                        <div className="size-8 rounded-full bg-white/10 flex items-center justify-center">
+                                                            <span className="text-gray-400 text-xs">↓</span>
                                                         </div>
                                                         <div>
-                                                            <p className="text-sm text-gray-900 dark:text-white">AWS</p>
-                                                            <p className="text-xs text-gray-500 dark:text-gray-400">Cloud Services</p>
+                                                            <p className="text-sm text-white">AWS</p>
+                                                            <p className="text-xs text-gray-500">Cloud Services</p>
                                                         </div>
                                                     </div>
-                                                    <span className="text-sm text-gray-900 dark:text-white">-$2,340</span>
+                                                    <span className="text-sm text-white">-$2,340</span>
                                                 </div>
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="size-8 rounded-full bg-emerald-100 flex items-center justify-center dark:bg-emerald-900">
-                                                            <span className="text-emerald-600 text-xs dark:text-emerald-400">↑</span>
+                                                        <div className="size-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                                                            <span className="text-emerald-400 text-xs">↑</span>
                                                         </div>
                                                         <div>
-                                                            <p className="text-sm text-gray-900 dark:text-white">TechStart Inc</p>
-                                                            <p className="text-xs text-gray-500 dark:text-gray-400">Consulting</p>
+                                                            <p className="text-sm text-white">TechStart Inc</p>
+                                                            <p className="text-xs text-gray-500">Consulting</p>
                                                         </div>
                                                     </div>
-                                                    <span className="text-sm font-medium text-emerald-600">+$8,900</span>
+                                                    <span className="text-sm font-medium text-emerald-400">+$8,900</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -850,37 +861,144 @@ const ProductsSection = () => {
 
 const MetricsSection = () => {
     return (
-        <section className="bg-gradient-to-b from-gray-100 to-gray-50 py-16 md:py-24">
+        <section className="relative overflow-hidden bg-gradient-to-b from-white via-white to-blue-100/60 pt-16 pb-0 md:pt-24">
             <div className="mx-auto max-w-container px-4 md:px-8">
-                <div className="flex flex-col gap-12 md:gap-16">
-                    <div className="flex w-full flex-col items-center self-center text-center md:max-w-3xl">
-                        <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-blue-500/20 md:mb-6">
-                            <span className="text-2xl">⚡</span>
+                {/* Centered content */}
+                <div className="relative z-10 flex flex-col items-center text-center">
+                    <h2 className="max-w-3xl text-3xl font-bold text-gray-900 md:text-5xl lg:text-6xl">
+                        Be the CEO of a workforce that never stops
+                    </h2>
+                    <p className="mt-5 max-w-xl text-lg text-gray-500 md:mt-6 md:text-xl">
+                        Your team isn&apos;t just people anymore. It&apos;s people and agents — and you run both from one place.
+                    </p>
+                    <a
+                        href="/pricing"
+                        className="mt-8 inline-flex items-center justify-center rounded-full bg-blue-600 px-8 py-3.5 text-sm font-bold uppercase tracking-wider text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-700 md:mt-10"
+                    >
+                        Get Started
+                    </a>
+                </div>
+
+                {/* Preview cards peeking from bottom */}
+                <div className="relative z-10 mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-4 md:mt-16 md:grid-cols-3 md:gap-6">
+                    {/* Card 1 - Agent Stats */}
+                    <div className="rounded-t-2xl border border-gray-200 bg-white p-5 shadow-xl shadow-gray-200/50">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-gray-900">Agent Activity</h3>
+                            <span className="text-sm text-gray-400">⚙️</span>
                         </div>
-                        <h2 className="text-display-sm font-semibold text-gray-900 md:text-display-md">
-                            Be the CEO of a workforce that never stops
-                        </h2>
-                        <p className="mt-4 text-lg text-gray-600 md:mt-5 md:text-xl">
-                            Your team isn&apos;t just people anymore. It&apos;s people and agents — and you run both from one place.
-                        </p>
-                    </div>
-                    <dl className="flex flex-col justify-between gap-10 md:flex-row md:gap-8">
-                        {[
-                            { title: "38", subtitle: "Agents you can hire", description: "Build departments that run themselves." },
-                            { title: "∞", subtitle: "Hours in their workday", description: "Your agents don't clock out." },
-                            { title: "1", subtitle: "Dashboard to run it all", description: "People, agents, and results in one view." },
-                            { title: "0", subtitle: "Micromanagement required", description: "Train them once, they figure out the rest." },
-                        ].map((item) => (
-                            <div key={item.title} className="relative flex-1 overflow-hidden pt-4 md:mt-0 md:pt-0 md:pl-6">
-                                <div className="absolute top-0 left-0 h-full w-full border-t-2 border-blue-500 md:border-t-0 md:border-l-2" />
-                                <div className="flex flex-col gap-1">
-                                    <dd className="text-display-lg font-semibold text-blue-500">{item.title}</dd>
-                                    <dt className="text-lg font-semibold text-gray-900">{item.subtitle}</dt>
-                                    <p className="mt-1 text-sm text-gray-600">{item.description}</p>
+                        <div className="mb-4 rounded-xl bg-blue-500 px-4 py-3">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm">🤖</span>
+                                <p className="text-sm font-semibold text-white">7 agents completed 142 tasks today</p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex items-center gap-2">
+                                <div className="flex size-7 items-center justify-center rounded-full bg-blue-100">
+                                    <span className="text-xs">📊</span>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] uppercase text-gray-400">Tasks Done</p>
+                                    <p className="text-lg font-bold text-gray-900">1,284</p>
                                 </div>
                             </div>
-                        ))}
-                    </dl>
+                            <div className="flex items-center gap-2">
+                                <div className="flex size-7 items-center justify-center rounded-full bg-emerald-100">
+                                    <span className="text-xs">✅</span>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] uppercase text-gray-400">Success Rate</p>
+                                    <p className="text-lg font-bold text-gray-900">98.7%</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="flex size-7 items-center justify-center rounded-full bg-violet-100">
+                                    <span className="text-xs">💾</span>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] uppercase text-gray-400">Memories</p>
+                                    <p className="text-lg font-bold text-gray-900">342</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="flex size-7 items-center justify-center rounded-full bg-amber-100">
+                                    <span className="text-xs">⚡</span>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] uppercase text-gray-400">Uptime</p>
+                                    <p className="text-lg font-bold text-gray-900">24/7</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Card 2 - Revenue Dashboard */}
+                    <div className="rounded-t-2xl border border-gray-200 bg-white p-5 shadow-xl shadow-gray-200/50">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-gray-900">Revenue</h3>
+                            <div className="flex gap-1.5">
+                                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">🔍</span>
+                                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">📊</span>
+                            </div>
+                        </div>
+                        <div className="mb-3 flex items-center gap-3">
+                            <div className="flex size-8 items-center justify-center rounded-full bg-blue-100">
+                                <span className="text-sm">💰</span>
+                            </div>
+                            <div>
+                                <p className="text-[10px] uppercase text-gray-400">Total Revenue</p>
+                                <p className="text-2xl font-bold text-gray-900">$284,392</p>
+                            </div>
+                            <span className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-600">+12.5%</span>
+                        </div>
+                        <div className="mb-3 rounded-lg border border-gray-100 px-3 py-2">
+                            <p className="text-sm text-gray-600">agent-generated revenue</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-blue-500">📈</span>
+                                <span className="text-sm font-semibold text-gray-900">$48,250</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-emerald-500">✅</span>
+                                <span className="text-sm font-semibold text-gray-900">24 deals</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-amber-500">🔥</span>
+                                <span className="text-sm font-semibold text-gray-900">92%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Card 3 - Agent Roster */}
+                    <div className="rounded-t-2xl border border-gray-200 bg-white p-5 shadow-xl shadow-gray-200/50">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-gray-900">Active Agents</h3>
+                            <span className="rounded-full border border-blue-200 px-3 py-1 text-xs font-medium text-blue-600">+ Hire Agent</span>
+                        </div>
+                        <div className="space-y-3">
+                            {[
+                                { name: "Sales Agent", role: "Pipeline & deals", emoji: "🤝", color: "bg-blue-100" },
+                                { name: "Finance Agent", role: "Bookkeeping & forecasts", emoji: "💰", color: "bg-emerald-100" },
+                                { name: "Project Agent", role: "Tasks & milestones", emoji: "📋", color: "bg-violet-100" },
+                                { name: "Knowledge Agent", role: "Docs & SOPs", emoji: "📚", color: "bg-amber-100" },
+                            ].map((agent) => (
+                                <div key={agent.name} className="flex items-center gap-3">
+                                    <div className={`flex size-10 items-center justify-center rounded-full ${agent.color}`}>
+                                        <span className="text-lg">{agent.emoji}</span>
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-semibold text-gray-900">{agent.name}</p>
+                                        <p className="text-xs text-gray-500">{agent.role}</p>
+                                    </div>
+                                    <div className="flex size-5 items-center justify-center rounded border border-emerald-300 bg-emerald-50">
+                                        <div className="size-2 rounded-sm bg-emerald-500" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -901,7 +1019,7 @@ const CTASection = () => {
                         Your AI workforce is ready
                     </h2>
                     <p className="max-w-xl text-lg text-gray-600">
-                        Deploy 7 autonomous agents in 5 minutes. No credit card required. Start free forever.
+                        Deploy 7 autonomous agents in 5 minutes. Get started in minutes.
                     </p>
                     <div className="flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-start">
                         <Button color="secondary" size="xl" href="/demo/agents">
@@ -928,6 +1046,9 @@ const Footer = () => {
                             <p className="text-md text-gray-600">
                                 Business in the AI era.
                             </p>
+                            <a href="mailto:hello@dreamteam.ai" className="text-md text-gray-600 transition-colors hover:text-gray-900">
+                                hello@dreamteam.ai
+                            </a>
                         </div>
                         <nav className="flex-1">
                             <ul className="grid flex-1 grid-cols-2 gap-8 md:grid-cols-4">
@@ -995,7 +1116,6 @@ export function LandingPage() {
             <ProductsSection />
             <AppIntegration />
             <MetricsSection />
-            <CTASection />
             <Footer />
         </div>
     );

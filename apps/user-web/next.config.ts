@@ -39,6 +39,14 @@ const nextConfig: NextConfig = {
           source: "/api/agent-chat",
           destination: `${agentServerUrl}/agent-chat`,
         },
+        {
+          source: "/ai-info.md",
+          destination: "/ai-info",
+        },
+        {
+          source: "/llms.txt",
+          destination: "/llms-txt",
+        },
       ],
       afterFiles: [],
       fallback: [],

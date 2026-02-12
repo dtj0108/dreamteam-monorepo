@@ -1,44 +1,118 @@
-import { ArrowRightIcon } from 'lucide-react'
-
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter, CardTitle, CardDescription } from '@/components/ui/card'
-
-import { BorderBeam } from '@/components/ui/border-beam'
-
-type FeaturesProp = {
-  src: string
-  darkSrc: string
-  title: string
-  subTitle: string
-  description: string
-  href: string
-}
+import Link from 'next/link'
 
 const featureData = [
   {
-    src: 'https://cdn.shadcnstudio.com/ss-assets/blocks/marketing/features/image-29.png',
-    darkSrc: 'https://cdn.shadcnstudio.com/ss-assets/blocks/marketing/features/image-29-dark.png',
     title: 'They remember everything',
-    subTitle: 'Persistent Memory',
+    highlight: 'Persistent Memory',
     description: 'Your preferences, past decisions, and project context—agents learn from every interaction and never forget.',
-    href: '#'
+    mockup: (
+      <div className='w-full rounded-xl border border-white/10 bg-white/5 p-4'>
+        <div className='mb-3 flex items-center justify-between'>
+          <span className='text-sm font-semibold text-white'>Agent Memory</span>
+          <span className='rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-medium text-blue-400'>42 stored</span>
+        </div>
+        <div className='space-y-2'>
+          {[
+            { label: 'Drew prefers Slack over email', time: '2 days ago', icon: '🧠' },
+            { label: 'TechCorp uses Net-30 terms', time: '5 days ago', icon: '💼' },
+            { label: 'Monthly reports due on 1st', time: '1 week ago', icon: '📊' },
+          ].map((m) => (
+            <div key={m.label} className='flex items-start gap-2.5 rounded-lg bg-white/5 px-3 py-2'>
+              <span className='mt-0.5 text-sm'>{m.icon}</span>
+              <div className='flex-1 min-w-0'>
+                <p className='text-xs font-medium text-gray-200'>{m.label}</p>
+                <p className='text-[10px] text-gray-500'>{m.time}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className='mt-3 flex items-center gap-1.5 text-[10px] text-gray-500'>
+          <div className='size-1.5 rounded-full bg-blue-400 animate-pulse' />
+          Continuously learning from interactions...
+        </div>
+      </div>
+    ),
   },
   {
-    src: 'https://cdn.shadcnstudio.com/ss-assets/blocks/marketing/features/image-30.png',
-    darkSrc: 'https://cdn.shadcnstudio.com/ss-assets/blocks/marketing/features/image-30-dark.png',
     title: 'Teach them new skills',
-    subTitle: 'Custom Abilities',
+    highlight: 'Custom Abilities',
     description: 'Write instructions in plain English. Agents learn new workflows instantly and use them forever.',
-    href: '#'
+    mockup: (
+      <div className='w-full rounded-xl border border-white/10 bg-white/5 p-4'>
+        <div className='mb-3 flex items-center justify-between'>
+          <span className='text-sm font-semibold text-white'>Skills</span>
+          <button className='rounded-md bg-blue-600 px-2.5 py-1 text-[10px] font-medium text-white'>+ New Skill</button>
+        </div>
+        <div className='space-y-2'>
+          {[
+            { name: 'Project Planner', status: 'Active', color: 'bg-blue-500' },
+            { name: 'Lead Qualifier', status: 'Active', color: 'bg-blue-500' },
+            { name: 'Weekly Reporter', status: 'Draft', color: 'bg-gray-500' },
+          ].map((s) => (
+            <div key={s.name} className='flex items-center justify-between rounded-lg bg-white/5 px-3 py-2.5'>
+              <div className='flex items-center gap-2'>
+                <span className='text-sm'>✨</span>
+                <span className='text-xs font-medium text-gray-200'>{s.name}</span>
+              </div>
+              <div className='flex items-center gap-1.5'>
+                <div className={`size-1.5 rounded-full ${s.color}`} />
+                <span className='text-[10px] text-gray-500'>{s.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className='mt-3 rounded-lg border border-dashed border-white/10 bg-white/5 p-3'>
+          <p className='text-[10px] font-medium text-gray-500 mb-1'>Preview: Project Planner</p>
+          <div className='font-mono text-[10px] text-gray-500 space-y-0.5'>
+            <p className='text-blue-400'># When creating projects:</p>
+            <p>1. Break into milestones</p>
+            <p>2. Auto-assign by workload</p>
+            <p>3. Create documentation</p>
+          </div>
+        </div>
+      </div>
+    ),
   },
   {
-    src: 'https://cdn.shadcnstudio.com/ss-assets/blocks/marketing/features/image-31.png',
-    darkSrc: 'https://cdn.shadcnstudio.com/ss-assets/blocks/marketing/features/image-31-dark.png',
     title: 'Tools built in',
-    subTitle: 'Ready to Work',
+    highlight: 'Ready to Work',
     description: 'Transactions, projects, leads, knowledge base, web search, and more. Agents chain actions together autonomously.',
-    href: '#'
-  }
+    mockup: (
+      <div className='w-full rounded-xl border border-white/10 bg-white/5 p-4'>
+        <div className='mb-3 flex items-center justify-between'>
+          <span className='text-sm font-semibold text-white'>Agent Tools</span>
+          <span className='text-[10px] text-gray-500'>16 available</span>
+        </div>
+        <div className='grid grid-cols-4 gap-2'>
+          {[
+            { emoji: '💰', label: 'Transactions' },
+            { emoji: '📋', label: 'Projects' },
+            { emoji: '🤝', label: 'Leads' },
+            { emoji: '📚', label: 'Knowledge' },
+            { emoji: '🌐', label: 'Web Search' },
+            { emoji: '📧', label: 'Email' },
+            { emoji: '📊', label: 'Reports' },
+            { emoji: '📁', label: 'Export' },
+          ].map((t) => (
+            <div key={t.label} className='flex flex-col items-center gap-1 rounded-lg bg-white/5 p-2'>
+              <span className='text-lg'>{t.emoji}</span>
+              <span className='text-[9px] text-gray-500'>{t.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className='mt-3 rounded-lg bg-white/5 border border-white/10 p-3'>
+          <p className='text-[10px] text-gray-500 mb-1.5'>Action chain (3 tools)</p>
+          <div className='flex items-center gap-1.5 text-[10px]'>
+            <span className='rounded bg-blue-500/20 px-1.5 py-0.5 text-blue-400'>🤝 Score Lead</span>
+            <span className='text-gray-600'>→</span>
+            <span className='rounded bg-blue-500/20 px-1.5 py-0.5 text-blue-400'>📧 Send Email</span>
+            <span className='text-gray-600'>→</span>
+            <span className='rounded bg-blue-500/20 px-1.5 py-0.5 text-blue-400'>📋 Create Task</span>
+          </div>
+        </div>
+      </div>
+    ),
+  },
 ]
 
 const Features = () => {
@@ -56,51 +130,43 @@ const Features = () => {
           </p>
         </div>
 
-        <div className='grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3'>
-          {featureData.map((item) => (
-            <Card key={item.title} className='h-full group relative flex flex-col'>
-              <BorderBeam
-                duration={7}
-                size={400}
-                borderWidth={1.5}
-                className='from-transparent via-[#FE8FB5] to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100'
-              />
-              <BorderBeam
-                duration={7}
-                delay={4}
-                size={400}
-                borderWidth={1.5}
-                className='from-transparent via-[#FFBE7B] to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100'
-              />
-              <CardContent className='flex flex-1 flex-col gap-6'>
-                <div className='bg-muted flex h-46 w-full flex-col items-center justify-end overflow-hidden rounded-md'>
-                  <img
-                    src={item.src}
-                    alt={item.title}
-                    className='relative w-full max-w-68 origin-bottom rounded-md object-cover transition-transform duration-300 group-hover:scale-105 dark:hidden'
-                  />
-                  <img
-                    src={item.darkSrc}
-                    alt={item.title}
-                    className='relative hidden w-full max-w-68 origin-bottom rounded-md object-cover transition-transform duration-300 group-hover:scale-105 dark:inline-block'
-                  />
+        {/* Feature rows */}
+        <div className='flex flex-col gap-8'>
+          {featureData.map((item, i) => {
+            const reversed = i % 2 === 1
+            return (
+              <div
+                key={item.title}
+                className='rounded-3xl bg-gray-950 p-6 sm:p-10 lg:p-14'
+              >
+                <div className={`flex flex-col items-stretch gap-8 lg:gap-0 ${reversed ? 'lg:flex-row-reverse' : 'lg:flex-row'}`}>
+                  {/* Mockup side */}
+                  <div className='flex flex-1 items-center lg:px-8'>
+                    {item.mockup}
+                  </div>
+
+                  {/* Text side */}
+                  <div className={`flex flex-1 flex-col justify-center lg:items-start lg:text-left items-center text-center lg:px-8`}>
+                    <p className='text-sm font-semibold uppercase tracking-wider text-blue-400'>
+                      {item.highlight}
+                    </p>
+                    <h3 className='mt-3 text-2xl font-semibold text-white sm:text-3xl lg:text-4xl'>
+                      {item.title}
+                    </h3>
+                    <p className='mt-4 max-w-md text-base text-gray-400 sm:text-lg'>
+                      {item.description}
+                    </p>
+                    <Link
+                      href='/pricing'
+                      className='mt-6 inline-flex items-center justify-center rounded-full border-2 border-white/20 px-6 py-2.5 text-sm font-semibold text-white uppercase tracking-wider transition-colors hover:bg-white hover:text-gray-900'
+                    >
+                      Get Started
+                    </Link>
+                  </div>
                 </div>
-                <div className='flex-1 space-y-1.5'>
-                  <p className='text-muted-foreground capitalize'>{item.subTitle}</p>
-                  <CardTitle className='text-lg font-semibold'> {item.title}</CardTitle>
-                  <CardDescription className='text-base'>{item.description}</CardDescription>
-                </div>
-              </CardContent>
-              <CardFooter className='mt-auto'>
-                <Button size='lg' className='group' asChild>
-                  <a href={item.href}>
-                    Learn more
-                    <ArrowRightIcon className='transition-transform duration-300 group-hover:translate-x-1' />
-                  </a>
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
+              </div>
+            )
+          })}
         </div>
       </div>
     </section>
