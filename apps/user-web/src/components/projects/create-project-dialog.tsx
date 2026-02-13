@@ -65,10 +65,6 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
 
     setLoading(true)
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/20713e29-123e-4752-baf2-7c9fc59a15c8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'create-project-dialog.tsx:66',message:'Dialog: Submit started',data:{name:name.trim()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'G'})}).catch(()=>{});
-      // #endregion
-      
       const project = await createProject({
         name: name.trim(),
         description: description.trim() || undefined,
@@ -79,15 +75,8 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
         department_id: departmentId,
       })
 
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/20713e29-123e-4752-baf2-7c9fc59a15c8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'create-project-dialog.tsx:78',message:'Dialog: createProject returned',data:{hasProject:!!project,projectId:project?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'G'})}).catch(()=>{});
-      // #endregion
 
       if (project) {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/20713e29-123e-4752-baf2-7c9fc59a15c8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'create-project-dialog.tsx:84',message:'Dialog: Navigating to project',data:{projectId:project.id,url:`/projects/${project.id}`},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'G'})}).catch(()=>{});
-        // #endregion
-        
         onOpenChange(false)
         resetForm()
         router.push(`/projects/${project.id}`)

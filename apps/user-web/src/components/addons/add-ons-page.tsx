@@ -17,6 +17,7 @@ import { AddonsOverview } from './addons-overview'
 import { PurchaseConfirmDialog } from './purchase-confirm-dialog'
 import { AutoReplenishSettings } from './auto-replenish-settings'
 import { PaymentMethodCard } from '@/components/billing/payment-method-card'
+import { UpdatePaymentMethodModal } from '@/components/billing/update-payment-method-modal'
 import { isSMSBalanceLow, isCallMinutesLow, type CreditBundle } from '@/types/addons'
 
 export function AddOnsPage() {
@@ -80,6 +81,10 @@ export function AddOnsPage() {
     loading: billingLoading,
   } = useBilling()
 
+  // Update card modal state
+  const [updateCardModalOpen, setUpdateCardModalOpen] = useState(false)
+  const [setupClientSecret, setSetupClientSecret] = useState<string | null>(null)
+
   // Auto-replenish update state
   const [isUpdatingAutoReplenish, setIsUpdatingAutoReplenish] = useState(false)
 
@@ -111,7 +116,7 @@ export function AddOnsPage() {
     }
   }
 
-  // Handle payment method update (create SetupIntent)
+  // Handle payment method update (create SetupIntent and open modal)
   const handleUpdatePaymentMethod = async () => {
     try {
       const response = await fetch('/api/addons/payment-method', {
@@ -121,11 +126,8 @@ export function AddOnsPage() {
         throw new Error('Failed to create setup intent')
       }
       const { clientSecret } = await response.json()
-      // For now, we'll redirect to a setup page or show modal
-      // TODO: Implement Stripe Elements modal for card update
-      console.log('SetupIntent created:', clientSecret)
-      // For now, fall back to Stripe Checkout flow
-      alert('Card update feature coming soon. Please make a purchase to update your card.')
+      setSetupClientSecret(clientSecret)
+      setUpdateCardModalOpen(true)
     } catch (error) {
       console.error('Error updating payment method:', error)
     }
@@ -273,6 +275,16 @@ export function AddOnsPage() {
           isLoading={paymentMethodLoading}
           onUpdate={canManageBilling ? handleUpdatePaymentMethod : undefined}
           onRemove={canManageBilling ? handleRemovePaymentMethod : undefined}
+        />
+      )}
+
+      {/* Update Payment Method Modal */}
+      {setupClientSecret && (
+        <UpdatePaymentMethodModal
+          open={updateCardModalOpen}
+          onOpenChange={setUpdateCardModalOpen}
+          clientSecret={setupClientSecret}
+          onSuccess={refreshPaymentMethod}
         />
       )}
 

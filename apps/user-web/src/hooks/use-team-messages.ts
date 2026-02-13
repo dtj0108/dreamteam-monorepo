@@ -152,9 +152,6 @@ export function useTeamMessages({
 
   // Fetch initial messages - stale-while-revalidate pattern
   const fetchMessages = useCallback(async (before?: string) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7245/ingest/b671df86-278c-4632-b262-916f6c1f9fb0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-team-messages.ts:fetchMessages',message:'Fetching messages',data:{channelId,dmConversationId,before,hasCachedData:hasInitialDataRef.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'G'})}).catch(()=>{});
-    // #endregion
     if (!channelId && !dmConversationId) return
 
     const key = getCacheKey(channelId, dmConversationId)

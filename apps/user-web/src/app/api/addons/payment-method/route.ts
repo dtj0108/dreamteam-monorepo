@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@dreamteam/database/server'
 import { getCurrentWorkspaceId } from '@/lib/workspace-auth'
-import { getWorkspaceBilling, removePaymentMethod, createSetupIntent } from '@/lib/billing-queries'
+import { getWorkspaceBilling, removePaymentMethod, createSetupIntent, savePaymentMethod } from '@/lib/billing-queries'
 
 /**
  * GET /api/addons/payment-method
@@ -75,6 +75,42 @@ export async function POST(): Promise<NextResponse> {
   } catch (error) {
     console.error('Error creating SetupIntent:', error)
     return NextResponse.json({ error: 'Failed to create setup intent' }, { status: 500 })
+  }
+}
+
+/**
+ * PUT /api/addons/payment-method
+ * Save a new payment method after SetupIntent confirmation
+ */
+export async function PUT(request: NextRequest): Promise<NextResponse> {
+  try {
+    const supabase = await createServerSupabaseClient()
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const workspaceId = await getCurrentWorkspaceId(user.id)
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'No workspace selected' }, { status: 400 })
+    }
+
+    const { paymentMethodId } = await request.json()
+    if (!paymentMethodId || typeof paymentMethodId !== 'string') {
+      return NextResponse.json({ error: 'Missing paymentMethodId' }, { status: 400 })
+    }
+
+    await savePaymentMethod(workspaceId, paymentMethodId)
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error saving payment method:', error)
+    return NextResponse.json({ error: 'Failed to save payment method' }, { status: 500 })
   }
 }
 
