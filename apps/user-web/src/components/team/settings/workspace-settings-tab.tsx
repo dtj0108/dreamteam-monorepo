@@ -31,6 +31,7 @@ export function WorkspaceSettingsTab({ workspaceId, isOwner }: WorkspaceSettings
   const [workspace, setWorkspace] = useState<WorkspaceSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [timezone, setTimezone] = useState("UTC")
@@ -220,9 +221,9 @@ export function WorkspaceSettingsTab({ workspaceId, isOwner }: WorkspaceSettings
               </div>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="sm">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
+                  <Button variant="destructive" size="sm" disabled={isDeleting}>
+                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    {isDeleting ? "Deleting..." : "Delete"}
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -238,12 +239,29 @@ export function WorkspaceSettingsTab({ workspaceId, isOwner }: WorkspaceSettings
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={() => {
-                        // TODO: Implement workspace deletion
-                        console.log("Delete workspace:", workspaceId)
+                      disabled={isDeleting}
+                      onClick={async () => {
+                        setIsDeleting(true)
+                        try {
+                          const res = await fetch(`/api/workspaces/${workspaceId}`, {
+                            method: "DELETE",
+                          })
+                          if (res.ok) {
+                            window.location.href = "/account"
+                          } else {
+                            const data = await res.json()
+                            alert(data.error || "Failed to delete workspace")
+                            setIsDeleting(false)
+                          }
+                        } catch (error) {
+                          console.error("Failed to delete workspace:", error)
+                          alert("Failed to delete workspace. Please try again.")
+                          setIsDeleting(false)
+                        }
                       }}
                     >
-                      Delete Workspace
+                      {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {isDeleting ? "Deleting..." : "Delete Workspace"}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

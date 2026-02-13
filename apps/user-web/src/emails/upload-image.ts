@@ -7,13 +7,23 @@
 import { createClient } from '@supabase/supabase-js'
 import * as fs from 'fs'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://gfxwgzanzcdvhnenansu.supabase.co'
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmeHdnemFuemNkdmhuZW5hbnN1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTc1MDE5OSwiZXhwIjoyMDgxMzI2MTk5fQ.Bu7PPnOgh4bG7Mcl5WN8O-7q-LdIE7m9Qa00oSWYnnE'
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  throw new Error('Missing required environment variable: NEXT_PUBLIC_SUPABASE_URL')
+}
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('Missing required environment variable: SUPABASE_SERVICE_ROLE_KEY')
+}
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 async function uploadImage() {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-  const imagePath = '/Users/drewbaskin/dreamteam-monorepo-1/apps/user-web/public/emails/ai-sphere.png'
+  const imagePath = process.argv[2] || './apps/user-web/public/emails/ai-sphere.png'
+  if (!fs.existsSync(imagePath)) {
+    throw new Error(`Image file not found: ${imagePath}`)
+  }
   const imageBuffer = fs.readFileSync(imagePath)
 
   console.log('📤 Uploading ai-sphere.png to Supabase Storage...')
