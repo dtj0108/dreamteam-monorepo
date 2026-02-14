@@ -7,6 +7,7 @@ import { Button } from "@/components/base/buttons/button";
 import { Header } from "@/components/marketing/header-navigation/header";
 import { SectionDivider } from "@/components/shared-assets/section-divider";
 import { cx } from "@/lib/cx";
+import { LEGAL_COOKIES_URL, LEGAL_PRIVACY_URL, LEGAL_TERMS_URL } from "@/lib/legal-links";
 import { DreamTeamLogo } from "@/components/foundations/logo/dreamteam-logo";
 import { GitHub, LinkedIn, X } from "@/components/foundations/social-icons";
 
@@ -101,9 +102,9 @@ const footerNavList = [
     {
         label: "Legal",
         items: [
-            { label: "Terms", href: "#" },
-            { label: "Privacy", href: "#" },
-            { label: "Cookies", href: "#" },
+            { label: "Terms", href: LEGAL_TERMS_URL },
+            { label: "Privacy", href: LEGAL_PRIVACY_URL },
+            { label: "Cookies", href: LEGAL_COOKIES_URL },
         ],
     },
 ];
@@ -361,4 +362,3 @@ export function ProductLanding({
 }
 
 export default ProductLanding;
-

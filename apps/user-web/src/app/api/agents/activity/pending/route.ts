@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
-import { getSession } from "@dreamteam/auth/session"
+import { getAuthContext } from "@/lib/api-auth"
 
 // GET /api/agents/activity/pending - List pending approval executions
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession()
-    if (!session) {
+    const auth = await getAuthContext(request)
+    if (!auth || auth.type === "api_key") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    const userId = auth.userId
 
     const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
       .from("workspace_members")
       .select("id")
       .eq("workspace_id", workspaceId)
-      .eq("profile_id", session.id)
+      .eq("profile_id", userId)
       .single()
 
     if (memberError || !membership) {
@@ -46,12 +47,8 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
 
     if (error) {
-      // If table doesn't exist, return empty
-      if (error.code === "42P01") {
-        return NextResponse.json({ executions: [], total: 0 })
-      }
       console.error("Error fetching pending executions:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ executions: [], total: 0 })
     }
 
     return NextResponse.json({ executions: executions || [], total: count || 0 })

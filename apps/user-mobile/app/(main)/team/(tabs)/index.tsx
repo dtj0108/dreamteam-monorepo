@@ -15,7 +15,7 @@ import { useRouter } from "expo-router";
 import { ProductSwitcher } from "@/components/ProductSwitcher";
 
 import { Colors } from "@/constants/Colors";
-import { useChannels, useDMConversations } from "@/lib/hooks/useTeam";
+import { useAgents, useChannels, useDMConversations } from "@/lib/hooks/useTeam";
 import { ChannelWithMembership } from "@/lib/types/team";
 import { QuickActionCard } from "@/components/team/QuickActionCard";
 import { CollapsibleSection } from "@/components/team/CollapsibleSection";
@@ -40,9 +40,14 @@ export default function HomeScreen() {
     isLoading: dmsLoading,
     refetch: refetchDMs,
   } = useDMConversations();
+  const {
+    data: agentsData,
+    refetch: refetchAgents,
+  } = useAgents();
 
   const channels = channelsData?.channels || [];
   const dms = dmsData?.conversations || [];
+  const agents = agentsData?.agents || [];
   const isLoading = channelsLoading || dmsLoading;
 
   // Calculate unreads - channels and DMs with unread messages
@@ -67,11 +72,27 @@ export default function HomeScreen() {
         avatarUrl: d.participant?.user?.avatar_url,
       }));
 
-    return [...unreadChannels, ...unreadDMs];
-  }, [channels, dms]);
+    const unreadAgents = agents
+      .filter((agent) => (agent.unread_count || 0) > 0)
+      .map((agent) => ({
+        type: "agent" as const,
+        id: agent.id,
+        name: agent.name,
+        unreadCount: agent.unread_count || 0,
+        emoji: agent.emoji || "✨",
+      }));
+
+    return [...unreadChannels, ...unreadDMs, ...unreadAgents];
+  }, [channels, dms, agents]);
 
   // Calculate totals
   const totalUnread = unreads.reduce((sum, u) => sum + u.unreadCount, 0);
+  const dmUnreadCount = dms.reduce((sum, dm) => sum + (dm.unread_count || 0), 0);
+  const agentUnreadCount = agents.reduce(
+    (sum, agent) => sum + (agent.unread_count || 0),
+    0
+  );
+  const directMessageUnreadCount = dmUnreadCount + agentUnreadCount;
 
   // Handlers
   const handleChannelPress = (channel: ChannelWithMembership) => {
@@ -81,6 +102,8 @@ export default function HomeScreen() {
   const handleUnreadPress = (item: (typeof unreads)[0]) => {
     if (item.type === "channel") {
       router.push(`/(main)/team/channels/${item.id}`);
+    } else if (item.type === "agent") {
+      router.push(`/(main)/team/agents/${item.id}`);
     } else {
       router.push(`/(main)/team/dm/${item.id}`);
     }
@@ -93,6 +116,7 @@ export default function HomeScreen() {
   const handleRefresh = () => {
     refetchChannels();
     refetchDMs();
+    refetchAgents();
   };
 
   return (
@@ -154,6 +178,10 @@ export default function HomeScreen() {
                       ) : (
                         <Text className="text-lg font-bold text-gray-500">#</Text>
                       )
+                    ) : item.type === "agent" ? (
+                      <View className="h-10 w-10 items-center justify-center rounded-lg bg-violet-100">
+                        <Text className="text-lg">{item.emoji}</Text>
+                      </View>
                     ) : (
                       <View className="h-10 w-10 items-center justify-center rounded-full bg-sky-100">
                         <Text className="text-sm font-semibold text-sky-600">
@@ -230,6 +258,7 @@ export default function HomeScreen() {
           <CollapsibleSection
             title="Direct Messages"
             defaultExpanded={true}
+            badgeCount={directMessageUnreadCount}
             rightElement={
               <Pressable onPress={() => router.push("/(main)/team/dm/new")} className="mr-2">
                 <Ionicons name="add-circle-outline" size={20} color="#64748b" />

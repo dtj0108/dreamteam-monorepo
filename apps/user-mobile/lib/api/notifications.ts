@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
+import { del, post } from "../api";
 import { supabase } from "../supabase";
 
 // Key for storing the last registered push token locally
@@ -17,35 +18,18 @@ export async function registerPushToken(
   console.log("[Notifications API] registerPushToken:", { token: token.substring(0, 30) + "...", platform });
 
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    // Use getSession() (memory read) instead of getUser() (network call).
+    // The session has already been validated by AuthProvider on startup.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
       console.log("[Notifications API] registerPushToken - no user, skipping");
       return;
     }
 
-    // Upsert the push token (insert or update if exists)
-    const { error } = await supabase
-      .from("user_push_tokens")
-      .upsert(
-        {
-          user_id: user.id,
-          token,
-          platform,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "user_id,token",
-        }
-      );
-
-    if (error) {
-      // If the table doesn't exist yet, just log and continue
-      if (error.code === "42P01") {
-        console.log("[Notifications API] registerPushToken - user_push_tokens table not found (backend setup required)");
-        return;
-      }
-      throw error;
-    }
+    await post("/api/push-tokens", {
+      token,
+      platform,
+    });
 
     // Store locally so we can unregister on sign out
     await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
@@ -72,28 +56,15 @@ export async function unregisterPushToken(token?: string): Promise<void> {
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    // Use getSession() (memory read) instead of getUser() (network call).
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
       // Still try to clear local storage even if no user
       await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
       return;
     }
 
-    // Delete the push token from the database
-    const { error } = await supabase
-      .from("user_push_tokens")
-      .delete()
-      .eq("user_id", user.id)
-      .eq("token", tokenToRemove);
-
-    if (error) {
-      // If the table doesn't exist yet, just log and continue
-      if (error.code === "42P01") {
-        console.log("[Notifications API] unregisterPushToken - user_push_tokens table not found");
-      } else {
-        console.error("[Notifications API] unregisterPushToken error:", error);
-      }
-    }
+    await del(`/api/push-tokens?token=${encodeURIComponent(tokenToRemove)}`);
 
     // Clear local storage
     await AsyncStorage.removeItem(PUSH_TOKEN_KEY);

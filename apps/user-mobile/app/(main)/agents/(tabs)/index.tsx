@@ -16,10 +16,10 @@ import { ProductSwitcher } from "@/components/ProductSwitcher";
 import { Colors } from "@/constants/Colors";
 import { StatCard, ActivityItem, ApprovalItem } from "@/components/agents";
 import {
-  useDashboardStats,
   useHiredAgents,
   useAgentActivity,
   usePendingApprovals,
+  useAgentSchedules,
   useApproveExecution,
   useRejectExecution,
 } from "@/lib/hooks/useAgentsData";
@@ -29,10 +29,26 @@ export default function AgentsHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Queries
-  const { data: stats, refetch: refetchStats, isLoading: statsLoading } = useDashboardStats();
-  const { data: hiredAgents, refetch: refetchHired } = useHiredAgents();
-  const { data: activity, refetch: refetchActivity } = useAgentActivity({ limit: 5 });
-  const { data: pending, refetch: refetchPending } = usePendingApprovals();
+  const { data: hiredAgents, refetch: refetchHired, isLoading: hiredLoading } = useHiredAgents();
+  const {
+    data: recentActivity,
+    refetch: refetchRecentActivity,
+    isLoading: recentActivityLoading,
+  } = useAgentActivity({ limit: 10 });
+  const {
+    data: completedActivity,
+    refetch: refetchCompletedActivity,
+    isLoading: completedActivityLoading,
+  } = useAgentActivity({ status: "completed", limit: 1 });
+  const { data: pending, refetch: refetchPending, isLoading: pendingLoading } = usePendingApprovals();
+  const { data: schedules, refetch: refetchSchedules, isLoading: schedulesLoading } = useAgentSchedules();
+
+  const completedCount = completedActivity?.total || 0;
+  const pendingCount = pending?.total || pending?.executions.length || 0;
+  const recentExecutions = recentActivity?.executions || [];
+  const activeSchedulesCount = (schedules?.schedules || []).filter(
+    (schedule) => schedule.is_enabled
+  ).length;
 
   // Mutations
   const approveMutation = useApproveExecution();
@@ -41,10 +57,11 @@ export default function AgentsHomeScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([
-      refetchStats(),
       refetchHired(),
-      refetchActivity(),
+      refetchRecentActivity(),
+      refetchCompletedActivity(),
       refetchPending(),
+      refetchSchedules(),
     ]);
     setRefreshing(false);
   };
@@ -81,47 +98,51 @@ export default function AgentsHomeScreen() {
         </View>
 
         {/* Stat Cards */}
-        {statsLoading ? (
-          <View className="items-center py-8">
-            <ActivityIndicator size="large" color={Colors.primary} />
+        <View className="mb-4">
+          <View className="flex-row gap-3">
+            <StatCard
+              label="Hired Agents"
+              value={hiredAgents?.total ?? 0}
+              icon="users"
+              color={Colors.primary}
+              href="/(main)/agents/my-agents"
+            />
+            <StatCard
+              label="Pending"
+              value={pendingCount}
+              icon="clock-o"
+              color={Colors.warning}
+              href="/(main)/agents/activity"
+              showAlert={pendingCount > 0}
+            />
           </View>
-        ) : (
-          <View className="mb-4">
-            <View className="flex-row gap-3">
-              <StatCard
-                label="Hired Agents"
-                value={stats?.hiredAgents || 0}
-                icon="users"
-                color={Colors.primary}
-                href="/(main)/agents/my-agents"
-              />
-              <StatCard
-                label="Pending"
-                value={stats?.pendingApprovals || 0}
-                icon="clock-o"
-                color={Colors.warning}
-                href="/(main)/agents/activity"
-                showAlert={(stats?.pendingApprovals || 0) > 0}
-              />
-            </View>
-            <View className="mt-3 flex-row gap-3">
-              <StatCard
-                label="Completed"
-                value={stats?.completedTasks || 0}
-                icon="check-circle"
-                color={Colors.success}
-                href="/(main)/agents/activity"
-              />
-              <StatCard
-                label="Schedules"
-                value={stats?.activeSchedules || 0}
-                icon="calendar"
-                color="#8b5cf6"
-                href="/(main)/agents/more"
-              />
-            </View>
+          <View className="mt-3 flex-row gap-3">
+            <StatCard
+              label="Completed"
+              value={completedCount}
+              icon="check-circle"
+              color={Colors.success}
+              href="/(main)/agents/activity"
+            />
+            <StatCard
+              label="Schedules"
+              value={activeSchedulesCount}
+              icon="calendar"
+              color="#8b5cf6"
+              href="/(main)/agents/more"
+            />
           </View>
-        )}
+
+          {(hiredLoading ||
+            recentActivityLoading ||
+            completedActivityLoading ||
+            pendingLoading ||
+            schedulesLoading) && (
+            <View className="mt-3 items-center">
+              <ActivityIndicator size="small" color={Colors.primary} />
+            </View>
+          )}
+        </View>
 
         {/* Recent Activity */}
         <View className="mb-4">
@@ -136,7 +157,7 @@ export default function AgentsHomeScreen() {
             </Pressable>
           </View>
 
-          {activity?.executions.length === 0 ? (
+          {recentExecutions.length === 0 ? (
             <View className="rounded-xl bg-muted p-4">
               <Text className="text-center text-muted-foreground">
                 No recent activity
@@ -147,11 +168,11 @@ export default function AgentsHomeScreen() {
             </View>
           ) : (
             <View className="overflow-hidden rounded-xl bg-muted">
-              {activity?.executions.slice(0, 5).map((exec, index) => (
+              {recentExecutions.slice(0, 5).map((exec, index) => (
                 <ActivityItem
                   key={exec.id}
                   execution={exec}
-                  isLast={index === Math.min(activity.executions.length, 5) - 1}
+                  isLast={index === Math.min(recentExecutions.length, 5) - 1}
                 />
               ))}
             </View>

@@ -1,10 +1,12 @@
 import { LinearGradient } from "expo-linear-gradient";
+import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Logo } from "@/components/Logo";
+import { LEGAL_PRIVACY_URL, LEGAL_TERMS_URL } from "@/constants/legal-links";
 
 const logoImage = require("../../dreamteamlogo.png");
 
@@ -75,6 +77,10 @@ export default function WelcomeScreen() {
     router.push("/(auth)/login");
   };
 
+  const handleOpenLegalUrl = async (url: string) => {
+    await WebBrowser.openBrowserAsync(url);
+  };
+
   return (
     <LinearGradient
       colors={["#ffffff", "#f0f9ff", "#e0f2fe"]}
@@ -131,7 +137,21 @@ export default function WelcomeScreen() {
         >
           {/* Terms text */}
           <Text className="mb-4 text-center text-xs text-muted-foreground">
-            By continuing, you agree to our Terms of Service and Privacy Policy.
+            By continuing, you agree to our{" "}
+            <Text
+              className="text-primary underline"
+              onPress={() => handleOpenLegalUrl(LEGAL_TERMS_URL)}
+            >
+              Terms of Service
+            </Text>{" "}
+            and{" "}
+            <Text
+              className="text-primary underline"
+              onPress={() => handleOpenLegalUrl(LEGAL_PRIVACY_URL)}
+            >
+              Privacy Policy
+            </Text>
+            .
           </Text>
 
           {/* Continue button */}

@@ -36,6 +36,31 @@ import {
 
 const WORKSPACE_ID_KEY = "currentWorkspaceId";
 
+function isMissingColumnError(error: unknown, columnName: string): boolean {
+  if (!error || typeof error !== "object") return false;
+  const maybeError = error as { code?: string; message?: string };
+  return (
+    maybeError.code === "42703" &&
+    typeof maybeError.message === "string" &&
+    maybeError.message.includes(columnName)
+  );
+}
+
+function getApiBaseUrl(): string | null {
+  const raw = process.env.EXPO_PUBLIC_API_URL;
+  if (!raw) return null;
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.hostname === "dreamteam.ai") {
+      parsed.hostname = "www.dreamteam.ai";
+    }
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return raw.replace(/\/+$/, "");
+  }
+}
+
 // Helper to get current workspace ID
 async function getWorkspaceId(): Promise<string> {
   const workspaceId = await AsyncStorage.getItem(WORKSPACE_ID_KEY);
@@ -530,7 +555,7 @@ export async function getChannelMessages(
   console.log("[Team API] getChannelMessages via Web API", channelId, params);
   
   // Use the web API endpoint which returns messages with fresh signed URLs
-  const API_URL = process.env.EXPO_PUBLIC_API_URL;
+  const API_URL = getApiBaseUrl();
   
   if (API_URL) {
     try {
@@ -1005,20 +1030,43 @@ export async function getDMConversations(): Promise<DMConversationsResponse> {
 
     console.log("[Team API] getDMConversations - userId:", userId, "workspaceId:", workspaceId);
 
-    // Debug: Get ALL dm_participants to see what's in the table
-    const { data: allParts, error: allPartsError } = await supabase
-      .from("dm_participants")
-      .select("*");
-
-    console.log("[Team API] getDMConversations - ALL dm_participants:", allParts?.length, allParts);
-
     // Step 1: Get all DM conversation IDs where current user is a participant
-    const { data: myParticipations, error: myError } = await supabase
+    // Include last_read_at/is_muted so we can compute unread counts.
+    let myParticipations: Array<{
+      conversation_id: string;
+      last_read_at: string | null;
+      is_muted?: boolean;
+    }> = [];
+
+    const withMutedResult = await supabase
       .from("dm_participants")
-      .select("conversation_id")
+      .select("conversation_id, last_read_at, is_muted")
       .eq("profile_id", userId);
 
-    if (myError) throw myError;
+    if (withMutedResult.error) {
+      if (isMissingColumnError(withMutedResult.error, "is_muted")) {
+        // Older schemas do not have dm_participants.is_muted
+        const fallbackResult = await supabase
+          .from("dm_participants")
+          .select("conversation_id, last_read_at")
+          .eq("profile_id", userId);
+
+        if (fallbackResult.error) throw fallbackResult.error;
+        myParticipations = (fallbackResult.data || []).map((row: any) => ({
+          conversation_id: row.conversation_id,
+          last_read_at: row.last_read_at || null,
+          is_muted: false,
+        }));
+      } else {
+        throw withMutedResult.error;
+      }
+    } else {
+      myParticipations = (withMutedResult.data || []).map((row: any) => ({
+        conversation_id: row.conversation_id,
+        last_read_at: row.last_read_at || null,
+        is_muted: typeof row.is_muted === "boolean" ? row.is_muted : false,
+      }));
+    }
 
     console.log("[Team API] getDMConversations - my participations:", myParticipations?.length);
 
@@ -1028,6 +1076,18 @@ export async function getDMConversations(): Promise<DMConversationsResponse> {
     }
 
     const myConvIds = myParticipations.map((p) => p.conversation_id);
+    const myParticipationByConv = new Map<
+      string,
+      { last_read_at: string | null; is_muted: boolean }
+    >(
+      myParticipations.map((p: any) => [
+        p.conversation_id,
+        {
+          last_read_at: p.last_read_at || null,
+          is_muted: typeof p.is_muted === "boolean" ? p.is_muted : false,
+        },
+      ])
+    );
 
     // Step 2: Get all conversations with their details, filtered to current workspace
     const { data: allConversations, error: convError } = await supabase
@@ -1046,6 +1106,15 @@ export async function getDMConversations(): Promise<DMConversationsResponse> {
     }
 
     const conversationIds = allConversations.map((c) => c.id);
+
+    // Step 2.5: Get all DM messages for unread + preview data
+    const { data: allMessages, error: msgError } = await supabase
+      .from("messages")
+      .select("id, dm_conversation_id, sender_id, content, created_at, is_deleted")
+      .in("dm_conversation_id", conversationIds)
+      .order("created_at", { ascending: false });
+
+    if (msgError) throw msgError;
 
     // Step 3: Get all participants for these conversations (to find the other user)
     const { data: allParticipants, error: partError } = await supabase
@@ -1077,11 +1146,32 @@ export async function getDMConversations(): Promise<DMConversationsResponse> {
       participantsByConv.get(convId)!.push(p);
     });
 
+    // Group messages by conversation (already ordered newest first)
+    const messagesByConv = new Map<string, any[]>();
+    (allMessages || []).forEach((m: any) => {
+      const convId = m.dm_conversation_id;
+      if (!convId || m.is_deleted) return;
+      if (!messagesByConv.has(convId)) {
+        messagesByConv.set(convId, []);
+      }
+      messagesByConv.get(convId)!.push(m);
+    });
+
     // Build the response
     const conversations: DirectMessageConversation[] = [];
 
     for (const conv of allConversations) {
       const participants = participantsByConv.get(conv.id) || [];
+      const myParticipation = myParticipationByConv.get(conv.id);
+      const lastReadAt = myParticipation?.last_read_at
+        ? new Date(myParticipation.last_read_at)
+        : new Date(0);
+      const convMessages = messagesByConv.get(conv.id) || [];
+      const latestMessage = convMessages[0];
+      const unreadCount = convMessages.filter(
+        (m: any) =>
+          m.sender_id !== userId && new Date(m.created_at) > lastReadAt
+      ).length;
 
       // Find the other participant (not current user)
       const otherParticipant = participants.find((p: any) => p.profile_id !== userId);
@@ -1093,9 +1183,17 @@ export async function getDMConversations(): Promise<DMConversationsResponse> {
         id: conv.id,
         workspace_id: conv.workspace_id,
         participant_ids: participants.map((p: any) => p.profile_id) as [string, string],
-        last_message_at: null,
+        last_message_at: latestMessage?.created_at || conv.last_message_at || null,
         created_at: conv.created_at,
-        is_muted: false,
+        unread_count: unreadCount,
+        is_muted: myParticipation?.is_muted ?? false,
+        last_message: latestMessage
+          ? {
+              id: latestMessage.id,
+              content: latestMessage.content,
+              created_at: latestMessage.created_at,
+            }
+          : undefined,
         participant: otherProfile
           ? {
               id: otherProfile.id,
@@ -1297,7 +1395,7 @@ export async function getDMMessages(
   
   // Use the web API endpoint which returns messages with fresh signed URLs
   // The web API has service role permissions to create signed URLs
-  const API_URL = process.env.EXPO_PUBLIC_API_URL;
+  const API_URL = getApiBaseUrl();
   
   if (API_URL) {
     try {
@@ -1718,6 +1816,7 @@ export async function getAgents(): Promise<AgentsResponse> {
   console.log("[Team API] getAgents via Supabase");
   try {
     const workspaceId = await getWorkspaceId();
+    const userId = await getCurrentUserId();
 
     const { data, error } = await supabase
       .from("agents")
@@ -1727,8 +1826,115 @@ export async function getAgents(): Promise<AgentsResponse> {
 
     if (error) throw error;
 
-    console.log("[Team API] getAgents response:", (data || []).length, "agents");
-    return { agents: (data || []) as Agent[] };
+    const agents = (data || []) as Agent[];
+
+    if (agents.length === 0) {
+      console.log("[Team API] getAgents response: 0 agents");
+      return { agents };
+    }
+
+    const agentIds = agents.map((agent) => agent.id);
+    let agentsWithUnread = agents.map((agent) => ({
+      ...agent,
+      unread_count: 0,
+    }));
+
+    try {
+      const unreadCountByAgentId = new Map<string, number>();
+
+      // Mirror web unread logic: assistant messages newer than the user's last_read_at.
+      // Fallback for older schemas where last_read_at does not exist.
+      let conversations: Array<{
+        id: string;
+        agent_id: string;
+        last_read_at: string | null;
+      }> = [];
+
+      const conversationsWithReadResult = await supabase
+        .from("agent_conversations")
+        .select("id, agent_id, last_read_at")
+        .eq("user_id", userId)
+        .in("agent_id", agentIds);
+
+      if (conversationsWithReadResult.error) {
+        if (isMissingColumnError(conversationsWithReadResult.error, "last_read_at")) {
+          const conversationsFallbackResult = await supabase
+            .from("agent_conversations")
+            .select("id, agent_id")
+            .eq("user_id", userId)
+            .in("agent_id", agentIds);
+
+          if (conversationsFallbackResult.error) {
+            throw conversationsFallbackResult.error;
+          }
+
+          conversations = (conversationsFallbackResult.data || []).map((conv: any) => ({
+            id: conv.id,
+            agent_id: conv.agent_id,
+            last_read_at: null,
+          }));
+        } else {
+          throw conversationsWithReadResult.error;
+        }
+      } else {
+        conversations = (conversationsWithReadResult.data || []).map((conv: any) => ({
+          id: conv.id,
+          agent_id: conv.agent_id,
+          last_read_at: conv.last_read_at || null,
+        }));
+      }
+
+      if (conversations && conversations.length > 0) {
+        const conversationIds = conversations.map((conv) => conv.id);
+        const lastReadByConversationId = new Map<string, Date>(
+          conversations.map((conv) => [
+            conv.id,
+            conv.last_read_at ? new Date(conv.last_read_at) : new Date(0),
+          ])
+        );
+        const agentByConversationId = new Map<string, string>(
+          conversations.map((conv) => [conv.id, conv.agent_id])
+        );
+
+        const { data: assistantMessages, error: msgError } = await supabase
+          .from("agent_messages")
+          .select("conversation_id, created_at")
+          .in("conversation_id", conversationIds)
+          .eq("role", "assistant");
+
+        if (msgError) throw msgError;
+
+        (assistantMessages || []).forEach((message: any) => {
+          const conversationId = message.conversation_id as string | null;
+          const createdAt = message.created_at as string | null;
+          if (!conversationId || !createdAt) return;
+
+          const lastReadAt = lastReadByConversationId.get(conversationId) || new Date(0);
+          if (new Date(createdAt) <= lastReadAt) return;
+
+          const agentId = agentByConversationId.get(conversationId);
+          if (!agentId) return;
+
+          unreadCountByAgentId.set(
+            agentId,
+            (unreadCountByAgentId.get(agentId) || 0) + 1
+          );
+        });
+      }
+
+      agentsWithUnread = agents.map((agent) => ({
+        ...agent,
+        unread_count: unreadCountByAgentId.get(agent.id) || 0,
+      }));
+    } catch (unreadError) {
+      console.warn(
+        "[Team API] getAgents unread count fallback (returning agents without unread counts):",
+        unreadError
+      );
+    }
+
+    console.log("[Team API] getAgents response:", agentsWithUnread.length, "agents");
+    return { agents: agentsWithUnread };
   } catch (error) {
     console.error("[Team API] getAgents ERROR:", error);
     throw error;

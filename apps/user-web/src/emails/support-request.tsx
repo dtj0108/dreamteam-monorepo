@@ -19,7 +19,7 @@ interface SupportRequestEmailProps {
   userEmail: string;
   subject: string;
   message: string;
-  source: 'user-web' | 'admin';
+  source: 'user-web' | 'user-mobile' | 'admin';
   timestamp: string;
   urgency?: Urgency;
 }
@@ -77,7 +77,7 @@ export function SupportRequestEmail({
               </Text>
             )}
             <Text style={sourceBadge}>
-              from {source === 'admin' ? 'Admin Panel' : 'User App'}
+              from {source === 'admin' ? 'Admin Panel' : source === 'user-mobile' ? 'Mobile App' : 'User Web App'}
             </Text>
           </Section>
 

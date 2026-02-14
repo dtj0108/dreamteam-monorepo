@@ -1,4 +1,5 @@
 import { AuthError } from "@supabase/supabase-js";
+import * as WebBrowser from "expo-web-browser";
 import { Link } from "expo-router";
 import { useState } from "react";
 import {
@@ -14,6 +15,7 @@ import {
 
 import { Logo } from "@/components/Logo";
 import { Colors } from "@/constants/Colors";
+import { LEGAL_PRIVACY_URL, LEGAL_TERMS_URL } from "@/constants/legal-links";
 import { useAuth } from "@/providers/auth-provider";
 
 export default function SignupScreen() {
@@ -73,6 +75,10 @@ export default function SignupScreen() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOpenLegalUrl = async (url: string) => {
+    await WebBrowser.openBrowserAsync(url);
   };
 
   return (
@@ -202,6 +208,24 @@ export default function SignupScreen() {
                 </Text>
               )}
             </Pressable>
+
+            <Text className="mt-3 text-center text-xs text-muted-foreground">
+              By creating an account, you agree to our{" "}
+              <Text
+                className="text-primary underline"
+                onPress={() => handleOpenLegalUrl(LEGAL_TERMS_URL)}
+              >
+                Terms of Service
+              </Text>{" "}
+              and{" "}
+              <Text
+                className="text-primary underline"
+                onPress={() => handleOpenLegalUrl(LEGAL_PRIVACY_URL)}
+              >
+                Privacy Policy
+              </Text>
+              .
+            </Text>
           </View>
 
           <View className="mt-8 flex-row justify-center">

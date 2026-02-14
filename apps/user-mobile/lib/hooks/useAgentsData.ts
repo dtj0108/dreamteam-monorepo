@@ -1,4 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/providers/auth-provider";
+import { useWorkspace } from "@/providers/workspace-provider";
 import type {
   AgentsListResponse,
   AgentDetailResponse,
@@ -44,16 +46,32 @@ export function useAgentsList(params?: {
   department_id?: string;
   hired_only?: boolean;
 }) {
+  const { session, isLoading: isAuthLoading } = useAuth();
+  const { currentWorkspace, isLoading: isWorkspaceLoading } = useWorkspace();
+
   return useQuery<AgentsListResponse>({
     queryKey: agentsKeys.list(params),
     queryFn: () => agentsApi.getAgents(params),
+    enabled:
+      !!session?.access_token &&
+      !!currentWorkspace?.id &&
+      !isAuthLoading &&
+      !isWorkspaceLoading,
   });
 }
 
 export function useHiredAgents() {
+  const { session, isLoading: isAuthLoading } = useAuth();
+  const { currentWorkspace, isLoading: isWorkspaceLoading } = useWorkspace();
+
   return useQuery<AgentsListResponse>({
     queryKey: agentsKeys.hired(),
     queryFn: () => agentsApi.getAgents({ hired_only: true }),
+    enabled:
+      !!session?.access_token &&
+      !!currentWorkspace?.id &&
+      !isAuthLoading &&
+      !isWorkspaceLoading,
   });
 }
 
@@ -115,16 +133,38 @@ export function useAgentActivity(params?: {
   to_date?: string;
   limit?: number;
 }) {
+  const { session, isLoading: isAuthLoading } = useAuth();
+  const { currentWorkspace, isLoading: isWorkspaceLoading } = useWorkspace();
+
   return useQuery<ActivityResponse>({
     queryKey: agentsKeys.activityList(params),
     queryFn: () => agentsApi.getAgentActivity(params),
+    enabled:
+      !!session?.access_token &&
+      !!currentWorkspace?.id &&
+      !isAuthLoading &&
+      !isWorkspaceLoading,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 1,
   });
 }
 
 export function usePendingApprovals() {
+  const { session, isLoading: isAuthLoading } = useAuth();
+  const { currentWorkspace, isLoading: isWorkspaceLoading } = useWorkspace();
+
   return useQuery<ActivityResponse>({
     queryKey: agentsKeys.pending(),
     queryFn: () => agentsApi.getPendingApprovals(),
+    enabled:
+      !!session?.access_token &&
+      !!currentWorkspace?.id &&
+      !isAuthLoading &&
+      !isWorkspaceLoading,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 1,
   });
 }
 
@@ -161,9 +201,17 @@ export function useRejectExecution() {
 // ============================================================================
 
 export function useAgentSchedules() {
+  const { session, isLoading: isAuthLoading } = useAuth();
+  const { currentWorkspace, isLoading: isWorkspaceLoading } = useWorkspace();
+
   return useQuery<SchedulesResponse>({
     queryKey: agentsKeys.schedules(),
     queryFn: () => agentsApi.getAgentSchedules(),
+    enabled:
+      !!session?.access_token &&
+      !!currentWorkspace?.id &&
+      !isAuthLoading &&
+      !isWorkspaceLoading,
   });
 }
 
@@ -185,18 +233,34 @@ export function useToggleSchedule() {
 // ============================================================================
 
 export function useAgentConversations(agentId: string | undefined) {
+  const { session, isLoading: isAuthLoading } = useAuth();
+  const { currentWorkspace, isLoading: isWorkspaceLoading } = useWorkspace();
+
   return useQuery<ConversationListItem[]>({
     queryKey: agentsKeys.conversations(agentId!),
     queryFn: () => agentsApi.getAgentConversations(agentId!),
-    enabled: !!agentId,
+    enabled:
+      !!agentId &&
+      !!session?.access_token &&
+      !!currentWorkspace?.id &&
+      !isAuthLoading &&
+      !isWorkspaceLoading,
   });
 }
 
 export function useConversation(id: string | undefined) {
+  const { session, isLoading: isAuthLoading } = useAuth();
+  const { currentWorkspace, isLoading: isWorkspaceLoading } = useWorkspace();
+
   return useQuery<AgentConversation>({
     queryKey: agentsKeys.conversation(id!),
     queryFn: () => agentsApi.getConversation(id!),
-    enabled: !!id,
+    enabled:
+      !!id &&
+      !!session?.access_token &&
+      !!currentWorkspace?.id &&
+      !isAuthLoading &&
+      !isWorkspaceLoading,
   });
 }
 
@@ -231,8 +295,16 @@ export function useDeleteConversation() {
 // ============================================================================
 
 export function useDashboardStats() {
+  const { session, isLoading: isAuthLoading } = useAuth();
+  const { currentWorkspace, isLoading: isWorkspaceLoading } = useWorkspace();
+
   return useQuery<DashboardStats>({
     queryKey: agentsKeys.dashboardStats(),
     queryFn: () => agentsApi.getDashboardStats(),
+    enabled:
+      !!session?.access_token &&
+      !!currentWorkspace?.id &&
+      !isAuthLoading &&
+      !isWorkspaceLoading,
   });
 }

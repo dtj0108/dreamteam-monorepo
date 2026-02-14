@@ -30,7 +30,7 @@ interface WorkspaceContextType {
   currentWorkspace: Workspace | null;
   workspaces: Workspace[];
   isLoading: boolean;
-  switchWorkspace: (workspaceId: string) => void;
+  switchWorkspace: (workspaceId: string) => Promise<void>;
   refreshWorkspaces: () => Promise<void>;
 }
 
@@ -100,14 +100,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         selectedWorkspace = userWorkspaces[0];
       }
 
-      setCurrentWorkspace(selectedWorkspace);
-
       // Store workspace ID for API client access
       if (selectedWorkspace) {
         await AsyncStorage.setItem(WORKSPACE_ID_KEY, selectedWorkspace.id);
       } else {
         await AsyncStorage.removeItem(WORKSPACE_ID_KEY);
       }
+
+      // Update state after storage to avoid stale workspaceId reads in API client
+      setCurrentWorkspace(selectedWorkspace);
     } catch (error) {
       console.error("Error in fetchWorkspaces:", error);
     } finally {
@@ -123,25 +124,27 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     async (workspaceId: string) => {
       const workspace = workspaces.find((ws) => ws.id === workspaceId);
       if (workspace) {
-        setCurrentWorkspace(workspace);
-
         // Store workspace ID for API client access
         await AsyncStorage.setItem(WORKSPACE_ID_KEY, workspace.id);
 
+        setCurrentWorkspace(workspace);
+
         // Optionally update default workspace in profile
         if (user) {
-          supabase
-            .from("profiles")
-            .update({ default_workspace_id: workspaceId })
-            .eq("id", user.id)
-            .then(({ error }) => {
+          void (async () => {
+            try {
+              const { error } = await supabase
+                .from("profiles")
+                .update({ default_workspace_id: workspaceId })
+                .eq("id", user.id);
+
               if (error) {
                 console.error("Error updating default workspace:", error);
               }
-            })
-            .catch((error) => {
+            } catch (error) {
               console.error("Error updating default workspace:", error);
-            });
+            }
+          })();
         }
       }
     },

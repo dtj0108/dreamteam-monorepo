@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PageCard } from "@/components/knowledge/PageCard";
+import { ProductSwitcher } from "@/components/ProductSwitcher";
 import { Colors } from "@/constants/Colors";
 import { usePages } from "@/lib/hooks/useKnowledge";
 
@@ -53,6 +54,10 @@ export default function KnowledgeIndexScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      <View className="px-4" style={{ paddingTop: insets.top + 8 }}>
+        <ProductSwitcher />
+      </View>
+
       {/* Filter Bar */}
       <View className="flex-row items-center gap-2 px-4 pt-2">
         <View className="flex-1 flex-row rounded-lg bg-muted p-1">

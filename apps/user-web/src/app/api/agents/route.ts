@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient, getWorkspaceDeployment } from "@dreamteam/database"
-import { getSession } from "@dreamteam/auth/session"
+import { getAuthContext } from "@/lib/api-auth"
 import type { AgentWithHireStatus, AgentDepartment, ToolCategory } from "@/lib/types/agents"
 
 // Types for deployed agent tools/skills from active_config
@@ -55,10 +55,11 @@ interface AgentOrganization {
 // GET /api/agents - List agents from deployed team config
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession()
-    if (!session) {
+    const auth = await getAuthContext(request)
+    if (!auth || auth.type === "api_key") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    const userId = auth.userId
 
     const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
@@ -78,7 +79,7 @@ export async function GET(request: NextRequest) {
       .from("workspace_members")
       .select("id")
       .eq("workspace_id", workspaceId)
-      .eq("profile_id", session.id)
+      .eq("profile_id", userId)
       .single()
 
     if (memberError || !membership) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
-import { getSession } from "@dreamteam/auth/session"
+import { getAuthContext } from "@/lib/api-auth"
 
 // POST /api/agents/activity/[id]/reject - Reject an execution
 export async function POST(
@@ -8,10 +8,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getSession()
-    if (!session) {
+    const auth = await getAuthContext(request)
+    if (!auth || auth.type === "api_key") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    const userId = auth.userId
 
     const { id } = await params
     const body = await request.json()
@@ -49,7 +50,7 @@ export async function POST(
         .from("workspace_members")
         .select("id")
         .eq("workspace_id", hiredAgent.workspace_id)
-        .eq("profile_id", session.id)
+        .eq("profile_id", userId)
         .single()
 
       if (!membership) {

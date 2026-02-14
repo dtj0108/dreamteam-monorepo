@@ -8,7 +8,7 @@ interface SupportRequestBody {
   type: 'bug' | 'support' | 'feature';
   subject: string;
   message: string;
-  source: 'user-web' | 'admin';
+  source: 'user-web' | 'user-mobile' | 'admin';
   urgency: Urgency;
 }
 
@@ -49,9 +49,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!body.source || !['user-web', 'admin'].includes(body.source)) {
+    if (!body.source || !['user-web', 'user-mobile', 'admin'].includes(body.source)) {
       return NextResponse.json(
-        { error: 'Invalid source. Must be "user-web" or "admin".' },
+        { error: 'Invalid source. Must be "user-web", "user-mobile", or "admin".' },
         { status: 400 }
       );
     }

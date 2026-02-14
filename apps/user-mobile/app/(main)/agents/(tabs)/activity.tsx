@@ -48,6 +48,8 @@ export default function ActivityScreen() {
   const {
     data: activityData,
     isLoading: activityLoading,
+    isError: isActivityError,
+    error: activityError,
     refetch: refetchActivity,
   } = useAgentActivity({ status: statusFilter });
 
@@ -55,6 +57,8 @@ export default function ActivityScreen() {
   const {
     data: pendingData,
     isLoading: pendingLoading,
+    isError: isPendingError,
+    error: pendingError,
     refetch: refetchPending,
   } = usePendingApprovals();
 
@@ -75,6 +79,12 @@ export default function ActivityScreen() {
       await approveMutation.mutateAsync(id);
       Alert.alert("Success", "Execution approved");
     } catch (error: any) {
+      const message = error?.message || "Failed to approve";
+      if (message.includes("not pending approval")) {
+        await Promise.all([refetchPending(), refetchActivity()]);
+        Alert.alert("Updated", "This task was already processed. The list was refreshed.");
+        return;
+      }
       Alert.alert("Error", error.message || "Failed to approve");
     }
   };
@@ -82,8 +92,15 @@ export default function ActivityScreen() {
   const handleReject = async (id: string) => {
     try {
       await rejectMutation.mutateAsync({ id });
+      Alert.alert("Success", "Execution rejected");
     } catch (error: any) {
-      console.error("Failed to reject:", error);
+      const message = error?.message || "Failed to reject";
+      if (message.includes("not pending approval")) {
+        await Promise.all([refetchPending(), refetchActivity()]);
+        Alert.alert("Updated", "This task was already processed. The list was refreshed.");
+        return;
+      }
+      Alert.alert("Error", message);
     }
   };
 
@@ -103,6 +120,8 @@ export default function ActivityScreen() {
   };
 
   const isLoading = activeTab === "all" ? activityLoading : pendingLoading;
+  const isError = activeTab === "all" ? isActivityError : isPendingError;
+  const activeError = activeTab === "all" ? activityError : pendingError;
 
   const cardShadow = {
     shadowColor: "#000",
@@ -345,9 +364,30 @@ export default function ActivityScreen() {
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
+      ) : isError ? (
+        <View className="flex-1 items-center justify-center px-8">
+          <View
+            className="h-20 w-20 items-center justify-center rounded-full"
+            style={{ backgroundColor: Colors.destructive + "15" }}
+          >
+            <Ionicons name="alert-circle" size={36} color={Colors.destructive} />
+          </View>
+          <Text className="mt-6 text-xl font-semibold text-foreground">
+            Failed to load activity
+          </Text>
+          <Text className="mt-2 text-center leading-relaxed text-gray-500">
+            {(activeError as Error)?.message || "Please try again."}
+          </Text>
+          <Pressable
+            className="mt-5 rounded-xl bg-primary px-5 py-3 active:opacity-70"
+            onPress={onRefresh}
+          >
+            <Text className="font-medium text-white">Retry</Text>
+          </Pressable>
+        </View>
       ) : activeTab === "all" ? (
         // All Activity List
-        activityData?.executions.length === 0 ? (
+        (activityData?.executions?.length ?? 0) === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
             <View
               className="h-20 w-20 items-center justify-center rounded-full"
@@ -364,7 +404,7 @@ export default function ActivityScreen() {
           </View>
         ) : (
           <FlatList
-            data={activityData?.executions}
+            data={activityData?.executions || []}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100, gap: 12 }}
             refreshControl={
@@ -380,7 +420,7 @@ export default function ActivityScreen() {
         )
       ) : (
         // Pending Approvals List
-        pendingData?.executions.length === 0 ? (
+        (pendingData?.executions?.length ?? 0) === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
             <View
               className="h-20 w-20 items-center justify-center rounded-full"
@@ -397,7 +437,7 @@ export default function ActivityScreen() {
           </View>
         ) : (
           <FlatList
-            data={pendingData?.executions}
+            data={pendingData?.executions || []}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100, gap: 12 }}
             refreshControl={

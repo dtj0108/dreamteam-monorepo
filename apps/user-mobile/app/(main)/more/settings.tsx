@@ -76,6 +76,7 @@ export default function SettingsScreen() {
             icon="lock"
             label="Privacy & Security"
             showChevron
+            onPress={() => router.push("/(main)/more/legal")}
           />
         </View>
       </View>

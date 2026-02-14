@@ -11,18 +11,21 @@ export default function WorkspacesScreen() {
   const queryClient = useQueryClient();
   const { workspaces, currentWorkspace, switchWorkspace } = useWorkspace();
 
-  const handleSwitchWorkspace = (workspaceId: string) => {
+  const handleSwitchWorkspace = async (workspaceId: string) => {
     // Don't switch if already on this workspace
     if (currentWorkspace?.id === workspaceId) return;
 
-    // Switch workspace context
-    switchWorkspace(workspaceId);
+    try {
+      // Wait for storage + state update before clearing caches.
+      await switchWorkspace(workspaceId);
+      await queryClient.cancelQueries();
+      queryClient.clear();
 
-    // Invalidate all cached queries (full refresh)
-    queryClient.invalidateQueries();
-
-    // Navigate to hub
-    router.push("/(main)/hub");
+      // Navigate to hub
+      router.replace("/(main)/hub");
+    } catch (error) {
+      console.error("Failed to switch workspace:", error);
+    }
   };
 
   const handleAddWorkspace = () => {

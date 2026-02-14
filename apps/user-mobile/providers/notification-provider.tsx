@@ -51,7 +51,7 @@ export function NotificationProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, session } = useAuth();
+  const { user, session, isLoading: isAuthLoading } = useAuth();
   const router = useRouter();
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>();
   const [notification, setNotification] = useState<
@@ -68,6 +68,7 @@ export function NotificationProvider({
   const notificationListener = useRef<Notifications.EventSubscription>(null);
   const responseListener = useRef<Notifications.EventSubscription>(null);
   const lastTokenRef = useRef<string | undefined>(undefined);
+  const initializedUserIdRef = useRef<string | null>(null);
 
   // Load preferences on mount
   useEffect(() => {
@@ -137,6 +138,8 @@ export function NotificationProvider({
 
   // Setup notifications and register token when user is authenticated
   useEffect(() => {
+    let isActive = true;
+
     const setup = async () => {
       try {
         // Set up notification handler for foreground notifications
@@ -145,16 +148,25 @@ export function NotificationProvider({
         // Set up Android notification channel
         await setupAndroidChannel();
 
-        // Only register for push if user is authenticated
-        if (user && session) {
+        // Only register for push if user is authenticated and auth validation is complete
+        if (user?.id && session?.access_token && !isAuthLoading) {
+          // Prevent repeated registration when auth/session objects refresh.
+          if (initializedUserIdRef.current === user.id) return;
+          initializedUserIdRef.current = user.id;
+
           const token = await registerForPushNotificationsAsync();
+          if (!isActive) return;
+
           setExpoPushToken(token);
 
           // Register token with backend if we got one
           if (token && token !== lastTokenRef.current) {
             lastTokenRef.current = token;
             const platform = Platform.OS as "ios" | "android";
-            await registerPushToken(token, platform);
+            // Fire and forget — don't block notification setup on backend registration
+            registerPushToken(token, platform).catch((err) =>
+              console.log("[NotificationProvider] Push token registration failed:", err)
+            );
           }
         }
       } catch (error) {
@@ -162,7 +174,11 @@ export function NotificationProvider({
       }
     };
     setup();
-  }, [user, session]);
+
+    return () => {
+      isActive = false;
+    };
+  }, [user?.id, !!session?.access_token, isAuthLoading]);
 
   // Setup notification listeners
   useEffect(() => {
@@ -198,6 +214,8 @@ export function NotificationProvider({
   useEffect(() => {
     // If user becomes null (signed out), unregister the token
     if (!user && lastTokenRef.current) {
+      // Reset the dedup guard so re-authentication triggers a fresh registration
+      initializedUserIdRef.current = null;
       const tokenToUnregister = lastTokenRef.current;
       lastTokenRef.current = undefined;
       setExpoPushToken(undefined);

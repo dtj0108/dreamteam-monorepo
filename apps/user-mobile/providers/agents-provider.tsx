@@ -4,9 +4,11 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
+import { useAuth } from "./auth-provider";
 import { useWorkspace } from "./workspace-provider";
 import * as agentsApi from "@/lib/api/agents";
 import type {
@@ -88,6 +90,7 @@ const AgentsContext = createContext<AgentsContextType | undefined>(undefined);
 
 export function AgentsProvider({ children }: { children: React.ReactNode }) {
   const { currentWorkspace } = useWorkspace();
+  const { session, isLoading: isAuthLoading } = useAuth();
   const workspaceId = currentWorkspace?.id;
 
   // State
@@ -148,7 +151,7 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
 
   const fetchAgents = useCallback(
     async (filters?: AgentFilters) => {
-      if (!workspaceId) return;
+      if (!workspaceId || !session?.access_token || isAuthLoading) return;
 
       setIsLoading(true);
       try {
@@ -160,7 +163,7 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
       }
     },
-    [workspaceId]
+    [workspaceId, session?.access_token, isAuthLoading]
   );
 
   const fetchAgent = useCallback(
@@ -388,10 +391,18 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
   // Initial Load
   // ============================================================================
 
+  // Track fetched workspace to avoid re-fetching
+  const fetchedWorkspaceRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (workspaceId) {
+    if (workspaceId && session?.access_token && !isAuthLoading && fetchedWorkspaceRef.current !== workspaceId) {
+      fetchedWorkspaceRef.current = workspaceId;
+      setIsLoading(true);
       fetchAgents();
-    } else {
+      fetchPendingApprovals();
+      fetchSchedules();
+    } else if (!workspaceId || !session?.access_token) {
+      fetchedWorkspaceRef.current = null;
       // Clear state when workspace changes
       setAgents([]);
       setCurrentAgent(null);
@@ -400,7 +411,7 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
       setExecutions([]);
       setSchedules([]);
     }
-  }, [workspaceId, fetchAgents]);
+  }, [workspaceId, session?.access_token, isAuthLoading, fetchAgents, fetchPendingApprovals, fetchSchedules]);
 
   // ============================================================================
   // Context Value

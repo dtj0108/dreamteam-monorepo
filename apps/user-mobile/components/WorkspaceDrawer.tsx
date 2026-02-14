@@ -1,4 +1,5 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useQueryClient } from "@tanstack/react-query";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import {
@@ -26,11 +27,19 @@ interface WorkspaceDrawerProps {
 export function WorkspaceDrawer({ visible, onClose }: WorkspaceDrawerProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { workspaces, currentWorkspace, switchWorkspace } = useWorkspace();
 
-  const handleSelectWorkspace = (workspace: Workspace) => {
-    switchWorkspace(workspace.id);
-    onClose();
+  const handleSelectWorkspace = async (workspace: Workspace) => {
+    try {
+      await switchWorkspace(workspace.id);
+      await queryClient.cancelQueries();
+      queryClient.clear();
+    } catch (error) {
+      console.error("Failed to switch workspace:", error);
+    } finally {
+      onClose();
+    }
   };
 
   const handleAddWorkspace = () => {

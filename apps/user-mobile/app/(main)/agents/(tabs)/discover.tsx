@@ -25,7 +25,7 @@ export default function DiscoverAgentsScreen() {
   const [selectedAgent, setSelectedAgent] = useState<AgentWithHireStatus | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data, isLoading, refetch } = useAgentsList({ search: search || undefined });
+  const { data, isLoading, isError, error, refetch } = useAgentsList({ search: search || undefined });
   const hireMutation = useHireAgent();
 
   // Filter agents based on search
@@ -104,6 +104,21 @@ export default function DiscoverAgentsScreen() {
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      ) : isError ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-center text-base font-medium text-foreground">
+            Failed to load agents
+          </Text>
+          <Text className="mt-2 text-center text-muted-foreground">
+            {(error as Error)?.message || "Please try again."}
+          </Text>
+          <Pressable
+            className="mt-4 rounded-xl bg-primary px-4 py-2 active:opacity-70"
+            onPress={() => refetch()}
+          >
+            <Text className="font-medium text-white">Retry</Text>
+          </Pressable>
         </View>
       ) : (
         <FlatList

@@ -21,6 +21,7 @@ import { PushPermissionModal } from "@/components/notifications/PushPermissionMo
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
+import { ApiError } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { WorkspaceProvider } from "@/providers/workspace-provider";
 import { TeamProvider } from "@/providers/team-provider";
@@ -44,7 +45,14 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes
-      retry: 2,
+      retry: (failureCount, error) => {
+        if (error instanceof ApiError) {
+          if ([400, 401, 403, 404, 422].includes(error.status)) {
+            return false;
+          }
+        }
+        return failureCount < 1;
+      },
     },
   },
 });

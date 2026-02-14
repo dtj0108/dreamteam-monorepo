@@ -20,7 +20,7 @@ export default function MyAgentsScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data, isLoading, refetch } = useHiredAgents();
+  const { data, isLoading, isError, error, refetch } = useHiredAgents();
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -42,6 +42,32 @@ export default function MyAgentsScreen() {
         </SafeAreaView>
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View className="flex-1 bg-background">
+        <SafeAreaView edges={["top"]} className="bg-background">
+          <View className="px-4 py-2">
+            <ProductSwitcher />
+          </View>
+        </SafeAreaView>
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-center text-lg font-semibold text-foreground">
+            Failed to load agents
+          </Text>
+          <Text className="mt-2 text-center text-muted-foreground">
+            {(error as Error)?.message || "Please try again."}
+          </Text>
+          <Pressable
+            className="mt-6 rounded-xl bg-primary px-6 py-3 active:opacity-70"
+            onPress={() => refetch()}
+          >
+            <Text className="font-medium text-white">Retry</Text>
+          </Pressable>
         </View>
       </View>
     );

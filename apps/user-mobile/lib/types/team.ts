@@ -194,6 +194,7 @@ export interface Agent {
   created_by: string;
   created_at: string;
   updated_at: string;
+  unread_count?: number;
 }
 
 export interface AgentTool {

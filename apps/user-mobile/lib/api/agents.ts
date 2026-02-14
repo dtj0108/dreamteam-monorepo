@@ -1,5 +1,6 @@
 import { supabase } from "../supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ApiError, get, post } from "../api";
 import type {
   AgentsListResponse,
   AgentDetailResponse,
@@ -20,8 +21,103 @@ import type {
 
 const WORKSPACE_ID_KEY = "currentWorkspaceId";
 
+interface DeployedAgentFallback {
+  id: string;
+  slug?: string;
+  name: string;
+  description?: string | null;
+  avatar_url?: string | null;
+  system_prompt?: string;
+  model?: string;
+  provider?: string;
+  is_enabled?: boolean;
+  department_id?: string | null;
+  tools?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    category?: string;
+  }>;
+  skills?: Array<{
+    id: string;
+    name: string;
+    content?: string;
+  }>;
+}
+
+interface DeployedTeamConfigFallback {
+  team?: {
+    head_agent_id?: string | null;
+  };
+  agents?: DeployedAgentFallback[];
+}
+
 async function getWorkspaceId(): Promise<string | null> {
   return AsyncStorage.getItem(WORKSPACE_ID_KEY);
+}
+
+function shouldUseApiAuthFallback(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.status === 401 || error.status === 403)
+  );
+}
+
+async function getActivityFallback(
+  params?: Omit<ActivityQueryParams, "workspaceId">
+): Promise<ActivityResponse> {
+  const workspaceId = await getWorkspaceId();
+  if (!workspaceId) {
+    return { executions: [], total: 0 };
+  }
+
+  let query = supabase
+    .from("agent_schedule_executions")
+    .select(
+      `
+        *,
+        schedule:agent_schedules(id, name, cron_expression, task_prompt, workspace_id),
+        agent:ai_agents(id, name, avatar_url)
+      `,
+      { count: "exact" }
+    )
+    .eq("schedule.workspace_id", workspaceId)
+    .order("created_at", { ascending: false });
+
+  if (params?.agent_id) {
+    query = query.eq("agent_id", params.agent_id);
+  }
+  if (params?.status) {
+    query = query.eq("status", params.status);
+  }
+  if (params?.from_date) {
+    query = query.gte("created_at", params.from_date);
+  }
+  if (params?.to_date) {
+    query = query.lte("created_at", params.to_date);
+  }
+
+  const limit = params?.limit;
+  const offset = params?.offset || 0;
+  if (typeof limit === "number") {
+    query = query.range(offset, offset + Math.max(limit, 1) - 1);
+  } else if (offset > 0) {
+    query = query.range(offset, offset + 49);
+  }
+
+  const { data, error, count } = await query;
+  if (error) {
+    console.warn(
+      "[Agents API] Activity fallback query failed:",
+      error.message || error
+    );
+    return { executions: [], total: 0 };
+  }
+
+  return {
+    executions: (data || []) as AgentScheduleExecution[],
+    total: count || 0,
+  };
 }
 
 // ============================================================================
@@ -29,75 +125,180 @@ async function getWorkspaceId(): Promise<string | null> {
 // ============================================================================
 
 /**
- * List agents from `ai_agents` table (global catalog) with hire status.
- * Queries both ai_agents and agents tables, merges them.
+ * List agents from the web API's deployed team config.
+ * Uses the same /api/agents endpoint as the web app so mobile sees
+ * the same agents that are actually deployed for the workspace.
  */
 export async function getAgents(
   params?: Omit<AgentsQueryParams, "workspaceId">
 ): Promise<AgentsListResponse> {
-  const workspaceId = await getWorkspaceId();
+  const queryParams = new URLSearchParams();
+  if (params?.search) queryParams.set("search", params.search);
+  if (params?.department_id) queryParams.set("department_id", params.department_id);
+  if (params?.hired_only) queryParams.set("hired_only", "true");
+  if (params?.limit) queryParams.set("limit", String(params.limit));
+  if (params?.offset) queryParams.set("offset", String(params.offset));
 
-  // STEP 1: Query ai_agents (global catalog)
-  let query = supabase
-    .from("ai_agents")
-    .select("*", { count: "exact" })
-    .eq("is_enabled", true);
+  const qs = queryParams.toString();
+  const endpoint = qs ? `/api/agents?${qs}` : "/api/agents";
 
-  if (params?.search) {
-    query = query.or(`name.ilike.%${params.search}%,description.ilike.%${params.search}%`);
-  }
-  if (params?.department_id) {
-    query = query.eq("department_id", params.department_id);
-  }
-  if (params?.limit) {
-    query = query.limit(params.limit);
-  }
-  if (params?.offset) {
-    query = query.range(params.offset, params.offset + (params.limit || 50) - 1);
-  }
+  try {
+    const data = await get<{ agents: AgentWithHireStatus[]; total: number }>(endpoint);
+    return {
+      agents: data.agents,
+      total: data.total,
+    };
+  } catch (error) {
+    // Fallback for environments where web API bearer auth is not configured correctly.
+    if (!shouldUseApiAuthFallback(error)) {
+      throw error;
+    }
 
-  const { data: aiAgents, error: aiError, count } = await query;
+    const workspaceId = await getWorkspaceId();
+    if (!workspaceId) {
+      return { agents: [], total: 0 };
+    }
 
-  if (aiError) {
-    throw new Error(aiError.message);
-  }
+    // First fallback: read deployed team config directly (same source web /api/agents uses).
+    const { data: deployment } = await supabase
+      .from("workspace_deployed_teams")
+      .select("active_config, deployed_at")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "active")
+      .maybeSingle();
 
-  // STEP 2: Query agents (workspace hired copies)
-  let hiredAgents: LocalAgent[] = [];
-  if (workspaceId) {
-    const { data: hired, error: hiredError } = await supabase
+    const activeConfig = deployment?.active_config as DeployedTeamConfigFallback | null | undefined;
+    const deployedAt = deployment?.deployed_at || new Date().toISOString();
+    if (activeConfig?.agents && activeConfig.agents.length > 0) {
+      let deployedAgents: AgentWithHireStatus[] = activeConfig.agents.map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        slug: agent.slug || null,
+        description: agent.description || null,
+        user_description: null,
+        department_id: agent.department_id || null,
+        avatar_url: agent.avatar_url || null,
+        model: ((agent.model || "sonnet") as "sonnet" | "opus" | "haiku"),
+        system_prompt: agent.system_prompt || "",
+        permission_mode: "default",
+        max_turns: 10,
+        is_enabled: true,
+        is_head: activeConfig.team?.head_agent_id === agent.id,
+        config: {},
+        current_version: 1,
+        published_version: 1,
+        created_at: deployedAt,
+        updated_at: deployedAt,
+        isHired: agent.is_enabled !== false,
+        localAgentId: agent.id,
+        hiredAt: agent.is_enabled !== false ? deployedAt : null,
+      }));
+
+      if (params?.search) {
+        const searchLower = params.search.toLowerCase();
+        deployedAgents = deployedAgents.filter(
+          (a) =>
+            a.name.toLowerCase().includes(searchLower) ||
+            (a.description?.toLowerCase().includes(searchLower) ?? false)
+        );
+      }
+
+      if (params?.hired_only) {
+        deployedAgents = deployedAgents.filter((a) => a.isHired);
+      }
+
+      const offset = params?.offset || 0;
+      const limit = params?.limit || deployedAgents.length;
+      const total = deployedAgents.length;
+      const paged = deployedAgents.slice(offset, offset + limit);
+
+      return { agents: paged, total };
+    }
+
+    const { data: localAgents, error: localError } = await supabase
       .from("agents")
       .select("*")
       .eq("workspace_id", workspaceId)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
 
-    if (!hiredError && hired) {
-      hiredAgents = hired;
+    if (localError) {
+      throw new Error(localError.message);
     }
+
+    const localList = (localAgents || []) as LocalAgent[];
+    const localByAiId = new Map<string, LocalAgent>();
+    for (const localAgent of localList) {
+      const key = localAgent.ai_agent_id || localAgent.id;
+      localByAiId.set(key, localAgent);
+    }
+
+    let mergedAgents: AgentWithHireStatus[] = [];
+
+    // Prefer full catalog from ai_agents when readable.
+    const { data: aiAgents, error: aiError } = await supabase
+      .from("ai_agents")
+      .select("*")
+      .eq("is_enabled", true)
+      .order("created_at", { ascending: false });
+
+    if (!aiError && aiAgents && aiAgents.length > 0 && !params?.hired_only) {
+      mergedAgents = (aiAgents as AIAgent[]).map((agent) => {
+        const localAgent = localByAiId.get(agent.id) || null;
+        return {
+          ...agent,
+          isHired: !!localAgent,
+          localAgentId: localAgent?.id || null,
+          hiredAt: localAgent?.hired_at || null,
+        };
+      });
+    } else {
+      // Local-only fallback (still shows hired agents).
+      mergedAgents = localList.map((localAgent) => ({
+        id: localAgent.ai_agent_id || localAgent.id,
+        name: localAgent.name,
+        slug: null,
+        description: localAgent.description,
+        user_description: null,
+        department_id: null,
+        avatar_url: localAgent.avatar_url,
+        model: (localAgent.model as "sonnet" | "opus" | "haiku") || "sonnet",
+        system_prompt: localAgent.system_prompt || "",
+        permission_mode: "default",
+        max_turns: 10,
+        is_enabled: !!localAgent.is_active,
+        is_head: false,
+        config: {},
+        current_version: 1,
+        published_version: 1,
+        created_at: localAgent.created_at,
+        updated_at: localAgent.updated_at,
+        isHired: true,
+        localAgentId: localAgent.id,
+        hiredAt: localAgent.hired_at || null,
+      }));
+    }
+
+    if (params?.search) {
+      const searchLower = params.search.toLowerCase();
+      mergedAgents = mergedAgents.filter(
+        (a) =>
+          a.name.toLowerCase().includes(searchLower) ||
+          (a.description?.toLowerCase().includes(searchLower) ?? false)
+      );
+    }
+
+    if (params?.hired_only) {
+      mergedAgents = mergedAgents.filter((a) => a.isHired);
+    }
+
+    const offset = params?.offset || 0;
+    const limit = params?.limit || mergedAgents.length;
+    const total = mergedAgents.length;
+    const paged = mergedAgents.slice(offset, offset + limit);
+
+    return { agents: paged, total };
   }
-
-  // STEP 3: Merge - add hire status to each ai_agent
-  const hiredMap = new Map(hiredAgents.map(a => [a.ai_agent_id, a]));
-
-  let agents: AgentWithHireStatus[] = (aiAgents || []).map((agent: AIAgent) => {
-    const localAgent = hiredMap.get(agent.id);
-    return {
-      ...agent,
-      isHired: !!localAgent,
-      localAgentId: localAgent?.id || null,
-      hiredAt: localAgent?.hired_at || null,
-    };
-  });
-
-  // Filter to hired only if requested
-  if (params?.hired_only) {
-    agents = agents.filter(a => a.isHired);
-  }
-
-  return {
-    agents,
-    total: params?.hired_only ? agents.length : (count || 0),
-  };
 }
 
 /**
@@ -204,10 +405,11 @@ export async function hireAgent(id: string): Promise<LocalAgent> {
     throw new Error("No workspace selected");
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
     throw new Error("Not authenticated");
   }
+  const user = session.user;
 
   // Get the ai_agent details from global catalog
   const { data: aiAgent, error: aiError } = await supabase
@@ -285,22 +487,55 @@ export async function unhireAgent(id: string): Promise<{ success: boolean }> {
 export async function getAgentActivity(
   params?: Omit<ActivityQueryParams, "workspaceId">
 ): Promise<ActivityResponse> {
-  // Return empty for now - executions table may not exist yet
-  return {
-    executions: [],
-    total: 0,
-  };
+  const queryParams = new URLSearchParams();
+  if (params?.agent_id) queryParams.set("agent_id", params.agent_id);
+  if (params?.status) queryParams.set("status", params.status);
+  if (params?.from_date) queryParams.set("from_date", params.from_date);
+  if (params?.to_date) queryParams.set("to_date", params.to_date);
+  if (params?.limit) queryParams.set("limit", String(params.limit));
+  if (params?.offset) queryParams.set("offset", String(params.offset));
+
+  const qs = queryParams.toString();
+  const endpoint = qs ? `/api/agents/activity?${qs}` : "/api/agents/activity";
+
+  try {
+    const data = await get<ActivityResponse>(endpoint);
+    return {
+      executions: data.executions || [],
+      total: data.total || 0,
+    };
+  } catch (error) {
+    if (shouldUseApiAuthFallback(error)) {
+      console.warn(
+        "[Agents API] Falling back to direct activity query due API auth error:",
+        error
+      );
+      return getActivityFallback(params);
+    }
+    throw error;
+  }
 }
 
 /**
  * Get pending approvals
  */
 export async function getPendingApprovals(): Promise<ActivityResponse> {
-  // Return empty for now
-  return {
-    executions: [],
-    total: 0,
-  };
+  try {
+    const data = await get<ActivityResponse>("/api/agents/activity/pending");
+    return {
+      executions: data.executions || [],
+      total: data.total || 0,
+    };
+  } catch (error) {
+    if (shouldUseApiAuthFallback(error)) {
+      console.warn(
+        "[Agents API] Falling back to direct pending query due API auth error:",
+        error
+      );
+      return getActivityFallback({ status: "pending_approval" });
+    }
+    throw error;
+  }
 }
 
 /**
@@ -309,7 +544,9 @@ export async function getPendingApprovals(): Promise<ActivityResponse> {
 export async function approveExecution(
   id: string
 ): Promise<{ execution: AgentScheduleExecution; message: string }> {
-  throw new Error("Not implemented");
+  return post<{ execution: AgentScheduleExecution; message: string }>(
+    `/api/agents/activity/${id}/approve`
+  );
 }
 
 /**
@@ -319,7 +556,10 @@ export async function rejectExecution(
   id: string,
   reason?: string
 ): Promise<{ execution: AgentScheduleExecution; message: string }> {
-  throw new Error("Not implemented");
+  return post<{ execution: AgentScheduleExecution; message: string }>(
+    `/api/agents/activity/${id}/reject`,
+    { reason }
+  );
 }
 
 // ============================================================================
@@ -330,11 +570,39 @@ export async function rejectExecution(
  * List schedules for hired agents
  */
 export async function getAgentSchedules(): Promise<SchedulesResponse> {
-  // Return empty for now - schedules table may not exist yet
-  return {
-    schedules: [],
-    total: 0,
-  };
+  try {
+    const data = await get<SchedulesResponse>("/api/agents/schedules");
+    return {
+      schedules: data.schedules || [],
+      total: data.total || 0,
+    };
+  } catch {
+    const workspaceId = await getWorkspaceId();
+    if (!workspaceId) {
+      return { schedules: [], total: 0 };
+    }
+
+    const { data, error: fallbackError, count } = await supabase
+      .from("agent_schedules")
+      .select(
+        `
+        *,
+        agent:ai_agents(id, name, avatar_url, tier_required)
+      `,
+        { count: "exact" }
+      )
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false });
+
+    if (fallbackError) {
+      throw new Error(fallbackError.message);
+    }
+
+    return {
+      schedules: (data || []) as AgentSchedule[],
+      total: count || 0,
+    };
+  }
 }
 
 /**
@@ -357,10 +625,11 @@ export async function toggleSchedule(
 export async function getAgentConversations(
   agentId: string
 ): Promise<ConversationListItem[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
     throw new Error("Not authenticated");
   }
+  const user = session.user;
 
   const { data, error } = await supabase
     .from("agent_conversations")
@@ -384,11 +653,12 @@ export async function createConversation(
   title?: string
 ): Promise<ConversationListItem> {
   const workspaceId = await getWorkspaceId();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
 
-  if (!workspaceId || !user) {
+  if (!workspaceId || !session?.user) {
     throw new Error("Not authenticated or no workspace");
   }
+  const user = session.user;
 
   const { data, error } = await supabase
     .from("agent_conversations")
@@ -546,10 +816,10 @@ export interface DashboardStats {
  */
 export async function getDashboardStats(): Promise<DashboardStats> {
   const [agents, pending, activity, schedules] = await Promise.all([
-    getAgents({ hired_only: true }),
-    getPendingApprovals(),
-    getAgentActivity({ status: "completed", limit: 1 }),
-    getAgentSchedules(),
+    getAgents({ hired_only: true }).catch((): AgentsListResponse => ({ agents: [], total: 0 })),
+    getPendingApprovals().catch((): ActivityResponse => ({ executions: [], total: 0 })),
+    getAgentActivity({ status: "completed", limit: 1 }).catch((): ActivityResponse => ({ executions: [], total: 0 })),
+    getAgentSchedules().catch((): SchedulesResponse => ({ schedules: [], total: 0 })),
   ]);
 
   return {

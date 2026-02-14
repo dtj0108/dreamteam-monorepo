@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@dreamteam/database/server"
-import { getSession } from "@dreamteam/auth/session"
+import { getAuthContext } from "@/lib/api-auth"
 import { getNextRunTime, isValidCron } from "@/lib/cron-utils"
 import { getWorkspaceDeployment, type DeployedTeamConfig } from "@dreamteam/database"
 
 // GET /api/agents/schedules - List all schedules for hired agents
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession()
-    if (!session) {
+    const auth = await getAuthContext(request)
+    if (!auth || auth.type === "api_key") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    const userId = auth.userId
 
     const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
       .from("workspace_members")
       .select("id")
       .eq("workspace_id", workspaceId)
-      .eq("profile_id", session.id)
+      .eq("profile_id", userId)
       .single()
 
     if (memberError || !membership) {
@@ -100,12 +101,8 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
 
     if (error) {
-      // If table doesn't exist, return empty
-      if (error.code === "42P01") {
-        return NextResponse.json({ schedules: [], total: 0 })
-      }
       console.error("Error fetching schedules:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ schedules: [], total: 0 })
     }
 
     if (schedules?.some((schedule: { workspace_id: string }) => schedule.workspace_id !== workspaceId)) {
@@ -130,10 +127,11 @@ export async function GET(request: NextRequest) {
 // POST /api/agents/schedules - Create a new schedule
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession()
-    if (!session) {
+    const auth = await getAuthContext(request)
+    if (!auth || auth.type === "api_key") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    const userId = auth.userId
 
     const supabase = createAdminClient()
     const body = await request.json()
@@ -169,7 +167,7 @@ export async function POST(request: NextRequest) {
       .from("workspace_members")
       .select("id")
       .eq("workspace_id", workspaceId)
-      .eq("profile_id", session.id)
+      .eq("profile_id", userId)
       .single()
 
     if (memberError || !membership) {
@@ -229,7 +227,7 @@ export async function POST(request: NextRequest) {
         requires_approval,
         is_enabled: true,
         next_run_at: nextRunAt.toISOString(),
-        created_by: session.id,
+        created_by: userId,
         output_config: {},
         workspace_id: workspaceId, // Required for MCP tools to have workspace context
       })

@@ -12,6 +12,7 @@ interface CollapsibleSectionProps {
   children: React.ReactNode;
   defaultExpanded?: boolean;
   rightElement?: React.ReactNode;
+  badgeCount?: number;
 }
 
 export function CollapsibleSection({
@@ -19,6 +20,7 @@ export function CollapsibleSection({
   children,
   defaultExpanded = true,
   rightElement,
+  badgeCount = 0,
 }: CollapsibleSectionProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const rotation = useSharedValue(defaultExpanded ? 0 : -90);
@@ -38,7 +40,16 @@ export function CollapsibleSection({
         onPress={toggleExpanded}
         className="flex-row items-center justify-between px-4 py-3"
       >
-        <Text className="text-base font-semibold text-foreground">{title}</Text>
+        <View className="flex-row items-center">
+          <Text className="text-base font-semibold text-foreground">{title}</Text>
+          {badgeCount > 0 && (
+            <View className="ml-2 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 py-0.5">
+              <Text className="text-xs font-semibold text-white">
+                {badgeCount > 99 ? "99+" : badgeCount}
+              </Text>
+            </View>
+          )}
+        </View>
         <View className="flex-row items-center">
           {rightElement}
           <Animated.View style={chevronStyle}>

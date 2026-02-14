@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { LEGAL_PRIVACY_URL, LEGAL_TERMS_URL } from '@/lib/legal-links'
 
 import Logo from '@/components/shadcn-studio/logo'
 import AuthBackgroundShape from '@/assets/svg/auth-background-shape'
@@ -485,9 +486,25 @@ function CompleteSignupForm() {
                   disabled={submitting}
                 />
                 <Label htmlFor="agreeToTerms" className="cursor-pointer">
-                  <span className="text-muted-foreground">I agree to</span>{' '}
-                  <a href="#" className="hover:underline">
-                    privacy policy & terms
+                  <span className="text-muted-foreground">I agree to the </span>
+                  <a
+                    href={LEGAL_TERMS_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:underline"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    Terms of Service
+                  </a>
+                  <span className="text-muted-foreground"> and </span>
+                  <a
+                    href={LEGAL_PRIVACY_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:underline"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    Privacy Policy
                   </a>
                 </Label>
               </div>

@@ -29,6 +29,7 @@ import {
   DollarSign,
   Activity,
   AlertTriangle,
+  Scale,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -44,6 +45,7 @@ const navItems = [
   { href: '/admin/testing', label: 'Testing', icon: FlaskConical },
   { href: '/admin/time-travel', label: 'Time Travel', icon: Clock },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: ScrollText },
+  { href: '/admin/legal-docs', label: 'Legal Docs', icon: Scale },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ]
 
