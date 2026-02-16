@@ -44,6 +44,7 @@ export type BillingEventSource = 'webhook' | 'api' | 'admin' | 'system'
  */
 export type BillingAlertType =
   | 'payment_failed'
+  | 'payment_method_save_failed'
   | 'trial_expiring'
   | 'high_value_churn'
   | 'unusual_activity'

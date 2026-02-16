@@ -256,6 +256,7 @@ export async function PATCH(
       .from('a2p_campaigns')
       .update(updates)
       .eq('id', id)
+      .eq('workspace_id', workspaceId)
       .select()
       .single()
 
@@ -331,6 +332,7 @@ export async function DELETE(
       .from('a2p_campaigns')
       .delete()
       .eq('id', id)
+      .eq('workspace_id', workspaceId)
 
     if (error) {
       console.error('Failed to delete campaign:', error)

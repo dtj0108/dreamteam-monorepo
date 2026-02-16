@@ -1546,18 +1546,23 @@ export async function createAgentTierSubscription(
     console.log(`[createAgentTierSubscription] No existing subscription found, creating new for workspace ${workspaceId}, tier: ${tier}`)
 
     // Create the subscription with the saved payment method
-    const subscription = await getStripe().subscriptions.create({
-      customer: billing.stripe_customer_id,
-      items: [{ price: priceId }],
-      default_payment_method: billing.default_payment_method_id,
-      payment_behavior: 'error_if_incomplete', // Fail fast if payment fails
-      metadata: {
-        workspace_id: workspaceId,
-        type: 'agent_tier',
-        agent_tier: tier,
+    const subscription = await getStripe().subscriptions.create(
+      {
+        customer: billing.stripe_customer_id,
+        items: [{ price: priceId }],
+        default_payment_method: billing.default_payment_method_id,
+        payment_behavior: 'error_if_incomplete', // Fail fast if payment fails
+        metadata: {
+          workspace_id: workspaceId,
+          type: 'agent_tier',
+          agent_tier: tier,
+        },
+        expand: ['latest_invoice.payment_intent'],
       },
-      expand: ['latest_invoice.payment_intent'],
-    })
+      {
+        idempotencyKey: `create-agent-sub-${workspaceId}-${tier}-${priceId}`,
+      }
+    )
 
     console.log(`[createAgentTierSubscription] Subscription created: ${subscription.id}, status: ${subscription.status}`)
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@dreamteam/database/server'
 import { sendVerificationCode } from '@/lib/twilio'
+import { checkRateLimit, getRateLimitHeaders } from '@dreamteam/auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +12,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Email is required' },
         { status: 400 }
+      )
+    }
+
+    // Per-email rate limit: 3 requests per 10 minutes
+    const emailLimit = checkRateLimit(email.toLowerCase(), {
+      windowMs: 10 * 60 * 1000,
+      maxRequests: 3,
+      keyPrefix: 'forgot-pw-email',
+    })
+    if (!emailLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: getRateLimitHeaders(emailLimit) }
+      )
+    }
+
+    // Per-IP rate limit: 10 requests per 10 minutes
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
+    const ipLimit = checkRateLimit(clientIp, {
+      windowMs: 10 * 60 * 1000,
+      maxRequests: 10,
+      keyPrefix: 'forgot-pw-ip',
+    })
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: getRateLimitHeaders(ipLimit) }
       )
     }
 
@@ -32,11 +60,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!profile.phone) {
-      // User exists but has no phone — can't send OTP
-      return NextResponse.json(
-        { error: 'No phone number on file. Please contact support.' },
-        { status: 400 }
-      )
+      // User exists but has no phone — return generic success to avoid enumeration
+      return NextResponse.json({
+        success: true,
+        message: 'If an account exists with that email, a verification code has been sent.',
+      })
     }
 
     // Send OTP via Twilio Verify

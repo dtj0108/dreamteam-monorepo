@@ -61,58 +61,32 @@ export async function addSMSCredits(
   const supabase = createAdminClient()
   const credits = SMS_BUNDLES[bundle].credits
 
+  // CAS: Mark purchase as completed before adding credits to prevent duplicates
+  if (purchaseId) {
+    const { data: updated } = await supabase
+      .from('sms_credit_purchases')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', purchaseId)
+      .eq('status', 'pending')
+      .select('id')
+      .single()
+
+    if (!updated) {
+      console.warn(`[addons] SMS purchase ${purchaseId} already completed, skipping`)
+      return true
+    }
+  }
+
   const { error } = await supabase.rpc('add_sms_credits_safe', {
     p_workspace_id: workspaceId,
     p_amount: credits,
   })
 
-  // If function doesn't exist, fall back to manual update
-  if (error && error.code === '42883') {
-    // Function doesn't exist, do it manually
-    const { error: updateError } = await supabase
-      .from('workspace_sms_credits')
-      .update({
-        balance: supabase.rpc('increment', { x: credits }) as unknown as number,
-        lifetime_credits: supabase.rpc('increment', { x: credits }) as unknown as number,
-      })
-      .eq('workspace_id', workspaceId)
-
-    if (updateError) {
-      // Use raw SQL increment
-      const { data: current } = await supabase
-        .from('workspace_sms_credits')
-        .select('balance, lifetime_credits')
-        .eq('workspace_id', workspaceId)
-        .single()
-
-      if (current) {
-        const { error: manualError } = await supabase
-          .from('workspace_sms_credits')
-          .update({
-            balance: current.balance + credits,
-            lifetime_credits: current.lifetime_credits + credits,
-          })
-          .eq('workspace_id', workspaceId)
-
-        if (manualError) {
-          console.error('[addons] Failed to add SMS credits after purchase — manual reconciliation needed', {
-            workspaceId, credits, error: manualError.message,
-          })
-          return false
-        }
-      }
-    }
-  }
-
-  // Update purchase record if provided
-  if (purchaseId) {
-    await supabase
-      .from('sms_credit_purchases')
-      .update({
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', purchaseId)
+  if (error) {
+    console.error('[addons] Failed to add SMS credits via RPC — manual reconciliation needed', {
+      workspaceId, credits, error: error.message, code: error.code,
+    })
+    return false
   }
 
   return true
@@ -315,39 +289,33 @@ export async function addCallMinutes(
   const minutes = MINUTES_BUNDLES[bundle].minutes
   const seconds = minutes * 60
 
-  // Get current balance and update
-  const { data: current } = await supabase
-    .from('workspace_call_minutes')
-    .select('balance_seconds, lifetime_seconds')
-    .eq('workspace_id', workspaceId)
-    .single()
+  // CAS: Mark purchase as completed before adding minutes to prevent duplicates
+  if (purchaseId) {
+    const { data: updated } = await supabase
+      .from('call_minutes_purchases')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', purchaseId)
+      .eq('status', 'pending')
+      .select('id')
+      .single()
 
-  if (current) {
-    const { error: minutesError } = await supabase
-      .from('workspace_call_minutes')
-      .update({
-        balance_seconds: current.balance_seconds + seconds,
-        lifetime_seconds: current.lifetime_seconds + seconds,
-      })
-      .eq('workspace_id', workspaceId)
-
-    if (minutesError) {
-      console.error('[addons] Failed to add call minutes after purchase — manual reconciliation needed', {
-        workspaceId, minutes, seconds, error: minutesError.message,
-      })
-      return false
+    if (!updated) {
+      console.warn(`[addons] Call minutes purchase ${purchaseId} already completed, skipping`)
+      return true
     }
   }
 
-  // Update purchase record if provided
-  if (purchaseId) {
-    await supabase
-      .from('call_minutes_purchases')
-      .update({
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', purchaseId)
+  // Atomically add call minutes via RPC to prevent race conditions
+  const { error } = await supabase.rpc('add_call_minutes_safe', {
+    p_workspace_id: workspaceId,
+    p_seconds: seconds,
+  })
+
+  if (error) {
+    console.error('[addons] Failed to add call minutes via RPC — manual reconciliation needed', {
+      workspaceId, minutes, seconds, error: error.message, code: error.code,
+    })
+    return false
   }
 
   return true
@@ -582,45 +550,26 @@ export async function createPhoneSubscription(
 }
 
 /**
- * Update phone subscription quantity and totals
+ * Update phone subscription quantity and totals atomically via RPC.
+ * Uses col = col + delta in SQL to prevent race conditions from concurrent updates.
  */
 export async function updatePhoneSubscriptionQuantity(
   workspaceId: string,
-  delta: {
-    local?: number
-    tollFree?: number
-  },
-  newMonthlyTotal?: number
+  delta: { local?: number; tollFree?: number },
+  monthlyDelta?: number
 ): Promise<void> {
   const supabase = createAdminClient()
 
-  // Get current subscription
-  const current = await getPhoneNumberSubscription(workspaceId)
-  if (!current) {
-    console.error('No phone subscription found for workspace')
-    return
-  }
+  const { error } = await supabase.rpc('update_phone_subscription_counts', {
+    p_workspace_id: workspaceId,
+    p_local_delta: delta.local ?? 0,
+    p_toll_free_delta: delta.tollFree ?? 0,
+    p_monthly_cents_delta: monthlyDelta ?? 0,
+  })
 
-  const updates: Record<string, number> = {}
-
-  if (delta.local !== undefined) {
-    updates.local_numbers = current.local_numbers + delta.local
+  if (error) {
+    console.error('[addons] Failed to update phone subscription counts:', error)
   }
-  if (delta.tollFree !== undefined) {
-    updates.toll_free_numbers = current.toll_free_numbers + delta.tollFree
-  }
-  if (delta.local !== undefined || delta.tollFree !== undefined) {
-    updates.total_numbers = (updates.local_numbers ?? current.local_numbers) +
-      (updates.toll_free_numbers ?? current.toll_free_numbers)
-  }
-  if (newMonthlyTotal !== undefined) {
-    updates.monthly_total_cents = newMonthlyTotal
-  }
-
-  await supabase
-    .from('phone_number_subscriptions')
-    .update(updates)
-    .eq('workspace_id', workspaceId)
 }
 
 /**
@@ -725,10 +674,9 @@ export async function addPhoneNumberToSubscription(
       }
     }
 
-    // Update local counts
+    // Update local counts atomically
     const delta = numberType === 'tollFree' ? { tollFree: 1 } : { local: 1 }
-    const currentMonthly = phoneSub?.monthly_total_cents || 0
-    await updatePhoneSubscriptionQuantity(workspaceId, delta, currentMonthly + PHONE_PRICING[numberType])
+    await updatePhoneSubscriptionQuantity(workspaceId, delta, PHONE_PRICING[numberType])
 
     return { success: true }
   } catch (error) {
@@ -755,8 +703,7 @@ export async function removePhoneNumberFromSubscription(
     if (!phoneSub?.stripe_subscription_id) {
       // No Stripe subscription, just update local counts
       if (phoneSub) {
-        const newMonthly = Math.max(0, phoneSub.monthly_total_cents - PHONE_PRICING[numberType])
-        await updatePhoneSubscriptionQuantity(workspaceId, delta, newMonthly)
+        await updatePhoneSubscriptionQuantity(workspaceId, delta, -PHONE_PRICING[numberType])
       }
       return { success: true }
     }
@@ -768,8 +715,7 @@ export async function removePhoneNumberFromSubscription(
 
     if (!existingItem) {
       // Item not found in Stripe, just update local counts
-      const newMonthly = Math.max(0, phoneSub.monthly_total_cents - PHONE_PRICING[numberType])
-      await updatePhoneSubscriptionQuantity(workspaceId, delta, newMonthly)
+      await updatePhoneSubscriptionQuantity(workspaceId, delta, -PHONE_PRICING[numberType])
       return { success: true }
     }
 
@@ -807,9 +753,8 @@ export async function removePhoneNumberFromSubscription(
         .eq('workspace_id', workspaceId)
     }
 
-    // Update local counts
-    const newMonthly = Math.max(0, phoneSub.monthly_total_cents - PHONE_PRICING[numberType])
-    await updatePhoneSubscriptionQuantity(workspaceId, delta, newMonthly)
+    // Update local counts atomically
+    await updatePhoneSubscriptionQuantity(workspaceId, delta, -PHONE_PRICING[numberType])
 
     return { success: true }
   } catch (error) {

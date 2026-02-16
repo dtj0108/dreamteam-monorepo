@@ -30,9 +30,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Optional: Verify cron secret to prevent abuse
+    // Verify cron secret — reject if secret is unset or mismatched
     const cronSecret = request.headers.get("x-cron-secret")
-    if (process.env.CRON_SECRET && cronSecret !== process.env.CRON_SECRET) {
+    if (!process.env.CRON_SECRET || cronSecret !== process.env.CRON_SECRET) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

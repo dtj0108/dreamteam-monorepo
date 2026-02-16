@@ -24,6 +24,19 @@ export async function processScheduledSMS(): Promise<ProcessResult> {
 
   const supabase = createAdminClient()
 
+  // Recovery: reset items stuck in 'processing' for more than 10 minutes
+  const staleThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  const { data: resetItems } = await supabase
+    .from('scheduled_sms')
+    .update({ status: 'pending' })
+    .eq('status', 'processing')
+    .lt('updated_at', staleThreshold)
+    .select('id')
+
+  if (resetItems && resetItems.length > 0) {
+    console.warn(`[Scheduled SMS] Reset ${resetItems.length} stuck items back to pending`)
+  }
+
   // 1. Fetch pending SMS where scheduled_for <= now
   const { data: pendingSMS, error: fetchError } = await supabase
     .from('scheduled_sms')
@@ -49,7 +62,7 @@ export async function processScheduledSMS(): Promise<ProcessResult> {
     // Mark as processing
     const { error: updateError } = await supabase
       .from('scheduled_sms')
-      .update({ status: 'processing' })
+      .update({ status: 'processing', updated_at: new Date().toISOString() })
       .eq('id', scheduled.id)
       .eq('status', 'pending') // Ensure it's still pending (prevent race conditions)
 

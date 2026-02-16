@@ -22,10 +22,10 @@ interface AutoReplenishWorkspace {
  * Vercel Cron schedule: every 5 minutes
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  // Verify cron authorization
+  // Verify cron authorization — reject if secret is unset or mismatched
   const authHeader = request.headers.get('authorization')
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
-    console.warn('Auto-replenish cron: Unauthorized request')
+  if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
+    console.warn('Auto-replenish cron: Unauthorized request (missing or invalid secret)')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -98,25 +98,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       results.processed++
 
       try {
-        // Check for recent attempt to prevent duplicate charges
+        // Check for recent successful attempt to prevent re-charging too soon
         const { data: recentAttempt } = await supabase
           .from('auto_replenish_attempts')
-          .select('id, created_at')
+          .select('id, status, created_at')
           .eq('workspace_id', workspace.workspace_id)
           .eq('replenish_type', workspace.type)
-          .gte('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString()) // Last 10 minutes
-          .order('created_at', { ascending: false })
+          .eq('status', 'succeeded')
+          .gte('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
           .limit(1)
           .single()
 
         if (recentAttempt) {
-          console.log(`Auto-replenish: Skipping ${workspace.workspace_id} - recent attempt exists`)
+          console.log(`Auto-replenish: Skipping ${workspace.workspace_id} - recently succeeded`)
           results.skipped++
           results.details.push({
             workspaceId: workspace.workspace_id,
             type: workspace.type,
             status: 'skipped',
-            error: 'Recent attempt exists',
+            error: 'Recently succeeded',
           })
           continue
         }
@@ -146,7 +146,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             ? (bundleConfig as typeof SMS_BUNDLES.starter).credits
             : (bundleConfig as typeof MINUTES_BUNDLES.starter).minutes * 60 // Store as seconds
 
-        // Create auto-replenish attempt record
+        // Attempt to atomically claim this replenish slot.
+        // The partial unique index (idx_auto_replenish_unique_processing) prevents
+        // two 'processing' rows for the same workspace+type.
         const { data: attempt, error: attemptError } = await supabase
           .from('auto_replenish_attempts')
           .insert({
@@ -161,6 +163,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           .single()
 
         if (attemptError) {
+          // Unique constraint violation = another instance is already processing
+          if (attemptError.code === '23505') {
+            console.log(`Auto-replenish: Skipping ${workspace.workspace_id} - concurrent attempt in progress`)
+            results.skipped++
+            results.details.push({
+              workspaceId: workspace.workspace_id,
+              type: workspace.type,
+              status: 'skipped',
+              error: 'Concurrent attempt in progress',
+            })
+            continue
+          }
+          // Other insert error
           console.error(`Auto-replenish: Failed to create attempt record:`, attemptError)
           results.failed++
           results.details.push({
@@ -204,14 +219,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           continue
         }
 
-        // Charge succeeded - add credits/minutes
-        if (workspace.type === 'sms_credits') {
-          await addSMSCredits(workspace.workspace_id, workspace.bundle)
-        } else {
-          await addCallMinutes(workspace.workspace_id, workspace.bundle)
-        }
-
-        // Update attempt as succeeded
+        // Mark attempt as succeeded BEFORE adding credits to prevent duplicate charges on crash
         await supabase
           .from('auto_replenish_attempts')
           .update({
@@ -220,6 +228,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             succeeded_at: new Date().toISOString(),
           })
           .eq('id', attempt.id)
+
+        // Now add credits/minutes — if this fails, charge is recorded but credits need manual reconciliation
+        try {
+          if (workspace.type === 'sms_credits') {
+            await addSMSCredits(workspace.workspace_id, workspace.bundle)
+          } else {
+            await addCallMinutes(workspace.workspace_id, workspace.bundle)
+          }
+        } catch (creditError) {
+          console.error(`Auto-replenish: Credits/minutes failed after successful charge for ${workspace.workspace_id}:`, creditError)
+          // Mark that credits weren't added so it can be reconciled
+          await supabase
+            .from('auto_replenish_attempts')
+            .update({
+              error_message: `Charge succeeded but credit addition failed: ${creditError instanceof Error ? creditError.message : String(creditError)}`,
+            })
+            .eq('id', attempt.id)
+        }
 
         console.log(`Auto-replenish: Success for ${workspace.workspace_id} - ${workspace.type} ${workspace.bundle}`)
         results.successful++

@@ -36,6 +36,19 @@ export async function processScheduledWorkflows(): Promise<ProcessResult> {
     errors: [],
   }
 
+  // Recovery: reset items stuck in 'processing' for more than 10 minutes
+  const staleThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  const { data: resetItems } = await supabase
+    .from('workflow_scheduled_actions')
+    .update({ status: 'pending', processed_at: null })
+    .eq('status', 'processing')
+    .lt('processed_at', staleThreshold)
+    .select('id')
+
+  if (resetItems && resetItems.length > 0) {
+    console.warn(`[Scheduled Workflows] Reset ${resetItems.length} stuck items back to pending`)
+  }
+
   // Find all pending scheduled actions that are due
   const { data: pendingActions, error: fetchError } = await supabase
     .from('workflow_scheduled_actions')
@@ -67,6 +80,7 @@ export async function processScheduledWorkflows(): Promise<ProcessResult> {
         .from('workflow_scheduled_actions')
         .update({ status: 'processing', processed_at: new Date().toISOString() })
         .eq('id', scheduledAction.id)
+        .eq('status', 'pending')
 
       // Fetch previous results from the execution record
       const { data: execution } = await supabase

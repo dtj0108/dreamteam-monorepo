@@ -87,14 +87,13 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Note: For now we allow creating campaigns for any brand status
-    // In production, you may want to require approved brands:
-    // if (brand.status !== 'approved') {
-    //   return NextResponse.json(
-    //     { error: 'Brand must be approved before creating campaigns' },
-    //     { status: 400 }
-    //   )
-    // }
+    // Block campaigns for rejected or suspended brands
+    if (brand.status === 'rejected' || brand.status === 'suspended') {
+      return NextResponse.json(
+        { error: `Cannot create campaigns for a ${brand.status} brand. Please resolve brand issues first.` },
+        { status: 400 }
+      )
+    }
 
     // Check for duplicate campaign name in workspace
     const { data: existing } = await supabase

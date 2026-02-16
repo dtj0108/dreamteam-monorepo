@@ -78,19 +78,18 @@ export async function POST(request: NextRequest) {
     const body = await request.text()
     const signature = request.headers.get('x-nylas-signature')
 
-    // Verify webhook signature (skip if not configured, for development)
+    // Verify webhook signature
     const verification = verifyWebhookSignature(body, signature)
     if (!verification.valid) {
-      // In production, reject invalid signatures
-      // In development without webhook secret, allow through with warning
-      if (verification.error !== 'Webhook secret not configured') {
+      const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production'
+      if (isProduction || verification.error !== 'Webhook secret not configured') {
         console.error('Webhook verification failed:', verification.error)
         return NextResponse.json(
           { error: 'Invalid signature' },
           { status: 401 }
         )
       }
-      console.warn('[Nylas Webhook] Webhook secret not configured - processing without verification')
+      console.warn('[Nylas Webhook] Webhook secret not configured - processing without verification (dev only)')
     }
 
     const payload = JSON.parse(body)

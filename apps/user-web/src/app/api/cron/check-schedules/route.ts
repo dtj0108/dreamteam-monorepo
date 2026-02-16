@@ -58,8 +58,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Test mode not allowed in production" }, { status: 403 })
   }
 
-  // Verify authorization (if CRON_SECRET is configured) - skip in test mode for local dev
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !testMode) {
+  // Verify cron secret — reject if secret is unset or mismatched (skip in test mode for local dev)
+  if ((!cronSecret || authHeader !== `Bearer ${cronSecret}`) && !testMode) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

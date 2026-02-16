@@ -29,7 +29,7 @@ export async function requireWorkspaceMember(workspaceId: string): Promise<{
     .from('workspace_members')
     .select('role')
     .eq('workspace_id', workspaceId)
-    .eq('user_id', user.id)
+    .eq('profile_id', user.id)
     .single()
 
   if (!membership) {
@@ -70,7 +70,7 @@ export async function requireWorkspaceAdmin(workspaceId: string): Promise<{
     .from('workspace_members')
     .select('role')
     .eq('workspace_id', workspaceId)
-    .eq('user_id', user.id)
+    .eq('profile_id', user.id)
     .single()
 
   if (!membership || membership.role === 'member') {

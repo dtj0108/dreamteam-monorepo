@@ -123,14 +123,13 @@ export async function POST(
       )
     }
 
-    // Note: For now we allow assigning numbers to any campaign status
-    // In production, you may want to require approved campaigns:
-    // if (campaign.status !== 'approved') {
-    //   return NextResponse.json(
-    //     { error: 'Campaign must be approved before assigning phone numbers' },
-    //     { status: 400 }
-    //   )
-    // }
+    // Block number assignment for rejected or suspended campaigns
+    if (campaign.status === 'rejected' || campaign.status === 'suspended') {
+      return NextResponse.json(
+        { error: `Cannot assign numbers to a ${campaign.status} campaign. Please resolve campaign issues first.` },
+        { status: 400 }
+      )
+    }
 
     // Verify phone number exists and belongs to workspace
     const { data: phoneNumber } = await supabase

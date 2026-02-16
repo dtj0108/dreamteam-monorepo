@@ -4,6 +4,13 @@ import { parseOAuthState, exchangeCodeForToken, isNylasConfigured } from '@/lib/
 import { encryptToken } from '@/lib/encryption'
 import { logNylasEvent } from '@/lib/audit'
 
+function sanitizeReturnUrl(url: string | undefined): string {
+  const fallback = '/sales/inbox'
+  if (!url || typeof url !== 'string') return fallback
+  if (url.startsWith('/') && !url.startsWith('//')) return url
+  return fallback
+}
+
 /**
  * GET /api/nylas/callback
  *
@@ -47,7 +54,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { userId, workspaceId, provider, returnUrl } = stateData
-    const redirectBase = returnUrl || '/sales/inbox'
+    const redirectBase = sanitizeReturnUrl(returnUrl)
 
     // Exchange code for access token
     const tokenResult = await exchangeCodeForToken(code)

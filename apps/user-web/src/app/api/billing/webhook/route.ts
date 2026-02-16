@@ -32,6 +32,7 @@ import {
   logPaymentSucceeded,
   logPaymentFailed,
   logAddonPurchased,
+  createBillingAlert,
 } from '@/lib/billing-events'
 
 /**
@@ -80,10 +81,13 @@ export async function POST(request: NextRequest) {
         if (isGuestCheckout && !workspaceId) {
           console.log(`Guest checkout completed: ${session.id}. Subscription will be linked during signup.`)
           // Just mark the session as completed in our records - billing update happens at signup
-          await supabase
+          const { error: guestCheckoutError } = await supabase
             .from('billing_checkout_sessions')
             .update({ status: 'completed', completed_at: new Date().toISOString() })
             .eq('stripe_session_id', session.id)
+          if (guestCheckoutError) {
+            console.error('[webhook] Failed to update billing_checkout_sessions for guest checkout:', { sessionId: session.id, error: guestCheckoutError.message })
+          }
           break
         }
 
@@ -93,7 +97,11 @@ export async function POST(request: NextRequest) {
           const purchase = await findPendingSMSPurchase(session.id)
 
           if (purchase) {
-            await addSMSCredits(purchase.workspace_id, bundleType, purchase.id)
+            const credited = await addSMSCredits(purchase.workspace_id, bundleType, purchase.id)
+            if (!credited) {
+              console.error(`[webhook] Failed to add SMS credits for workspace ${purchase.workspace_id}: ${bundleType}`)
+              return NextResponse.json({ error: 'Failed to add credits' }, { status: 500 })
+            }
             console.log(`SMS credits added for workspace ${purchase.workspace_id}: ${bundleType}`)
 
             // Log billing event
@@ -121,6 +129,13 @@ export async function POST(request: NextRequest) {
                   console.error('[webhook] Error stack:', pmError.stack)
                 }
                 // Don't fail the webhook - credits were still added
+                await createBillingAlert({
+                  workspaceId: purchase.workspace_id,
+                  alertType: 'payment_method_save_failed',
+                  severity: 'medium',
+                  title: 'Payment method save failed after SMS credits purchase',
+                  description: `Credits were added but payment method could not be saved. Error: ${pmError instanceof Error ? pmError.message : String(pmError)}`,
+                })
               }
             } else {
               console.error(`[webhook] Missing data: paymentIntentId=${paymentIntentId}, workspace_id=${purchase.workspace_id}`)
@@ -137,7 +152,11 @@ export async function POST(request: NextRequest) {
           const purchase = await findPendingCallMinutesPurchase(session.id)
 
           if (purchase) {
-            await addCallMinutes(purchase.workspace_id, bundleType, purchase.id)
+            const credited = await addCallMinutes(purchase.workspace_id, bundleType, purchase.id)
+            if (!credited) {
+              console.error(`[webhook] Failed to add call minutes for workspace ${purchase.workspace_id}: ${bundleType}`)
+              return NextResponse.json({ error: 'Failed to add minutes' }, { status: 500 })
+            }
             console.log(`Call minutes added for workspace ${purchase.workspace_id}: ${bundleType}`)
 
             // Log billing event
@@ -165,6 +184,13 @@ export async function POST(request: NextRequest) {
                   console.error('[webhook] Error stack:', pmError.stack)
                 }
                 // Don't fail the webhook - minutes were still added
+                await createBillingAlert({
+                  workspaceId: purchase.workspace_id,
+                  alertType: 'payment_method_save_failed',
+                  severity: 'medium',
+                  title: 'Payment method save failed after call minutes purchase',
+                  description: `Minutes were added but payment method could not be saved. Error: ${pmError instanceof Error ? pmError.message : String(pmError)}`,
+                })
               }
             } else {
               console.error(`[webhook] Missing data: paymentIntentId=${paymentIntentId}, workspace_id=${purchase.workspace_id}`)
@@ -205,7 +231,7 @@ export async function POST(request: NextRequest) {
           console.log(`[auto-deploy] Triggering deployment for workspace ${workspaceId} with plan ${targetPlan}`)
 
           // Set deploy status to pending before attempting
-          await supabase
+          const { error: deployPendingError } = await supabase
             .from('workspace_billing')
             .update({
               agent_deploy_status: 'pending',
@@ -213,21 +239,30 @@ export async function POST(request: NextRequest) {
               agent_deploy_attempted_at: new Date().toISOString(),
             })
             .eq('workspace_id', workspaceId)
+          if (deployPendingError) {
+            console.error('[webhook] Failed to set agent_deploy_status to pending:', { workspaceId, error: deployPendingError.message })
+          }
 
           try {
             const deployResult = await autoDeployTeamForPlan(workspaceId, targetPlan)
             if (deployResult.deployed) {
               console.log(`[auto-deploy] Successfully deployed team ${deployResult.teamId} to workspace ${workspaceId}`)
-              await supabase
+              const { error: deploySuccessError } = await supabase
                 .from('workspace_billing')
                 .update({ agent_deploy_status: 'deployed', agent_deploy_error: null })
                 .eq('workspace_id', workspaceId)
+              if (deploySuccessError) {
+                console.error('[webhook] Failed to set agent_deploy_status to deployed:', { workspaceId, error: deploySuccessError.message })
+              }
             } else {
               console.error(`[auto-deploy] Failed to deploy team for workspace ${workspaceId}: ${deployResult.error}`)
-              await supabase
+              const { error: deployFailError } = await supabase
                 .from('workspace_billing')
                 .update({ agent_deploy_status: 'failed', agent_deploy_error: deployResult.error || 'deploy_failed' })
                 .eq('workspace_id', workspaceId)
+              if (deployFailError) {
+                console.error('[webhook] Failed to set agent_deploy_status to failed:', { workspaceId, error: deployFailError.message })
+              }
               await supabase.from('billing_alerts').insert({
                 workspace_id: workspaceId,
                 alert_type: 'deploy_failed',
@@ -239,10 +274,13 @@ export async function POST(request: NextRequest) {
           } catch (err) {
             const errMsg = err instanceof Error ? err.message : 'unknown error'
             console.error(`[auto-deploy] Deploy error for workspace ${workspaceId}:`, err)
-            await supabase
+            const { error: deployCatchError } = await supabase
               .from('workspace_billing')
               .update({ agent_deploy_status: 'failed', agent_deploy_error: errMsg })
               .eq('workspace_id', workspaceId)
+            if (deployCatchError) {
+              console.error('[webhook] Failed to set agent_deploy_status to failed (catch):', { workspaceId, error: deployCatchError.message })
+            }
             await supabase.from('billing_alerts').insert({
               workspace_id: workspaceId,
               alert_type: 'deploy_failed',
@@ -280,10 +318,13 @@ export async function POST(request: NextRequest) {
             : subscription.status === 'past_due' ? 'past_due'
             : subscription.status === 'canceled' ? 'canceled'
             : 'pending'
-          await supabase
+          const { error: phoneSubUpdateError } = await supabase
             .from('phone_number_subscriptions')
             .update({ status: phoneStatus })
             .eq('stripe_subscription_id', subscription.id)
+          if (phoneSubUpdateError) {
+            console.error('[webhook] Failed to update phone_number_subscriptions status:', { subscriptionId: subscription.id, phoneStatus, error: phoneSubUpdateError.message })
+          }
           console.log(`Phone number subscription updated: ${subscription.id} -> ${phoneStatus}`)
           break
         }
@@ -331,7 +372,7 @@ export async function POST(request: NextRequest) {
             : null
 
           if (isDowngrade) {
-            await supabase
+            const { error: downgradeError } = await supabase
               .from('workspace_billing')
               .update({
                 stripe_agent_subscription_id: subscription.id,
@@ -341,12 +382,15 @@ export async function POST(request: NextRequest) {
                 agent_tier_pending_effective_at: periodEnd,
               })
               .eq('workspace_id', workspaceId)
+            if (downgradeError) {
+              console.error('[webhook] Failed to update workspace_billing for agent tier downgrade:', { workspaceId, error: downgradeError.message })
+            }
             return
           }
 
           if (isUpgrade) {
             if (subscription.status === 'active') {
-              await supabase
+              const { error: upgradeError } = await supabase
                 .from('workspace_billing')
                 .update({
                   stripe_agent_subscription_id: subscription.id,
@@ -360,20 +404,29 @@ export async function POST(request: NextRequest) {
                   agent_deploy_attempted_at: new Date().toISOString(),
                 })
                 .eq('workspace_id', workspaceId)
+              if (upgradeError) {
+                console.error('[webhook] Failed to update workspace_billing for agent tier upgrade:', { workspaceId, error: upgradeError.message })
+              }
 
               try {
                 const deployResult = await autoDeployTeamForPlan(workspaceId, targetPlan)
                 if (deployResult.deployed) {
-                  await supabase
+                  const { error: upgradeDeployedError } = await supabase
                     .from('workspace_billing')
                     .update({ agent_deploy_status: 'deployed', agent_deploy_error: null })
                     .eq('workspace_id', workspaceId)
+                  if (upgradeDeployedError) {
+                    console.error('[webhook] Failed to set agent_deploy_status to deployed (upgrade):', { workspaceId, error: upgradeDeployedError.message })
+                  }
                 } else {
                   console.error(`[auto-deploy] Failed to deploy team for workspace ${workspaceId}: ${deployResult.error}`)
-                  await supabase
+                  const { error: upgradeDeployFailError } = await supabase
                     .from('workspace_billing')
                     .update({ agent_deploy_status: 'failed', agent_deploy_error: deployResult.error || 'deploy_failed' })
                     .eq('workspace_id', workspaceId)
+                  if (upgradeDeployFailError) {
+                    console.error('[webhook] Failed to set agent_deploy_status to failed (upgrade):', { workspaceId, error: upgradeDeployFailError.message })
+                  }
                   await supabase.from('billing_alerts').insert({
                     workspace_id: workspaceId,
                     alert_type: 'deploy_failed',
@@ -385,10 +438,13 @@ export async function POST(request: NextRequest) {
               } catch (err) {
                 const errMsg = err instanceof Error ? err.message : 'unknown error'
                 console.error(`[auto-deploy] Deploy error for workspace ${workspaceId}:`, err)
-                await supabase
+                const { error: upgradeCatchError } = await supabase
                   .from('workspace_billing')
                   .update({ agent_deploy_status: 'failed', agent_deploy_error: errMsg })
                   .eq('workspace_id', workspaceId)
+                if (upgradeCatchError) {
+                  console.error('[webhook] Failed to set agent_deploy_status to failed (upgrade catch):', { workspaceId, error: upgradeCatchError.message })
+                }
                 await supabase.from('billing_alerts').insert({
                   workspace_id: workspaceId,
                   alert_type: 'deploy_failed',
@@ -398,7 +454,7 @@ export async function POST(request: NextRequest) {
                 })
               }
             } else {
-              await supabase
+              const { error: upgradePendingError } = await supabase
                 .from('workspace_billing')
                 .update({
                   stripe_agent_subscription_id: subscription.id,
@@ -408,6 +464,9 @@ export async function POST(request: NextRequest) {
                   agent_tier_pending_effective_at: null,
                 })
                 .eq('workspace_id', workspaceId)
+              if (upgradePendingError) {
+                console.error('[webhook] Failed to update workspace_billing for agent tier pending:', { workspaceId, error: upgradePendingError.message })
+              }
             }
             return
           }
@@ -420,7 +479,7 @@ export async function POST(request: NextRequest) {
             new Date(pendingEffectiveAt).getTime() <= Date.now()
           ) {
             // Update subscription status fields first
-            await supabase
+            const { error: sameTierPendingError } = await supabase
               .from('workspace_billing')
               .update({
                 stripe_agent_subscription_id: subscription.id,
@@ -428,6 +487,9 @@ export async function POST(request: NextRequest) {
                 agent_period_end: periodEnd,
               })
               .eq('workspace_id', workspaceId)
+            if (sameTierPendingError) {
+              console.error('[webhook] Failed to update workspace_billing for same tier pending apply:', { workspaceId, error: sameTierPendingError.message })
+            }
 
             // Use atomic CAS to apply the pending tier change
             const casResult = await applyPendingTierChange(workspaceId, pendingTier)
@@ -437,7 +499,7 @@ export async function POST(request: NextRequest) {
               console.error(`[webhook] Pending tier applied but deploy issue for workspace ${workspaceId}: ${casResult.error}`)
             }
           } else {
-            await supabase
+            const { error: sameTierUpdateError } = await supabase
               .from('workspace_billing')
               .update({
                 stripe_agent_subscription_id: subscription.id,
@@ -445,6 +507,9 @@ export async function POST(request: NextRequest) {
                 agent_period_end: periodEnd,
               })
               .eq('workspace_id', workspaceId)
+            if (sameTierUpdateError) {
+              console.error('[webhook] Failed to update workspace_billing for same tier:', { workspaceId, error: sameTierUpdateError.message })
+            }
           }
         }
 
@@ -522,7 +587,7 @@ export async function POST(request: NextRequest) {
 
         // Handle phone number subscription cancellation
         if (rawDeletedSubType === 'phone_numbers') {
-          await supabase
+          const { error: phoneCancelError } = await supabase
             .from('phone_number_subscriptions')
             .update({
               status: 'canceled',
@@ -530,6 +595,9 @@ export async function POST(request: NextRequest) {
               stripe_subscription_item_id: null,
             })
             .eq('stripe_subscription_id', subscription.id)
+          if (phoneCancelError) {
+            console.error('[webhook] Failed to update phone_number_subscriptions for cancellation:', { subscriptionId: subscription.id, error: phoneCancelError.message })
+          }
           console.log(`Phone number subscription canceled: ${subscription.id}`)
           break
         }
@@ -697,7 +765,7 @@ export async function POST(request: NextRequest) {
 
         // Update auto_replenish_attempts if this was an auto-replenish charge
         if (paymentIntent.metadata?.auto_replenish_attempt_id) {
-          await supabase
+          const { error: replenishSuccessError } = await supabase
             .from('auto_replenish_attempts')
             .update({
               status: 'succeeded',
@@ -705,6 +773,10 @@ export async function POST(request: NextRequest) {
               succeeded_at: new Date().toISOString(),
             })
             .eq('id', paymentIntent.metadata.auto_replenish_attempt_id)
+            .eq('status', 'processing')  // Only update if still processing — don't overwrite cron's annotation
+          if (replenishSuccessError) {
+            console.error('[webhook] Failed to update auto_replenish_attempts to succeeded:', { attemptId: paymentIntent.metadata.auto_replenish_attempt_id, error: replenishSuccessError.message })
+          }
         }
         break
       }
@@ -727,7 +799,7 @@ export async function POST(request: NextRequest) {
 
         // Update auto_replenish_attempts if this was an auto-replenish charge
         if (paymentIntent.metadata?.auto_replenish_attempt_id) {
-          await supabase
+          const { error: replenishFailError } = await supabase
             .from('auto_replenish_attempts')
             .update({
               status: 'failed',
@@ -736,6 +808,9 @@ export async function POST(request: NextRequest) {
               failed_at: new Date().toISOString(),
             })
             .eq('id', paymentIntent.metadata.auto_replenish_attempt_id)
+          if (replenishFailError) {
+            console.error('[webhook] Failed to update auto_replenish_attempts to failed:', { attemptId: paymentIntent.metadata.auto_replenish_attempt_id, error: replenishFailError.message })
+          }
         }
         break
       }

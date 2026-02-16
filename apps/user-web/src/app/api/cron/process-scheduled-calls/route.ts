@@ -6,12 +6,10 @@ const CRON_SECRET = process.env.CRON_SECRET
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify cron secret if configured (recommended for production)
-    if (CRON_SECRET) {
-      const authHeader = request.headers.get('authorization')
-      if (authHeader !== `Bearer ${CRON_SECRET}`) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      }
+    // Verify cron secret — reject if secret is unset or mismatched
+    const authHeader = request.headers.get('authorization')
+    if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const result = await processScheduledCalls()

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyCode } from '@/lib/twilio'
 import { createServerSupabaseClient, createAdminClient } from '@dreamteam/database/server'
+import { checkRateLimit, getRateLimitHeaders } from '@dreamteam/auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +12,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Phone number and code are required' },
         { status: 400 }
+      )
+    }
+
+    // Per-phone rate limit: 5 attempts per 10 minutes
+    const phoneLimit = checkRateLimit(phone, {
+      windowMs: 10 * 60 * 1000,
+      maxRequests: 5,
+      keyPrefix: 'otp-verify-phone',
+    })
+    if (!phoneLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many verification attempts. Please try again later.' },
+        { status: 429, headers: getRateLimitHeaders(phoneLimit) }
+      )
+    }
+
+    // Per-IP rate limit: 15 attempts per 10 minutes
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
+    const ipLimit = checkRateLimit(clientIp, {
+      windowMs: 10 * 60 * 1000,
+      maxRequests: 15,
+      keyPrefix: 'otp-verify-ip',
+    })
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: getRateLimitHeaders(ipLimit) }
       )
     }
 
@@ -58,16 +86,17 @@ export async function POST(request: NextRequest) {
     } else {
       // No active session - look up user by phone number
       // This handles the case where session cookies weren't properly set
-      const { data: profileData, error: profileError } = await adminSupabase
+      const { data: profileData } = await adminSupabase
         .from('profiles')
         .select('id, name, email, phone')
         .eq('phone', phone)
         .single()
 
-      if (profileError || !profileData) {
+      if (!profileData) {
+        // Return same error as wrong code to prevent phone enumeration
         return NextResponse.json(
-          { error: 'No account found with this phone number. Please sign up first.' },
-          { status: 404 }
+          { error: 'Invalid verification code' },
+          { status: 401 }
         )
       }
 
@@ -76,10 +105,11 @@ export async function POST(request: NextRequest) {
       // Sign in the user using their auth.users record
       // We need to create a session for them
       const { data: authUser } = await adminSupabase.auth.admin.getUserById(profile.id)
-      
+
       if (!authUser.user) {
+        // Return same error as wrong code to prevent phone enumeration
         return NextResponse.json(
-          { error: 'Authentication error. Please try logging in.' },
+          { error: 'Invalid verification code' },
           { status: 401 }
         )
       }
@@ -88,9 +118,9 @@ export async function POST(request: NextRequest) {
     // Mark 2FA as complete and phone as verified using admin client
     const { error: updateError } = await adminSupabase
       .from('profiles')
-      .update({ 
+      .update({
         pending_2fa: false,
-        phone_verified: true 
+        phone_verified: true
       })
       .eq('id', profile.id)
 

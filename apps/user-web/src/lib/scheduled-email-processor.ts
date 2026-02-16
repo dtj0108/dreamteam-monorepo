@@ -23,6 +23,19 @@ export async function processScheduledEmails(): Promise<ProcessResult> {
 
   const supabase = createAdminClient()
 
+  // Recovery: reset items stuck in 'processing' for more than 10 minutes
+  const staleThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  const { data: resetItems } = await supabase
+    .from('scheduled_emails')
+    .update({ status: 'pending' })
+    .eq('status', 'processing')
+    .lt('updated_at', staleThreshold)
+    .select('id')
+
+  if (resetItems && resetItems.length > 0) {
+    console.warn(`[Scheduled Emails] Reset ${resetItems.length} stuck items back to pending`)
+  }
+
   // 1. Fetch pending emails where scheduled_for <= now
   const { data: pendingEmails, error: fetchError } = await supabase
     .from('scheduled_emails')
@@ -48,7 +61,7 @@ export async function processScheduledEmails(): Promise<ProcessResult> {
     // Mark as processing
     const { error: updateError } = await supabase
       .from('scheduled_emails')
-      .update({ status: 'processing' })
+      .update({ status: 'processing', updated_at: new Date().toISOString() })
       .eq('id', scheduled.id)
       .eq('status', 'pending') // Ensure it's still pending (prevent race conditions)
 

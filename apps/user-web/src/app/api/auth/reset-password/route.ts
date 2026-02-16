@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@dreamteam/database/server'
 import { verifyCode } from '@/lib/twilio'
+import { checkRateLimit, getRateLimitHeaders } from '@dreamteam/auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,6 +22,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Per-email rate limit: 5 attempts per 10 minutes
+    const emailLimit = checkRateLimit(email.toLowerCase(), {
+      windowMs: 10 * 60 * 1000,
+      maxRequests: 5,
+      keyPrefix: 'reset-pw-email',
+    })
+    if (!emailLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many attempts. Please try again later.' },
+        { status: 429, headers: getRateLimitHeaders(emailLimit) }
+      )
+    }
+
+    // Per-IP rate limit: 15 attempts per 10 minutes
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
+    const ipLimit = checkRateLimit(clientIp, {
+      windowMs: 10 * 60 * 1000,
+      maxRequests: 15,
+      keyPrefix: 'reset-pw-ip',
+    })
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many attempts. Please try again later.' },
+        { status: 429, headers: getRateLimitHeaders(ipLimit) }
+      )
+    }
+
     const adminSupabase = createAdminClient()
 
     // Look up user by email
@@ -32,8 +60,8 @@ export async function POST(request: NextRequest) {
 
     if (profileError || !profile || !profile.phone) {
       return NextResponse.json(
-        { error: 'Account not found' },
-        { status: 404 }
+        { error: 'Invalid or expired verification code' },
+        { status: 401 }
       )
     }
 

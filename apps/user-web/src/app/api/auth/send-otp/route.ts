@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendVerificationCode } from '@/lib/twilio'
+import { checkRateLimit, getRateLimitHeaders } from '@dreamteam/auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,6 +23,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Per-phone rate limit: 3 sends per 10 minutes
+    const phoneLimit = checkRateLimit(phone, {
+      windowMs: 10 * 60 * 1000,
+      maxRequests: 3,
+      keyPrefix: 'otp-send-phone',
+    })
+    if (!phoneLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many verification attempts. Please try again later.' },
+        { status: 429, headers: getRateLimitHeaders(phoneLimit) }
+      )
+    }
+
+    // Per-IP rate limit: 10 sends per 10 minutes
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
+    const ipLimit = checkRateLimit(clientIp, {
+      windowMs: 10 * 60 * 1000,
+      maxRequests: 10,
+      keyPrefix: 'otp-send-ip',
+    })
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: getRateLimitHeaders(ipLimit) }
+      )
+    }
+
     const result = await sendVerificationCode(phone)
 
     if (!result.success) {
@@ -40,4 +68,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
